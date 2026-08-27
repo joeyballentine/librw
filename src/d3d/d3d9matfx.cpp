@@ -52,7 +52,7 @@ matfxRender_Default(InstanceDataHeader *header, InstanceData *inst, int32 lightB
 	else
 		setVertexShader(default_all_VS);
 
-	SetRenderState(VERTEXALPHA, inst->vertexAlpha || m->color.alpha != 255);
+	d3d::setPipelineVertexAlpha(inst->vertexAlpha || m->color.alpha != 255);
 
 	if(inst->material->texture){
 		d3d::setTexture(0, m->texture);
@@ -148,7 +148,7 @@ matfxRender_EnvMap(InstanceDataHeader *header, InstanceData *inst, int32 lightBi
 	}else
 		setPixelShader(matfx_env_PS);
 
-	SetRenderState(VERTEXALPHA, texAlpha || inst->vertexAlpha || m->color.alpha != 255);
+	d3d::setPipelineVertexAlpha(texAlpha || inst->vertexAlpha || m->color.alpha != 255);
 
 	drawInst(header, inst);
 

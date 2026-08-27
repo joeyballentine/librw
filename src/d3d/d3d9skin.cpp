@@ -312,7 +312,7 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 	for(uint32 i = 0; i < header->numMeshes; i++){
 		Material *m = inst->material;
 
-		SetRenderState(VERTEXALPHA, inst->vertexAlpha || m->color.alpha != 255);
+		d3d::setPipelineVertexAlpha(inst->vertexAlpha || m->color.alpha != 255);
 
 		setMaterial(flags, m->color, m->surfaceProps);
 

@@ -304,6 +304,9 @@ void getSamplerState(uint32 stage, uint32 type, uint32 *value);
 void flushCache(void);
 
 void setTexture(uint32 stage, Texture *tex);
+// Object pipelines announce what the instanced geometry needs here; it is
+// combined with the application's own VERTEXALPHA request, never replaces it.
+void setPipelineVertexAlpha(bool32 enable);
 void setMaterial(const RGBA &color, const SurfaceProperties &surfaceprops, float extraSurfProp = 0.0f);
 inline void setMaterial(uint32 flags, const RGBA &color, const SurfaceProperties &surfaceprops, float extraSurfProp = 0.0f)
 {

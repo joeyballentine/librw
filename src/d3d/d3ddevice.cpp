@@ -71,6 +71,11 @@ struct RwRasterStateCache {
 // cached RW render states
 struct RwStateCache {
 	bool32 vertexAlpha;
+	// What the APPLICATION last asked for, kept apart from the effective
+	// state above. The object pipelines overwrite vertexAlpha per mesh from
+	// the instanced geometry, which on its own throws away a blend the app
+	// explicitly requested; keeping the request lets them OR it back in.
+	bool32 appVertexAlpha;
 	bool32 textureAlpha;
 	uint32 srcblend, destblend;
 	uint32 zwrite;
@@ -457,6 +462,21 @@ setVertexAlpha(bool32 enable)
 	}
 }
 
+// The object pipelines' way in. `enable` is what the instanced geometry needs
+// -- vertex alpha in the mesh, or a material that is not fully opaque -- and
+// it is OR'd with what the application asked for rather than replacing it.
+//
+// Without that, a mesh whose own data says "opaque" switches blending off
+// again after the app has set up a blend for it, and the src/dest factors it
+// just chose never reach the framebuffer. Real RenderWare's console drivers
+// leave blending to the application; only the D3D pipelines here infer it, so
+// the inference has to be additive to the request, not a substitute for it.
+void
+setPipelineVertexAlpha(bool32 enable)
+{
+	setVertexAlpha(enable || rwStateCache.appVertexAlpha);
+}
+
 void
 setRasterStage(uint32 stage, Raster *raster)
 {
@@ -636,6 +656,7 @@ setRwRenderState(int32 state, void *pvalue)
 		setFilterMode(0, value);
 		break;
 	case VERTEXALPHA:
+		rwStateCache.appVertexAlpha = bval;
 		setVertexAlpha(bval);
 		break;
 	case SRCBLEND:
@@ -1709,6 +1730,7 @@ initD3D(void)
 	rwStateCache.destblend = BLENDINVSRCALPHA;
 	d3ddevice->SetRenderState(D3DRS_ALPHABLENDENABLE, 0);
 	rwStateCache.vertexAlpha = 0;
+	rwStateCache.appVertexAlpha = 0;
 	rwStateCache.textureAlpha = 0;
 
 	rwStateCache.stencilenable = 0;

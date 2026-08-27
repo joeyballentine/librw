@@ -96,7 +96,7 @@ defaultRenderCB_Fix(Atomic *atomic, InstanceDataHeader *header)
 
 	InstanceData *inst = header->inst;
 	for(uint32 i = 0; i < header->numMeshes; i++){
-		SetRenderState(VERTEXALPHA, inst->vertexAlpha || inst->material->color.alpha != 255);
+		d3d::setPipelineVertexAlpha(inst->vertexAlpha || inst->material->color.alpha != 255);
 		const static rw::RGBA white = { 255, 255, 255, 255 };
 		d3d::setMaterial(white, inst->material->surfaceProps);
 
@@ -165,7 +165,7 @@ defaultRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header)
 	for(uint32 i = 0; i < header->numMeshes; i++){
 		Material *m = inst->material;
 
-		SetRenderState(VERTEXALPHA, inst->vertexAlpha || m->color.alpha != 255);
+		d3d::setPipelineVertexAlpha(inst->vertexAlpha || m->color.alpha != 255);
 
 		setMaterial(flags, m->color, m->surfaceProps);
 
