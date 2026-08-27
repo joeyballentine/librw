@@ -88,6 +88,7 @@ struct RwStateCache {
 	uint32 stencilwritemask;
 	uint32 alphafunc;
 	uint32 alpharef;
+	uint32 colorwritemask;
 
 	// emulation of PS2 GS
 	bool32 gsalpha;
@@ -749,6 +750,14 @@ setRwRenderState(int32 state, void *pvalue)
 	case GSALPHATESTREF:
 		rwStateCache.gsalpharef = value;
 		break;
+	case COLORWRITEMASK:
+		if(rwStateCache.colorwritemask != value){
+			rwStateCache.colorwritemask = value;
+			// The D3DCOLORWRITEENABLE_* bits are in the same order as
+			// ColorWriteMask's, so the value passes straight through.
+			setRenderState(D3DRS_COLORWRITEENABLE, value);
+		}
+		break;
 	}
 }
 
@@ -837,6 +846,9 @@ getRwRenderState(int32 state)
 		break;
 	case GSALPHATESTREF:
 		val = rwStateCache.gsalpharef;
+		break;
+	case COLORWRITEMASK:
+		val = rwStateCache.colorwritemask;
 		break;
 	default:
 		val = 0;
@@ -1677,6 +1689,11 @@ initD3D(void)
 
 	rwStateCache.gsalpha = 0;
 	rwStateCache.gsalpharef = 128;
+
+	// Everything writes every channel until something says otherwise. Set on the
+	// device as well as cached, so the two cannot disagree after a reset.
+	d3ddevice->SetRenderState(D3DRS_COLORWRITEENABLE, COLORWRITEALL);
+	rwStateCache.colorwritemask = COLORWRITEALL;
 
 	d3ddevice->SetRenderState(D3DRS_FOGENABLE, FALSE);
 	rwStateCache.fogenable = 0;

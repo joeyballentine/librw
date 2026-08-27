@@ -37,7 +37,22 @@ enum RenderState
 	// emulation of PS2 GS alpha test
 	//  in the mode where it still writes color but nor depth
 	GSALPHATEST,
-	GSALPHATESTREF
+	GSALPHATESTREF,
+
+	// Which colour channels a draw is allowed to write, as a mask of
+	// COLORWRITE*. Added for the GameCube/PS2 games' depth-priming passes: they
+	// draw once with colour writes off to fill the z-buffer, then again with
+	// them on, and without this the first pass paints.
+	COLORWRITEMASK
+};
+
+enum ColorWriteMask
+{
+	COLORWRITERED   = 1,
+	COLORWRITEGREEN = 2,
+	COLORWRITEBLUE  = 4,
+	COLORWRITEALPHA = 8,
+	COLORWRITEALL   = 15
 };
 
 enum AlphaTestFunc
