@@ -479,8 +479,18 @@ Skin::findUsedBones(int32 numVertices)
 void
 Skin::setPipeline(Atomic *a, int32 type)
 {
-	(void)type;
-	a->pipeline = skinGlobals.pipelines[rw::platform];
+	ObjPipeline *pipe = nil;
+	// SKINTYPEMATFX is the only one of RenderWare's three types that is
+	// implemented, and only on the platforms whose skin plugin registered a
+	// combined pipeline. Anything else -- SKINTYPEGENERIC, SKINTYPETOON, or
+	// matfx on a platform that has no combined pipeline -- gets the plain
+	// skinning pipeline, which is the type-blind behaviour this used to have
+	// unconditionally: wrong for matfx, but never worse than not skinning.
+	if(type == SKINTYPEMATFX)
+		pipe = skinGlobals.matfxPipelines[rw::platform];
+	if(pipe == nil)
+		pipe = skinGlobals.pipelines[rw::platform];
+	a->pipeline = pipe;
 }
 
 }

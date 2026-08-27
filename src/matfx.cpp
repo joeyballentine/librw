@@ -569,7 +569,34 @@ void
 MatFX::enableEffects(Atomic *atomic)
 {
 	*PLUGINOFFSET(int32, atomic, matFXGlobals.atomicOffset) = 1;
-	atomic->pipeline = matFXGlobals.pipelines[rw::platform];
+	// A skinned atomic must never leave a skinning pipeline. The plain matfx
+	// pipeline instances with the default callback, which puts no bone weights
+	// or indices in the vertex buffer -- and the instanced data is cached on
+	// the GEOMETRY and never rebuilt just because the pipeline changed, so an
+	// atomic that renders once through here and then goes back to a skinning
+	// pipeline feeds a skinning shader a buffer with no bones in it. Handing
+	// it the combined pipeline instead keeps one vertex format across every
+	// pipeline the atomic can be on, and costs nothing when no material has an
+	// effect: that pipeline draws exactly what the plain skinning one does.
+	//
+	// On a platform with no combined pipeline the plain skinning one is still
+	// the better answer than the matfx one: it loses the effect, where the
+	// matfx pipeline loses the skinning, and a character frozen in its bind
+	// pose is worse than a character with no shine on it.
+	//
+	// skinGlobals.geoOffset is only nonzero once registerSkinPlugin has run,
+	// which is what makes Skin::get safe to call here. The geometry can still
+	// be nil: the atomic's plugin data is read off a stream before its
+	// geometry is attached, and readAtomicMatFX comes through here.
+	ObjPipeline *pipe = nil;
+	if(skinGlobals.geoOffset && atomic->geometry && Skin::get(atomic->geometry)){
+		pipe = skinGlobals.matfxPipelines[rw::platform];
+		if(pipe == nil)
+			pipe = skinGlobals.pipelines[rw::platform];
+	}
+	if(pipe == nil)
+		pipe = matFXGlobals.pipelines[rw::platform];
+	atomic->pipeline = pipe;
 }
 
 // This prevents setting the pipeline on clone

@@ -26,9 +26,13 @@ void skinRenderCB(Atomic *atomic, InstanceDataHeader *header) {}
 #else
 
 
-static void *skin_amb_VS;
-static void *skin_amb_dir_VS;
-static void *skin_all_VS;
+// Shared with the combined skin+matfx pipeline in d3d9skinmatfx.cpp, which
+// falls back to these for the meshes of a skinned atomic whose material has no
+// effect on it. They agree on where the bone matrices live, so the fallback is
+// a shader swap and nothing else.
+void *skin_amb_VS;
+void *skin_amb_dir_VS;
+void *skin_all_VS;
 
 #define NUMDECLELT 14
 
@@ -377,9 +381,14 @@ skinOpen(void *o, int32, int32)
 {
 #ifdef RW_D3D9
 	createSkinShaders();
+	createSkinMatFXShaders();
 #endif
 
 	skinGlobals.pipelines[PLATFORM_D3D9] = makeSkinPipeline();
+	// The combined skin+matfx pipeline belongs to the skin plugin, not the
+	// matfx one: it is what SKINTYPEMATFX selects, and a platform that does not
+	// register it here silently falls back to plain skinning.
+	skinGlobals.matfxPipelines[PLATFORM_D3D9] = makeSkinMatFXPipeline();
 	return o;
 }
 
@@ -388,10 +397,13 @@ skinClose(void *o, int32, int32)
 {
 #ifdef RW_D3D9
 	destroySkinShaders();
+	destroySkinMatFXShaders();
 #endif
 
 	((ObjPipeline*)skinGlobals.pipelines[PLATFORM_D3D9])->destroy();
 	skinGlobals.pipelines[PLATFORM_D3D9] = nil;
+	((ObjPipeline*)skinGlobals.matfxPipelines[PLATFORM_D3D9])->destroy();
+	skinGlobals.matfxPipelines[PLATFORM_D3D9] = nil;
 	return o;
 }
 

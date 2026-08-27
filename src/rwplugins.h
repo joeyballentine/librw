@@ -181,11 +181,27 @@ void registerMatFXPlugin(void);
  * Skin
  */
 
+// RenderWare has one skinning pipeline per material effect and picks between
+// them by type. These are its type numbers, as RpSkinType spells them, because
+// Skin::setPipeline is reached from application code that has them to hand.
+enum SkinType
+{
+	SKINTYPEGENERIC = 1,
+	SKINTYPEMATFX = 2,
+	SKINTYPETOON = 3
+};
+
 struct SkinGlobals
 {
 	int32 geoOffset;
 	int32 atomicOffset;
 	ObjPipeline *pipelines[NUM_PLATFORMS];
+	// The pipeline that skins AND applies a material effect, per platform. It
+	// is separate from pipelines[] because a platform can have the plain one
+	// without having this: only the platform that registers an entry here can
+	// honour SKINTYPEMATFX, and everywhere else the type falls back to plain
+	// skinning rather than to nothing at all.
+	ObjPipeline *matfxPipelines[NUM_PLATFORMS];
 	ObjPipeline *dummypipe;
 };
 extern SkinGlobals skinGlobals;

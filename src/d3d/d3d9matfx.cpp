@@ -27,8 +27,11 @@ void matfxRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header) {}
 static void *matfx_env_amb_VS;
 static void *matfx_env_amb_dir_VS;
 static void *matfx_env_all_VS;
-static void *matfx_env_PS;
-static void *matfx_env_tex_PS;
+// Shared with the combined skin+matfx pipeline in d3d9skinmatfx.cpp: the env
+// map is resolved entirely in the pixel shader, so the two pipelines differ
+// only in how their vertex shaders get to a normal and can use one of these.
+void *matfx_env_PS;
+void *matfx_env_tex_PS;
 
 enum
 {
@@ -72,8 +75,11 @@ static RawMatrix normal2texcoord = {
 	{ 0.5f,  0.5f, 0.0f }, 1.0f
 };
 
+// vsloc is where the shader wants the 4x4 texture matrix. It is VSLOC_texMat
+// for every shader in this file, but the combined skin+matfx shader needs its
+// bone matrices at VSLOC_afterLights and moves the env constants aside.
 void
-uploadEnvMatrix(Frame *frame)
+uploadEnvMatrix(Frame *frame, int32 vsloc)
 {
 	Matrix invMat;
 	if(frame == nil)
@@ -92,7 +98,47 @@ uploadEnvMatrix(Frame *frame)
 	float uscale = fabs(normal2texcoord.right.x);
 	normal2texcoord.right.x = MatFX::envMapFlipU ? -uscale : uscale;
 	RawMatrix::mult(&envMtx, &invMtx, &normal2texcoord);
-	d3ddevice->SetVertexShaderConstantF(VSLOC_texMat, (float*)&envMtx, 4);
+	d3ddevice->SetVertexShaderConstantF(vsloc, (float*)&envMtx, 4);
+}
+
+// Everything an env-map shader needs that is not the shader itself: the env
+// texture in stage 1, the texture matrix, and the shininess/clamp/colour
+// constants. Split out of matfxRender_EnvMap because the combined skin+matfx
+// pipeline needs the identical state and only picks a different vertex shader.
+//
+// vslocBase is the register the 4x4 texture matrix goes to; the clamp and the
+// env colour follow it at the same fixed offsets in every env shader, so one
+// base is enough to place all three. The effect is taken apart into arguments
+// rather than passed as a MatFX::Env* so that this can be declared in
+// rwd3d9.h, which several translation units include without rwplugins.h.
+void
+uploadEnvMapState(Material *m, Texture *envTex, Frame *envFrame,
+                  float32 coefficient, bool32 fbAlpha, int32 vslocBase)
+{
+	d3d::setTexture(1, envTex);
+	uploadEnvMatrix(envFrame, vslocBase);
+
+	static float zero[4];
+	static float one[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+	struct  {
+		float shininess;
+		float disableFBA;
+		float unused[2];
+	} fxparams;
+	fxparams.shininess = coefficient;
+	fxparams.disableFBA = fbAlpha ? 0.0f : 1.0f;
+	d3ddevice->SetPixelShaderConstantF(PSLOC_shininess, (float*)&fxparams, 1);
+	// This clamps the vertex color below. With it we can achieve both PC and PS2 style matfx
+	if(MatFX::envMapApplyLight)
+		d3ddevice->SetVertexShaderConstantF(vslocBase + 4, zero, 1);
+	else
+		d3ddevice->SetVertexShaderConstantF(vslocBase + 4, one, 1);
+	RGBAf envcol[4];
+	if(MatFX::envMapUseMatColor)
+		convColor(envcol, &m->color);
+	else
+		convColor(envcol, &MatFX::envMapColor);
+	d3ddevice->SetVertexShaderConstantF(vslocBase + 5, (float*)&envcol, 1);
 }
 
 void
@@ -105,32 +151,9 @@ matfxRender_EnvMap(InstanceDataHeader *header, InstanceData *inst, int32 lightBi
 		return;
 	}
 
-	d3d::setTexture(1, env->tex);
-	uploadEnvMatrix(env->frame);
+	uploadEnvMapState(m, env->tex, env->frame, env->coefficient, env->fbAlpha, VSLOC_texMat);
 
 	SetRenderState(SRCBLEND, BLENDONE);
-
-	static float zero[4];
-	static float one[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-	struct  {
-		float shininess;
-		float disableFBA;
-		float unused[2];
-	} fxparams;
-	fxparams.shininess = env->coefficient;
-	fxparams.disableFBA = env->fbAlpha ? 0.0f : 1.0f;
-	d3ddevice->SetPixelShaderConstantF(PSLOC_shininess, (float*)&fxparams, 1);
-	// This clamps the vertex color below. With it we can achieve both PC and PS2 style matfx
-	if(MatFX::envMapApplyLight)
-		d3ddevice->SetVertexShaderConstantF(VSLOC_colorClamp, zero, 1);
-	else
-		d3ddevice->SetVertexShaderConstantF(VSLOC_colorClamp, one, 1);
-	RGBAf envcol[4];
-	if(MatFX::envMapUseMatColor)
-		convColor(envcol, &m->color);
-	else
-		convColor(envcol, &MatFX::envMapColor);
-	d3ddevice->SetVertexShaderConstantF(VSLOC_envColor, (float*)&envcol, 1);
 
 	// Pick a shader
 	if((lightBits & VSLIGHT_MASK) == 0)

@@ -96,11 +96,31 @@ void uploadSkinMatrices(Atomic *atomic);
 void skinInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance);
 void skinRenderCB(Atomic *atomic, InstanceDataHeader *header);
 ObjPipeline *makeSkinPipeline(void);
+extern void *skin_amb_VS;
+extern void *skin_amb_dir_VS;
+extern void *skin_all_VS;
+
+// Skin plugin, combined with MatFX
+
+// The pipeline RenderWare calls rpSKINTYPEMATFX: it skins the vertices AND
+// applies the material effect, which neither the skin nor the matfx pipeline
+// alone can do. Its shaders and its open/close live with the skin plugin
+// because that is which globals hold it, but the env state it uploads is the
+// matfx pipeline's, shared rather than copied.
+void skinMatfxRenderCB(Atomic *atomic, InstanceDataHeader *header);
+ObjPipeline *makeSkinMatFXPipeline(void);
+void createSkinMatFXShaders(void);
+void destroySkinMatFXShaders(void);
 
 // MatFX plugin
 
 void initMatFX(void);
 ObjPipeline *makeMatFXPipeline(void);
+void uploadEnvMatrix(Frame *frame, int32 vsloc);
+void uploadEnvMapState(Material *m, Texture *envTex, Frame *envFrame,
+                       float32 coefficient, bool32 fbAlpha, int32 vslocBase);
+extern void *matfx_env_PS;
+extern void *matfx_env_tex_PS;
 
 // Native Texture and Raster
 
