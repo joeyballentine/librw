@@ -3,6 +3,13 @@
 "%DXSDK_DIR%\utilities\bin\x86\fxc.exe" /nologo /T vs_2_0 /DDIRECTIONALS /Fh default_amb_dir_VS.h default_VS.hlsl
 "%DXSDK_DIR%\utilities\bin\x86\fxc.exe" /nologo /T vs_2_0 /DDIRECTIONALS /DPOINTLIGHTS /DSPOTLIGHTS /Fh default_all_VS.h default_VS.hlsl
 
+rem The same shader with a texture coordinate transform, for the pipeline
+rem rw::GetUVTransformPipeline() returns. Separate blobs rather than a branch in
+rem the default one so that a model with no animated UVs pays nothing.
+"%DXSDK_DIR%\utilities\bin\x86\fxc.exe" /nologo /T vs_2_0 /DUVXFORM /Fh uvxform_amb_VS.h default_VS.hlsl
+"%DXSDK_DIR%\utilities\bin\x86\fxc.exe" /nologo /T vs_2_0 /DUVXFORM /DDIRECTIONALS /Fh uvxform_amb_dir_VS.h default_VS.hlsl
+"%DXSDK_DIR%\utilities\bin\x86\fxc.exe" /nologo /T vs_2_0 /DUVXFORM /DDIRECTIONALS /DPOINTLIGHTS /DSPOTLIGHTS /Fh uvxform_all_VS.h default_VS.hlsl
+
 "%DXSDK_DIR%\utilities\bin\x86\fxc.exe" /nologo /T ps_2_0 /Fh default_PS.h default_PS.hlsl
 "%DXSDK_DIR%\utilities\bin\x86\fxc.exe" /nologo /T ps_2_0 /DTEX /Fh default_tex_PS.h default_PS.hlsl
 

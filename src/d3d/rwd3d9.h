@@ -88,6 +88,14 @@ void defaultRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header);
 
 ObjPipeline *makeDefaultPipeline(void);
 
+// The default pipeline with rw::uvTransform applied to the vertices' texture
+// coordinates. Instancing and uninstancing are the default ones -- nothing
+// about the vertex buffer changes, which is the whole reason the transform is
+// worth doing in the shader.
+void uvTransformRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header);
+
+ObjPipeline *makeUVTransformPipeline(void);
+
 
 // Skin plugin
 

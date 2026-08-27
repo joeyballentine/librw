@@ -114,6 +114,50 @@ void SetRenderStatePtr(int32 state, void *value);
 uint32 GetRenderState(int32 state);
 void *GetRenderStatePtr(int32 state);
 
+// Texture coordinate transform
+//
+// A 2x4 matrix applied to a vertex's texture coordinates before they are used,
+// which is what the GameCube and PS2 call a texgen matrix and what animates a
+// scrolling, rotating or scaling surface without touching the geometry. The
+// geometry is the point: an instanced model shares one Geometry between every
+// Atomic that draws it, so anything written into the vertices animates every
+// copy of the model at once. A transform applied at draw time animates the one
+// atomic being drawn.
+//
+// The matrix multiplies the vector (u, v, 1, 1), so row 0 is
+// (uu, uv, uconst, uconst2) and the two constant columns BOTH add to u. That is
+// deliberately the GameCube's GX_TG_MTX2x4 convention rather than a tidier 2x3,
+// because the games that need this were authored against it -- see
+// UVTRANSFORM_IDENTITY for what "no transform" is.
+//
+// This is state, not a material property: it is set for a draw and cleared
+// after, in the same way a render state is. Only the pipeline
+// GetUVTransformPipeline() returns reads it; every other pipeline ignores it,
+// so setting it does not disturb anything else that is drawing.
+struct ObjPipeline;
+
+enum { NUMUVTRANSFORMELEMENTS = 8 };
+
+extern float32 uvTransform[NUMUVTRANSFORMELEMENTS];
+
+extern const float32 UVTRANSFORM_IDENTITY[NUMUVTRANSFORMELEMENTS];
+
+// nil resets the transform to the identity.
+void SetUVTransform(const float32 *xform);
+
+// The atomic pipeline that applies it, for the platform in use, or nil where
+// the platform has no implementation. A caller that gets nil must keep drawing
+// with whatever pipeline it already had -- an unanimated surface is the correct
+// fallback, and the only other option is not drawing at all.
+ObjPipeline *GetUVTransformPipeline(void);
+
+// Each platform's, filled in by that platform's driverOpen and cleared by its
+// driverClose, exactly as the default pipeline is. A platform that leaves its
+// entry nil is a platform where the transform is not implemented, and that is
+// how GetUVTransformPipeline answers nil rather than by knowing which
+// platforms those are.
+extern ObjPipeline *uvTransformPipelines[NUM_PLATFORMS];
+
 // Im2D
 
 namespace im2d {

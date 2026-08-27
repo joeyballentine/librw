@@ -379,6 +379,12 @@ enum
 	VSLOC_lights	= 17,
 	VSLOC_afterLights	= VSLOC_lights + 8*3,
 
+	// Two rows of a 2x4 texture coordinate transform, for the pipeline
+	// GetUVTransformPipeline() returns. Shares VSLOC_afterLights with the
+	// skin pipeline's bone matrices and the matfx pipeline's texture matrix,
+	// which is safe because each pipeline uploads its own before drawing.
+	VSLOC_uvXform	= VSLOC_afterLights,
+
 	VSLOC_numLights	= 0,
 
 	PSLOC_fogColor = 0
@@ -411,6 +417,11 @@ extern void *im2dOverridePS;
 extern void *default_amb_VS;
 extern void *default_amb_dir_VS;
 extern void *default_all_VS;
+// The same three with a texture coordinate transform applied, built from
+// default_VS.hlsl with UVXFORM defined. They pair with the same pixel shaders.
+extern void *uvxform_amb_VS;
+extern void *uvxform_amb_dir_VS;
+extern void *uvxform_all_VS;
 extern void *default_PS;
 extern void *default_tex_PS;
 extern void *im2d_VS;
