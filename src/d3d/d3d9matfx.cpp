@@ -126,7 +126,9 @@ uploadEnvMapState(Material *m, Texture *envTex, Frame *envFrame,
 		float unused[2];
 	} fxparams;
 	fxparams.shininess = coefficient;
-	fxparams.disableFBA = fbAlpha ? 0.0f : 1.0f;
+	// disableFBA = 0 makes the shader's `fba` term the diffuse alpha; 1 pins
+	// it to one and the environment pass ignores the alpha entirely.
+	fxparams.disableFBA = (fbAlpha || MatFX::envMapModulateByAlpha) ? 0.0f : 1.0f;
 	d3ddevice->SetPixelShaderConstantF(PSLOC_shininess, (float*)&fxparams, 1);
 	// This clamps the vertex color below. With it we can achieve both PC and PS2 style matfx
 	if(MatFX::envMapApplyLight)

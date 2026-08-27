@@ -164,6 +164,13 @@ struct MatFX
 	static bool32 envMapApplyLight;	// modulate env map by lighting
 	static bool32 envMapUseMatColor;	// modulate env map by material color
 	static RGBA envMapColor;	// if !envMapUseMatColor, use this
+	// Modulate the environment pass by the diffuse alpha even when the
+	// material did not ask for frame-buffer alpha. RenderWare's consoles let
+	// the material alpha scale the reflection; this shader only does so when
+	// fbAlpha is set, and an application that relies on the former has no way
+	// to ask for it. Off by default, so nothing changes for anyone who does
+	// not set it.
+	static bool32 envMapModulateByAlpha;
 };
 
 struct MatFXGlobals
