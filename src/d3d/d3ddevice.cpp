@@ -104,6 +104,7 @@ struct RwStateCache {
 static RwStateCache rwStateCache;
 
 void *constantVertexStream;
+bool32 constantVertexColorWhite;
 static IDirect3DTexture9 *whiteTex;
 
 D3dShaderState d3dShaderState;
@@ -1686,9 +1687,10 @@ initD3D(void)
 	constants.normal.x = 0.0f;
 	constants.normal.y = 0.0f;
 	constants.normal.z = 0.0f;
-	constants.color.red = 0;
-	constants.color.green = 0;
-	constants.color.blue = 0;
+	uint8 base = constantVertexColorWhite ? 255 : 0;
+	constants.color.red = base;
+	constants.color.green = base;
+	constants.color.blue = base;
 	constants.color.alpha = 255;
 	for(s = 0; s < 8; s++){
 		constants.texCoors[s].u = 0.0f;

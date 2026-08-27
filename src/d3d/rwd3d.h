@@ -341,6 +341,12 @@ struct VertexConstantData
 	TexCoords texCoors[8];
 };
 extern void *constantVertexStream;
+// The colour the constant vertex stream carries, for geometry drawn without a
+// per-vertex colour. Zero -- black -- is the default and means lighting is the
+// only thing that can brighten such a model. An application whose art expects
+// an unlit vertex to start white rather than black sets this before the device
+// is created.
+extern bool32 constantVertexColorWhite;
 
 // TODO: figure out why this even still exists...
 struct D3dShaderState
