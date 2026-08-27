@@ -10,6 +10,7 @@
 #include "../rwpipeline.h"
 #include "../rwobjects.h"
 #include "../rwengine.h"
+#include "../rwrender.h"
 #include "rwd3d.h"
 #include "rwd3d9.h"
 
@@ -36,6 +37,7 @@ driverOpen(void *o, int32, int32)
 	createDefaultShaders();
 #endif
 	engine->driver[PLATFORM_D3D9]->defaultPipeline = makeDefaultPipeline();
+	uvTransformPipelines[PLATFORM_D3D9] = makeUVTransformPipeline();
 
 	engine->driver[PLATFORM_D3D9]->rasterNativeOffset = nativeRasterOffset;
 	engine->driver[PLATFORM_D3D9]->rasterCreate       = rasterCreate;
@@ -54,6 +56,10 @@ driverClose(void *o, int32, int32)
 #ifdef RW_D3D9
 	destroyDefaultShaders();
 #endif
+	if(uvTransformPipelines[PLATFORM_D3D9]){
+		uvTransformPipelines[PLATFORM_D3D9]->destroy();
+		uvTransformPipelines[PLATFORM_D3D9] = nil;
+	}
 	return o;
 }
 
@@ -695,6 +701,20 @@ makeDefaultPipeline(void)
 	pipe->instanceCB = defaultInstanceCB;
 	pipe->uninstanceCB = defaultUninstanceCB;
 	pipe->renderCB = defaultRenderCB_Shader;
+	return pipe;
+}
+
+// The default pipeline that also applies rw::uvTransform. Same instancing --
+// an atomic can be handed this pipeline and handed back the default one
+// between frames without its vertex buffer being rebuilt either way, which is
+// exactly what a game that turns the effect on per surface does.
+ObjPipeline*
+makeUVTransformPipeline(void)
+{
+	ObjPipeline *pipe = ObjPipeline::create();
+	pipe->instanceCB = defaultInstanceCB;
+	pipe->uninstanceCB = defaultUninstanceCB;
+	pipe->renderCB = uvTransformRenderCB_Shader;
 	return pipe;
 }
 

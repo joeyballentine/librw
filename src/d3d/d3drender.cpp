@@ -25,6 +25,9 @@ IDirect3DDevice9 *d3ddevice = nil;
 void *default_amb_VS;
 void *default_amb_dir_VS;
 void *default_all_VS;
+void *uvxform_amb_VS;
+void *uvxform_amb_dir_VS;
+void *uvxform_all_VS;
 void *default_PS;
 void *default_tex_PS;
 void *im2d_VS;
@@ -52,6 +55,25 @@ createDefaultShaders(void)
 #include "shaders/default_all_VS.h"
 		default_all_VS = createVertexShader((void*)VS_NAME);
 		assert(default_all_VS);
+	}
+
+	{
+		static
+#include "shaders/uvxform_amb_VS.h"
+		uvxform_amb_VS = createVertexShader((void*)VS_NAME);
+		assert(uvxform_amb_VS);
+	}
+	{
+		static
+#include "shaders/uvxform_amb_dir_VS.h"
+		uvxform_amb_dir_VS = createVertexShader((void*)VS_NAME);
+		assert(uvxform_amb_dir_VS);
+	}
+	{
+		static
+#include "shaders/uvxform_all_VS.h"
+		uvxform_all_VS = createVertexShader((void*)VS_NAME);
+		assert(uvxform_all_VS);
 	}
 
 	{
@@ -96,6 +118,12 @@ destroyDefaultShaders(void)
 	default_amb_dir_VS = nil;
 	destroyVertexShader(default_all_VS);
 	default_all_VS = nil;
+	destroyVertexShader(uvxform_amb_VS);
+	uvxform_amb_VS = nil;
+	destroyVertexShader(uvxform_amb_dir_VS);
+	uvxform_amb_dir_VS = nil;
+	destroyVertexShader(uvxform_all_VS);
+	uvxform_all_VS = nil;
 
 	destroyPixelShader(default_PS);
 	default_PS = nil;

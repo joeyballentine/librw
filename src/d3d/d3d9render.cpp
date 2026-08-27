@@ -20,6 +20,7 @@ using namespace d3d;
 #ifndef RW_D3D9
 void defaultRenderCB(Atomic*, InstanceDataHeader*) {}
 void defaultRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header) {}
+void uvTransformRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header) {}
 #else
 
 void
@@ -141,8 +142,11 @@ defaultRenderCB_Fix(Atomic *atomic, InstanceDataHeader *header)
 }
 */
 
-void
-defaultRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header)
+// The default pipeline's render, and the UV-transforming one's. They differ by
+// two shader blobs and one constant upload, so they are one function rather
+// than a copy that will drift.
+static void
+renderCB_Shader(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 {
 	int vsBits;
 	uint32 flags = atomic->geometry->flags;
@@ -153,13 +157,21 @@ defaultRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header)
 	vsBits = lightingCB_Shader(atomic);
 	uploadMatrices(atomic->getFrame()->getLTM());
 
+	// Uploaded per atomic and not cached, because the transform is state the
+	// application changes between draws -- that is what makes a surface
+	// animate -- so there is nothing here that stays the same long enough to
+	// be worth comparing against.
+	if(uvXform)
+		d3ddevice->SetVertexShaderConstantF(VSLOC_uvXform, uvTransform,
+		                                    NUMUVTRANSFORMELEMENTS/4);
+
 	// Pick a shader
 	if((vsBits & VSLIGHT_MASK) == 0)
-		setVertexShader(default_amb_VS);
+		setVertexShader(uvXform ? uvxform_amb_VS : default_amb_VS);
 	else if((vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT)
-		setVertexShader(default_amb_dir_VS);
+		setVertexShader(uvXform ? uvxform_amb_dir_VS : default_amb_dir_VS);
 	else
-		setVertexShader(default_all_VS);
+		setVertexShader(uvXform ? uvxform_all_VS : default_all_VS);
 
 	InstanceData *inst = header->inst;
 	for(uint32 i = 0; i < header->numMeshes; i++){
@@ -178,6 +190,18 @@ defaultRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header)
 		drawInst(header, inst);
 		inst++;
 	}
+}
+
+void
+defaultRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header)
+{
+	renderCB_Shader(atomic, header, 0);
+}
+
+void
+uvTransformRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header)
+{
+	renderCB_Shader(atomic, header, 1);
 }
 
 #endif

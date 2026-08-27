@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "rwbase.h"
 #include "rwplg.h"
@@ -18,6 +19,40 @@ uint32 GetRenderState(int32 state){
 
 void *GetRenderStatePtr(int32 state){
 	return engine->device.getRenderState(state); }
+
+// Texture coordinate transform. See rwrender.h for what the matrix means.
+
+const float32 UVTRANSFORM_IDENTITY[NUMUVTRANSFORMELEMENTS] = {
+	1.0f, 0.0f, 0.0f, 0.0f,
+	0.0f, 1.0f, 0.0f, 0.0f
+};
+
+float32 uvTransform[NUMUVTRANSFORMELEMENTS] = {
+	1.0f, 0.0f, 0.0f, 0.0f,
+	0.0f, 1.0f, 0.0f, 0.0f
+};
+
+ObjPipeline *uvTransformPipelines[NUM_PLATFORMS];
+
+void
+SetUVTransform(const float32 *xform)
+{
+	if(xform == nil)
+		xform = UVTRANSFORM_IDENTITY;
+	memcpy(uvTransform, xform, sizeof(uvTransform));
+}
+
+ObjPipeline*
+GetUVTransformPipeline(void)
+{
+	// rw::platform is whatever the engine was started with. Bounds-checked
+	// rather than indexed blind so that asking before Engine::start, or from
+	// a build with no backend at all, answers nil instead of reading past
+	// the array.
+	if(platform < 0 || platform >= NUM_PLATFORMS)
+		return nil;
+	return uvTransformPipelines[platform];
+}
 
 // Im2D
 
