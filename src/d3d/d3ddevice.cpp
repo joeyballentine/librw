@@ -1382,9 +1382,11 @@ releaseVideoMemory(void)
 	// surface and back to the back buffer's, and releases the virtual screen's.
 	// Run first, it makes every camera Z buffer that was sharing that surface
 	// stop matching -- so each one is read as private and Releases a surface
-	// that has already been released, once per camera. The Reset immediately
-	// afterwards then faults inside the display driver, on a thread of the
-	// driver's own, where nothing names this as the cause.
+	// that has already been released, once per camera. With the game's own
+	// camera and the menu's that is two extra releases of one surface, and the
+	// Reset immediately afterwards faults inside the display driver, on a thread
+	// of the driver's own, where nothing names this as the cause. Resizing the
+	// window or dragging it to a monitor of another DPI was enough to do it.
 	releaseVidmemRasters();
 	releaseVirtualScreen();
 
@@ -1564,31 +1566,51 @@ blitVirtualScreen(void)
 	if(virtualScreenTarget == nil)
 		return;
 
-	RECT client;
-	GetClientRect(d3d9Globals.window, &client);
-	int32 windowWidth = client.right;
-	int32 windowHeight = client.bottom;
-	if(windowWidth <= 0 || windowHeight <= 0)
-		return;
-
 	IDirect3DSurface9 *backBuffer = nil;
 	if(FAILED(d3ddevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer)) ||
 	   backBuffer == nil)
 		return;
 
+	// The BACK BUFFER's size, and NOT the window's.
+	//
+	// The two are the same number for most of a frame and are not the same at
+	// the one moment that matters. The port pumps its window at present time,
+	// one call before this, so a WM_SIZE is delivered while the back buffer is
+	// still the size it was created at -- and the device is not reset to match
+	// until beginUpdate on the NEXT frame. Measured in window coordinates, the
+	// destination rectangle for that one frame lies outside the destination
+	// surface, which is invalid.
+	//
+	// Present scales the back buffer onto the client area regardless, so laying
+	// the letterbox out in back-buffer space draws exactly the same picture and
+	// cannot go out of bounds. The frame between the resize and the reset is
+	// presented at the old size and stretched, which nobody sees.
+	D3DSURFACE_DESC desc;
+	if(FAILED(backBuffer->GetDesc(&desc))){
+		backBuffer->Release();
+		return;
+	}
+
+	int32 targetWidth = (int32)desc.Width;
+	int32 targetHeight = (int32)desc.Height;
+	if(targetWidth <= 0 || targetHeight <= 0){
+		backBuffer->Release();
+		return;
+	}
+
 	// Integer arithmetic, so that a rectangle which should exactly fill the
-	// window does: the float form leaves a row or column of background showing
+	// target does: the float form leaves a row or column of background showing
 	// at some sizes, which reads as a rendering fault rather than as rounding.
-	int32 fitWidth = windowWidth;
-	int32 fitHeight = (int32)(((int64)windowWidth * virtualScreenHeight) / virtualScreenWidth);
-	if(fitHeight > windowHeight){
-		fitHeight = windowHeight;
-		fitWidth = (int32)(((int64)windowHeight * virtualScreenWidth) / virtualScreenHeight);
+	int32 fitWidth = targetWidth;
+	int32 fitHeight = (int32)(((int64)targetWidth * virtualScreenHeight) / virtualScreenWidth);
+	if(fitHeight > targetHeight){
+		fitHeight = targetHeight;
+		fitWidth = (int32)(((int64)targetHeight * virtualScreenWidth) / virtualScreenHeight);
 	}
 
 	RECT dest;
-	dest.left = (windowWidth - fitWidth) / 2;
-	dest.top = (windowHeight - fitHeight) / 2;
+	dest.left = (targetWidth - fitWidth) / 2;
+	dest.top = (targetHeight - fitHeight) / 2;
 	dest.right = dest.left + fitWidth;
 	dest.bottom = dest.top + fitHeight;
 
