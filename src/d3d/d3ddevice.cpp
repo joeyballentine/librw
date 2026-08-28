@@ -1360,7 +1360,6 @@ releaseVideoMemory(void)
 {
 	int32 i;
 
-	releaseVirtualScreen();
 	for(i = 0; i < MAXNUMSTAGES; i++)
 		d3ddevice->SetTexture(i, nil);
 	d3ddevice->SetVertexDeclaration(nil);
@@ -1370,12 +1369,32 @@ releaseVideoMemory(void)
 	for(i = 0; i < MAXNUMSTREAMS; i++)
 		d3ddevice->SetStreamSource(0, nil, 0, 0);
 
+	// The RASTERS FIRST, and then the virtual screen. This order is load
+	// bearing and it was the other way round.
+	//
+	// releaseVidmemRasters decides whether a Z raster owns its depth surface by
+	// comparing that surface with d3d9Globals.defaultDepthSurf: equal means the
+	// raster is sharing the engine's, so leave it alone and let the pointer
+	// dangle as the marker that recreateVidmemRasters reads. Anything else it
+	// takes to be the raster's own and Releases.
+	//
+	// releaseVirtualScreen moves defaultDepthSurf off the virtual screen's depth
+	// surface and back to the back buffer's, and releases the virtual screen's.
+	// Run first, it makes every camera Z buffer that was sharing that surface
+	// stop matching -- so each one is read as private and Releases a surface
+	// that has already been released, once per camera. The Reset immediately
+	// afterwards then faults inside the display driver, on a thread of the
+	// driver's own, where nothing names this as the cause.
+	releaseVidmemRasters();
+	releaseVirtualScreen();
+
+	// After releaseVirtualScreen, so that what gets bound is the back buffer it
+	// just handed back rather than the surface it just destroyed.
 	setRenderTarget(0, d3d9Globals.defaultRenderTarget);
 	for(i = 1; i < MAXNUMRENDERTARGETS; i++)
 		setRenderTarget(i, nil);
 	setDepthSurface(d3d9Globals.defaultDepthSurf);
 
-	releaseVidmemRasters();
 	releaseDynamicVBs();
 	releaseDynamicIBs();
 }
