@@ -496,10 +496,10 @@ rasterCreateZbuffer(Raster *raster)
 	natras->format = d3d9Globals.present.AutoDepthStencilFormat;
 	raster->depth = findFormatDepth(natras->format);
 
-	RECT rect;
-	GetClientRect(d3d9Globals.window, &rect);
+	int32 screenWidth, screenHeight;
+	getScreenExtent(&screenWidth, &screenHeight);
 	// This check is done by RW but it's rather strange...
-	if(rect.right == raster->width && rect.bottom == raster->height)
+	if(screenWidth == raster->width && screenHeight == raster->height)
 		natras->texture = d3d9Globals.defaultDepthSurf;
 	else{
 		IDirect3DSurface9 *surf = nil;

@@ -23,6 +23,40 @@ namespace d3d {
 
 D3d9Globals d3d9Globals;
 
+// --- the virtual screen -----------------------------------------------------
+//
+// setVirtualScreen's contract is in rwd3d.h. What it costs here is one extra
+// render target and depth surface, and a stretch at present time.
+//
+// The back buffer still follows the window -- beginUpdate resizes it, and it has
+// to, because it is what the picture is stretched INTO. What changes is that the
+// default render target is no longer the back buffer: cameras draw to a surface
+// of a fixed size, so a viewport taken from a camera raster covers all of it
+// however large the window has become.
+//
+// realBackBuffer and realDepthSurf are the borrowed pointers librw would
+// otherwise have kept in d3d9Globals. They are needed at present time and again
+// when the surfaces are handed back before a device reset.
+int32 virtualScreenWidth;
+int32 virtualScreenHeight;
+static IDirect3DSurface9 *virtualScreenTarget;
+static IDirect3DSurface9 *virtualScreenDepth;
+static IDirect3DSurface9 *realBackBuffer;
+static IDirect3DSurface9 *realDepthSurf;
+
+void
+getScreenExtent(int32 *width, int32 *height)
+{
+	if(virtualScreenTarget){
+		*width = virtualScreenWidth;
+		*height = virtualScreenHeight;
+		return;
+	}
+	RECT rect;
+	GetClientRect(d3d9Globals.window, &rect);
+	*width = rect.right;
+	*height = rect.bottom;
+}
 // Keep track of rasters exclusively in video memory
 // as they need special treatment sometimes
 struct VidmemRaster
@@ -1095,10 +1129,13 @@ recreateVidmemRasters(void)
 
 		case Raster::ZBUFFER:
 			if(natras->texture){
-				RECT rect;
-				GetClientRect(d3d9Globals.window, &rect);
-				raster->width = rect.right;
-				raster->height = rect.bottom;
+				// The extent, not the window: a Z buffer sharing the default
+				// depth surface has to match the surface it is paired with,
+				// and with a virtual screen that is no longer the client rect.
+				int32 screenWidth, screenHeight;
+				getScreenExtent(&screenWidth, &screenHeight);
+				raster->width = screenWidth;
+				raster->height = screenHeight;
 				natras->texture = d3d9Globals.defaultDepthSurf;
 				natras->format = d3d9Globals.present.AutoDepthStencilFormat;
 				raster->depth = findFormatDepth(natras->format);
@@ -1210,10 +1247,120 @@ recreateDynamicIBs(void)
 	}
 }
 
+// Point the default render target at a surface of the virtual screen's size.
+//
+// Called wherever librw has just taken the back buffer as the default: once at
+// startup and again after every device reset, which is also every window resize.
+// The real back buffer is kept because present time needs it and because
+// releaseVirtualScreen has to hand it back before the next reset.
+//
+// A failure here is not fatal. The surfaces stay null, the default render target
+// is left as the back buffer, and the game renders the way it did before the
+// virtual screen was asked for -- at its own size in a corner of the window.
+// That is worth having as the outcome of running out of video memory.
+static void
+acquireVirtualScreen(void)
+{
+	if(virtualScreenWidth <= 0 || virtualScreenHeight <= 0)
+		return;
+	assert(virtualScreenTarget == nil);
+
+	realBackBuffer = d3d9Globals.defaultRenderTarget;
+	realDepthSurf = d3d9Globals.defaultDepthSurf;
+
+	// D3DMULTISAMPLE_NONE, not the back buffer's setting. StretchRect refuses a
+	// multisampled destination, and the whole point of the surface is that it is
+	// the source of that stretch.
+	HRESULT hr = d3ddevice->CreateRenderTarget(virtualScreenWidth, virtualScreenHeight,
+		d3d9Globals.present.BackBufferFormat, D3DMULTISAMPLE_NONE, 0, FALSE,
+		&virtualScreenTarget, nil);
+	if(FAILED(hr)){
+		virtualScreenTarget = nil;
+		return;
+	}
+
+	hr = d3ddevice->CreateDepthStencilSurface(virtualScreenWidth, virtualScreenHeight,
+		d3d9Globals.present.AutoDepthStencilFormat, D3DMULTISAMPLE_NONE, 0, TRUE,
+		&virtualScreenDepth, nil);
+	if(FAILED(hr)){
+		virtualScreenTarget->Release();
+		virtualScreenTarget = nil;
+		virtualScreenDepth = nil;
+		return;
+	}
+
+	d3d9Globals.defaultRenderTarget = virtualScreenTarget;
+	d3d9Globals.defaultDepthSurf = virtualScreenDepth;
+	setRenderTarget(0, virtualScreenTarget);
+	setDepthSurface(virtualScreenDepth);
+}
+
+// Give the back buffer back and drop the surfaces.
+//
+// Both are D3DPOOL_DEFAULT and so must not outlive a Reset. The default render
+// target is restored FIRST because releaseVideoMemory binds whatever it points
+// at immediately after this returns, and binding a surface that has just been
+// released is the one ordering mistake here that would not announce itself.
+static void
+releaseVirtualScreen(void)
+{
+	if(virtualScreenTarget == nil)
+		return;
+
+	d3d9Globals.defaultRenderTarget = realBackBuffer;
+	d3d9Globals.defaultDepthSurf = realDepthSurf;
+
+	virtualScreenTarget->Release();
+	virtualScreenTarget = nil;
+	virtualScreenDepth->Release();
+	virtualScreenDepth = nil;
+}
+void
+setVirtualScreen(int32 width, int32 height)
+{
+	if(width <= 0 || height <= 0){
+		width = 0;
+		height = 0;
+	}
+	if(width == virtualScreenWidth && height == virtualScreenHeight)
+		return;
+
+	// Before the device exists this is just a note for acquireVirtualScreen to
+	// read out of initD3D, which is the order the engine actually starts in.
+	if(d3ddevice == nil){
+		virtualScreenWidth = width;
+		virtualScreenHeight = height;
+		return;
+	}
+
+	releaseVirtualScreen();
+	virtualScreenWidth = width;
+	virtualScreenHeight = height;
+	acquireVirtualScreen();
+	if(virtualScreenTarget == nil){
+		// Either it was switched off or the surfaces could not be made. Either
+		// way the back buffer is the target again and has to be bound, because
+		// releaseVirtualScreen only moved the pointer.
+		setRenderTarget(0, d3d9Globals.defaultRenderTarget);
+		setDepthSurface(d3d9Globals.defaultDepthSurf);
+	}
+}
+
+void
+getVirtualScreen(int32 *width, int32 *height)
+{
+	if(width)
+		*width = virtualScreenWidth;
+	if(height)
+		*height = virtualScreenHeight;
+}
+
 static void
 releaseVideoMemory(void)
 {
 	int32 i;
+
+	releaseVirtualScreen();
 	for(i = 0; i < MAXNUMSTAGES; i++)
 		d3ddevice->SetTexture(i, nil);
 	d3ddevice->SetVertexDeclaration(nil);
@@ -1243,6 +1390,10 @@ restoreVideoMemory(void)
 	d3ddevice->GetDepthStencilSurface(&d3d9Globals.defaultDepthSurf);
 	d3d9Globals.defaultDepthSurf->Release();	// refcount increased by Get
 	deviceCache.depthSurface = d3d9Globals.defaultDepthSurf;
+
+	// Before the rasters, because recreateVidmemRasters pairs a Z buffer with
+	// whatever the default depth surface is by then.
+	acquireVirtualScreen();
 
 	recreateDynamicIBs();
 	recreateDynamicVBs();
@@ -1374,6 +1525,67 @@ clearCamera(Camera *cam, RGBA *col, uint32 mode)
 	d3ddevice->Clear(0, nil, mode, c, 1.0f, 0);
 }
 
+// Stretch the virtual screen into the back buffer, keeping its aspect ratio.
+//
+// Called with no scene open, which is what StretchRect requires -- endUpdate has
+// already run by the time anything presents.
+//
+// The destination is the largest rectangle of the virtual screen's shape that
+// fits the window, centred, and the rest is cleared to black. Clearing every
+// frame rather than only when the window changes costs one fill of a surface
+// that is about to be overwritten anyway, and means nothing has to track when
+// the bars last moved.
+//
+// The depth surface is unbound before the back buffer is bound: D3D9 requires a
+// depth surface at least as large as the render target, and the virtual screen's
+// is deliberately smaller than the window.
+static void
+blitVirtualScreen(void)
+{
+	if(virtualScreenTarget == nil)
+		return;
+
+	RECT client;
+	GetClientRect(d3d9Globals.window, &client);
+	int32 windowWidth = client.right;
+	int32 windowHeight = client.bottom;
+	if(windowWidth <= 0 || windowHeight <= 0)
+		return;
+
+	IDirect3DSurface9 *backBuffer = nil;
+	if(FAILED(d3ddevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer)) ||
+	   backBuffer == nil)
+		return;
+
+	// Integer arithmetic, so that a rectangle which should exactly fill the
+	// window does: the float form leaves a row or column of background showing
+	// at some sizes, which reads as a rendering fault rather than as rounding.
+	int32 fitWidth = windowWidth;
+	int32 fitHeight = (int32)(((int64)windowWidth * virtualScreenHeight) / virtualScreenWidth);
+	if(fitHeight > windowHeight){
+		fitHeight = windowHeight;
+		fitWidth = (int32)(((int64)windowHeight * virtualScreenWidth) / virtualScreenHeight);
+	}
+
+	RECT dest;
+	dest.left = (windowWidth - fitWidth) / 2;
+	dest.top = (windowHeight - fitHeight) / 2;
+	dest.right = dest.left + fitWidth;
+	dest.bottom = dest.top + fitHeight;
+
+	setDepthSurface(nil);
+	setRenderTarget(0, backBuffer);
+	d3ddevice->Clear(0, nil, D3DCLEAR_TARGET, 0, 1.0f, 0);
+	d3ddevice->StretchRect(virtualScreenTarget, nil, backBuffer, &dest, D3DTEXF_LINEAR);
+
+	// Back to the virtual screen. beginUpdate would rebind it through
+	// setRenderSurfaces in any case, but leaving the back buffer bound means any
+	// clear between now and then lands on the wrong surface.
+	setRenderTarget(0, virtualScreenTarget);
+	setDepthSurface(virtualScreenDepth);
+
+	backBuffer->Release();
+}
 static void
 showRaster(Raster *raster, uint32 flag)
 {
@@ -1387,6 +1599,9 @@ showRaster(Raster *raster, uint32 flag)
 
 	// not used but we want cameras to have rasters
 	assert(raster);
+
+	blitVirtualScreen();
+
 	HRESULT res = d3ddevice->Present(nil, nil, 0, nil);
 
 	if(res == D3DERR_DEVICELOST){
@@ -1675,6 +1890,8 @@ initD3D(void)
 	d3ddevice->GetDepthStencilSurface(&d3d9Globals.defaultDepthSurf);
 	d3d9Globals.defaultDepthSurf->Release();	// refcount increased by Get
 	deviceCache.depthSurface = d3d9Globals.defaultDepthSurf;
+
+	acquireVirtualScreen();
 
 	d3d9Globals.numTextures = 0;
 	d3d9Globals.numVertexShaders = 0;

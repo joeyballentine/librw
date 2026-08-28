@@ -29,6 +29,26 @@ namespace d3d {
 
 extern bool32 isP8supported;
 
+// A fixed-size screen the game renders into, scaled onto the window at present
+// time with its aspect ratio kept.
+//
+// Without it a camera raster smaller than the window renders at its own size in
+// the window's top-left corner, because setViewport takes the viewport from the
+// raster while the back buffer follows the client rect. That is right for a
+// resolution-independent game and wrong for one whose framebuffer is a fixed
+// part of its design: it wants the picture SCALED, not a bigger window with the
+// same picture in a corner of it.
+//
+// When set, the default render target becomes an off-screen surface of this size
+// rather than the back buffer, so every camera that renders to the frame buffer
+// lands there whatever the window is doing. showRaster then stretches it into a
+// centred rectangle of the back buffer and clears what is left to black.
+//
+// Zero disables it and restores the stock behaviour. Safe to call before the
+// device exists; the surfaces are created with it and recreated across a reset.
+void setVirtualScreen(int32 width, int32 height);
+void getVirtualScreen(int32 *width, int32 *height);
+
 extern Device renderdevice;
 
 #ifdef RW_D3D9
