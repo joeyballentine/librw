@@ -1532,14 +1532,21 @@ setLights(WorldLights *lightData)
 		}
 	}
 
+	// The terminator the shader loop stops on, and only when a slot is left to
+	// put it in. A full array needs none: the loop runs out on its own.
 	uniformObject.lightParams[n].type = 0.0f;
-
+out:
+	// Reached by the gotos above as well, which is the point. They used to jump
+	// PAST these, so an atomic lit by exactly MAX_LIGHTS lights filled
+	// uniformObject and then uploaded none of it -- it drew with whatever the
+	// previous atomic had been lit by. Reachable in BFBB, which ships a light
+	// kit of eight directionals.
 	setUniform(u_ambLight, &uniformObject.ambLight);
 	setUniform(u_lightParams, uniformObject.lightParams);
 	setUniform(u_lightPosition, uniformObject.lightPosition);
 	setUniform(u_lightDirection, uniformObject.lightDirection);
 	setUniform(u_lightColor, uniformObject.lightColor);
-out:
+
 	objectDirty = 1;
 	return bits;
 }
