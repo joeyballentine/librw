@@ -324,6 +324,36 @@ inline DQuat negate(const DQuat &q) { return makeDQuat(negate(q.r), negate(q.d))
 inline DQuat scale(const DQuat &q, float32 r) { return makeDQuat(scale(q.r,r), scale(q.d,r)); }
 
 
+// What a texture's alpha channel actually contains, as opposed to whether the
+// pixel format has room for one.
+//
+// A native raster's hasAlpha is the format's answer and it is far too generous:
+// a DXT3 or DXT5 raster reports alpha whether or not a single texel uses it,
+// because the flag is carried over from the pixel format rather than read out
+// of the texels. Blending is switched on from that answer, so opaque art ends
+// up blended and keyed art ends up blended when it wants to be cut.
+//
+// At rw scope rather than in a backend, because none of it is a device's
+// decision: it is a property of the artwork, and every backend that blends from
+// it needs the same answer.
+enum AlphaKind
+{
+	// Every texel is opaque. Nothing to test and nothing to blend.
+	ALPHAOPAQUE = 0,
+	// Every texel is fully transparent or fully opaque -- a shape punched out
+	// of the texture. Wants an alpha test, not a blend.
+	ALPHAKEYED,
+	// Something in between exists somewhere. Genuinely translucent; blend it.
+	ALPHAGRADED
+};
+
+// Read the alpha out of a DXT surface's top level and say which of the three
+// kinds it is. `blocks` is level 0 as stored, `dxt` is 1, 3 or 5.
+//
+// Only the top level is worth reading. A mip chain filters a keyed edge into a
+// graded one, and the artwork's intent is in level 0.
+int32 classifyDXTAlpha(int32 dxt, const uint8 *blocks, int32 width, int32 height);
+
 struct RawMatrix
 {
 	V3d right;

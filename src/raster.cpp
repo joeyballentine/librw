@@ -422,14 +422,90 @@ xbox_to_d3d(rw::Raster *ras)
 		// removeMask on it -- whatever the block modes say.
 		if(i == 0)
 			d3d::setRasterAlphaKind(newras,
-				dxt == 1 && !xboxras->hasAlpha ? d3d::ALPHAOPAQUE :
-				d3d::classifyDXTAlpha(dxt, srcpx, ras->width, ras->height));
+				dxt == 1 && !xboxras->hasAlpha ? ALPHAOPAQUE :
+				classifyDXTAlpha(dxt, srcpx, ras->width, ras->height));
 	//	flipDXT(dxt, dstpx, srcpx, ras->width, ras->height);
 		ras->unlock(i);
 	//	newras->unlock(i);
 	}
 
 	return newras;
+}
+
+// The alpha a DXT block hands back for one of its sixteen texels.
+//
+// DXT1 carries a single bit of it and only in the block mode where the two
+// colour endpoints are ordered low-to-high; DXT3 stores a nibble per texel
+// outright; DXT5 stores two endpoints and a 3-bit index, and the endpoint
+// order picks between the eight-value ramp and the six-value ramp that reserves
+// two indices for the ends of the range.
+static uint8
+dxtBlockAlpha(int32 dxt, const uint8 *block, int32 texel)
+{
+	if(dxt == 1){
+		uint32 c0 = block[0] | (block[1] << 8);
+		uint32 c1 = block[2] | (block[3] << 8);
+		if(c0 > c1)
+			return 0xFF;
+		uint32 idx = (block[4 + (texel >> 2)] >> ((texel & 3)*2)) & 3;
+		return idx == 3 ? 0 : 0xFF;
+	}
+
+	if(dxt == 3){
+		uint8 n = block[texel >> 1];
+		n = (texel & 1) ? (n >> 4) : (n & 0xF);
+		// 0..15 spread over 0..255, so 15 lands exactly on opaque.
+		return (uint8)(n*17);
+	}
+
+	// DXT5.
+	uint32 a0 = block[0];
+	uint32 a1 = block[1];
+	uint64 bits = 0;
+	for(int i = 0; i < 6; i++)
+		bits |= (uint64)block[2+i] << (i*8);
+	uint32 idx = (uint32)((bits >> (texel*3)) & 7);
+
+	if(idx == 0) return (uint8)a0;
+	if(idx == 1) return (uint8)a1;
+	if(a0 > a1)
+		return (uint8)(((8-idx)*a0 + (idx-1)*a1)/7);
+	if(idx == 6) return 0;
+	if(idx == 7) return 0xFF;
+	return (uint8)(((6-idx)*a0 + (idx-1)*a1)/5);
+}
+
+int32
+classifyDXTAlpha(int32 dxt, const uint8 *blocks, int32 width, int32 height)
+{
+	if(dxt != 1 && dxt != 3 && dxt != 5)
+		return ALPHAGRADED;
+
+	int32 blockSize = dxt == 1 ? 8 : 16;
+	// DXT5's alpha block comes first; DXT3's does too. DXT1 keeps its one bit
+	// inside the colour block.
+	int32 bw = (width + 3)/4;
+	int32 bh = (height + 3)/4;
+	bool32 anyTransparent = 0;
+
+	for(int32 by = 0; by < bh; by++){
+		for(int32 bx = 0; bx < bw; bx++){
+			const uint8 *block = blocks + (by*bw + bx)*blockSize;
+			for(int32 t = 0; t < 16; t++){
+				// A surface narrower or shorter than the block grid is
+				// padded out to it, and what the encoder put in the
+				// padding is not the artwork.
+				if(bx*4 + (t & 3) >= width || by*4 + (t >> 2) >= height)
+					continue;
+				uint8 a = dxtBlockAlpha(dxt, block, t);
+				if(a == 0)
+					anyTransparent = 1;
+				else if(a != 0xFF)
+					return ALPHAGRADED;
+			}
+		}
+	}
+	return anyTransparent ? ALPHAKEYED : ALPHAOPAQUE;
 }
 
 static rw::Raster*
@@ -461,6 +537,15 @@ d3d_to_gl3(rw::Raster *ras)
 		uint8 *srcpx = ras->lock(i, Raster::LOCKREAD);
 		uint8 *dstpx = newras->lock(i, Raster::LOCKWRITE | Raster::LOCKNOFETCH);
 		flipDXT(dxt, dstpx, srcpx, ras->width, ras->height);
+		// The blocks go across untouched, so nothing on the way here has read
+		// the alpha out of them. Do it once, from the top level.
+		//
+		// DXT1 with the flag clear is opaque by decree -- rasterToImage calls
+		// removeMask on it -- whatever the block modes say.
+		if(i == 0)
+			gl3::setRasterAlphaKind(newras,
+				dxt == 1 && !d3dras->hasAlpha ? ALPHAOPAQUE :
+				classifyDXTAlpha(dxt, srcpx, ras->width, ras->height));
 		ras->unlock(i);
 		newras->unlock(i);
 	}
@@ -497,6 +582,13 @@ xbox_to_gl3(rw::Raster *ras)
 		uint8 *srcpx = ras->lock(i, Raster::LOCKREAD);
 		uint8 *dstpx = newras->lock(i, Raster::LOCKWRITE | Raster::LOCKNOFETCH);
 		flipDXT(dxt, dstpx, srcpx, ras->width, ras->height);
+		// See d3d_to_gl3 above, and xbox_to_d3d for the same call on the other
+		// backend: the blocks are copied through, so this is the only place
+		// that has both the texels and somewhere to record what is in them.
+		if(i == 0)
+			gl3::setRasterAlphaKind(newras,
+				dxt == 1 && !xboxras->hasAlpha ? ALPHAOPAQUE :
+				classifyDXTAlpha(dxt, srcpx, ras->width, ras->height));
 		ras->unlock(i);
 		newras->unlock(i);
 	}
