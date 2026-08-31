@@ -198,6 +198,24 @@ enum
 	VSLIGHT_AMBIENT = 8,
 };
 
+// A fixed-size screen, scaled onto the window at present time.
+//
+// Without one, a Raster::CAMERA IS the default framebuffer: the viewport
+// follows the window and the camera's projection does not, so resizing the
+// window stretches the picture. With one, the camera raster gets an FBO of its
+// own at its own size, everything draws into that, and showRaster blits it into
+// the window as the largest rectangle of its shape that fits -- centred, with
+// the rest black. Same contract as the D3D9 device's setVirtualScreen.
+//
+// Call it before the game creates its camera raster, and never with a size that
+// disagrees with the raster: the raster's own width and height are what the FBO
+// is built at, so a mismatch would silently render at the wrong size rather
+// than fail.
+//
+// Zero, the default, means no virtual screen and the behaviour above it.
+void setVirtualScreen(int32 width, int32 height);
+extern int32 virtualScreenWidth, virtualScreenHeight;
+
 extern const char *shaderDecl;	// #version stuff
 extern const char *header_vert_src;
 extern const char *header_frag_src;

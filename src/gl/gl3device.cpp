@@ -142,6 +142,16 @@ int32 u_surfProps;
 
 bool32 constantVertexColorWhite;
 
+int32 virtualScreenWidth;
+int32 virtualScreenHeight;
+
+void
+setVirtualScreen(int32 width, int32 height)
+{
+	virtualScreenWidth = width;
+	virtualScreenHeight = height;
+}
+
 Shader *defaultShader, *defaultShader_noAT;
 Shader *defaultShader_fullLight, *defaultShader_fullLight_noAT;
 Shader *uvXformShader, *uvXformShader_noAT;
@@ -1326,7 +1336,13 @@ getFramebufferRect(Raster *frameBuffer)
 {
 	Rect r;
 	Raster *fb = frameBuffer->parent;
-	if(fb->type == Raster::CAMERA){
+	Gl3Raster *natfb = PLUGINOFFSET(Gl3Raster, fb, nativeRasterOffset);
+	if(fb->type == Raster::CAMERA && natfb->fbo){
+		// A virtual screen. The picture is the raster's size and the window's
+		// shape has nothing to do with it until showRaster blits it out.
+		r.w = fb->width;
+		r.h = fb->height;
+	}else if(fb->type == Raster::CAMERA){
 #ifdef LIBRW_SDL2
 		SDL_GetWindowSize(glGlobals.window, &r.w, &r.h);
 #elif defined(LIBRW_SDL3)
@@ -1497,11 +1513,83 @@ clearCamera(Camera *cam, RGBA *col, uint32 mode)
 		glDisable(GL_SCISSOR_TEST);
 }
 
+// Stretch the virtual screen into the window, keeping its aspect ratio.
+//
+// The destination is the largest rectangle of the virtual screen's shape that
+// fits the window, centred, and the rest is cleared to black. Clearing every
+// frame rather than only when the window changes costs one fill of a surface
+// that is about to be overwritten anyway, and means nothing has to track when
+// the bars last moved.
+//
+// The scissor and the colour mask are forced off around it for the reason
+// clearCamera forces them: glClear obeys both, and glBlitFramebuffer obeys the
+// scissor. A frame that ended with either set would otherwise blit into a
+// corner of the window, or not at all.
+static void
+blitVirtualScreen(Raster *raster)
+{
+	Raster *fb = raster->parent;
+	Gl3Raster *natfb = PLUGINOFFSET(Gl3Raster, fb, nativeRasterOffset);
+	if(natfb->fbo == 0)
+		return;
+
+	int winw = 0, winh = 0;
+#if defined(LIBRW_SDL2) || defined(LIBRW_SDL3)
+	SDL_GetWindowSize(glGlobals.window, &winw, &winh);
+#elif defined(LIBRW_GLFW)
+	glfwGetFramebufferSize(glGlobals.window, &winw, &winh);
+#endif
+	if(winw <= 0 || winh <= 0)
+		return;
+
+	int32 vw = fb->width;
+	int32 vh = fb->height;
+	if(vw <= 0 || vh <= 0)
+		return;
+
+	// Widest first, then narrowed if that would not fit vertically. Done in
+	// 64-bit because a 4K window times a 2160-line screen overflows 32.
+	int32 dw = winw;
+	int32 dh = (int32)((int64)winw * vh / vw);
+	if(dh > winh){
+		dh = winh;
+		dw = (int32)((int64)winh * vw / vh);
+	}
+	int32 dx = (winw - dw)/2;
+	int32 dy = (winh - dh)/2;
+
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, natfb->fbo);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+
+	glDisable(GL_SCISSOR_TEST);
+	if(rwStateCache.colorwritemask != COLORWRITEALL)
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glBlitFramebuffer(0, 0, vw, vh, dx, dy, dx + dw, dy + dh,
+	                  GL_COLOR_BUFFER_BIT, GL_LINEAR);
+
+	if(rwStateCache.colorwritemask != COLORWRITEALL)
+		glColorMask(!!(rwStateCache.colorwritemask & COLORWRITERED),
+			!!(rwStateCache.colorwritemask & COLORWRITEGREEN),
+			!!(rwStateCache.colorwritemask & COLORWRITEBLUE),
+			!!(rwStateCache.colorwritemask & COLORWRITEALPHA));
+
+	// The read and draw bindings above went round bindFramebuffer's cache, so
+	// it no longer describes the binding. Put both back by hand.
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	currentFramebuffer = 0;
+}
+
 static void
 showRaster(Raster *raster, uint32 flags)
 {
 //	glViewport(raster->offsetX, raster->offsetY,
 //		raster->width, raster->height);
+
+	blitVirtualScreen(raster);
 
 #ifdef LIBRW_SDL2
 	if(flags & Raster::FLIPWAITVSYNCH)
