@@ -571,7 +571,10 @@ void
 setRenderState(int32 state, void *pvalue)
 {
 	uint32 value = (uint32)pvalue;
-	switch(state){
+	// Over RenderState and with no default, so that -Wswitch reports a state
+	// this backend has not answered rather than letting it be dropped. The
+	// unimplemented ones are listed at the bottom.
+	switch((RenderState)state){
 	case TEXTURERASTER:
 		rwStateCache.raster = (Raster*)pvalue;
 		if(rwStateCache.raster &&
@@ -638,12 +641,33 @@ setRenderState(int32 state, void *pvalue)
 		break;
 	case ALPHATESTREF:
 		break;
+
+	// Not implemented on this backend. Listed rather than left to a default
+	// so that a state added later stops the build here and somebody decides.
+	case CULLMODE:
+	case STENCILENABLE:
+	case STENCILFAIL:
+	case STENCILZFAIL:
+	case STENCILPASS:
+	case STENCILFUNCTION:
+	case STENCILFUNCTIONREF:
+	case STENCILFUNCTIONMASK:
+	case STENCILFUNCTIONWRITEMASK:
+	case GSALPHATEST:
+	case GSALPHATESTREF:
+	case COLORWRITEMASK:
+		break;
 	}
 }
 
+// This backend reports no render state at all. Not a switch, so nothing here
+// is guarded the way setRenderState above is; whoever implements it should
+// write it as an exhaustive switch over RenderState.
 void*
 getRenderState(int32 state)
 {
+	(void)state;
+	return nil;
 }
 
 // in librw

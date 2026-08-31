@@ -669,11 +669,19 @@ setMaterial(const RGBA &color, const SurfaceProperties &surfaceprops, float extr
 }
 
 static void
+// **The switch is over RenderState, not over the int it was handed, and it has
+// no default.** That is what makes -Wswitch an error when rwrender.h gains a
+// state this backend has not answered: without it the state is accepted and
+// silently dropped, which is how COLORWRITEMASK reached D3D9 and not GL3 and
+// left every depth-priming pass painting.
+//
+// A backend that cannot support a state says so with an empty case and a
+// comment. The point is that it is a decision somebody made, not a hole.
 setRwRenderState(int32 state, void *pvalue)
 {
 	uint32 value = (uint32)(uintptr)pvalue;
 	uint32 bval = value ? TRUE : FALSE;
-	switch(state){
+	switch((RenderState)state){
 	case TEXTURERASTER:
 		setRasterStage(0, (Raster*)pvalue);
 		break;
@@ -820,8 +828,10 @@ setRwRenderState(int32 state, void *pvalue)
 static void*
 getRwRenderState(int32 state)
 {
-	uint32 val;
-	switch(state){
+	// Initialised because the switch is exhaustive over the enum but the int
+	// that arrives does not have to be one of its values.
+	uint32 val = 0;
+	switch((RenderState)state){
 	case TEXTURERASTER:
 		return rwStateCache.texstage[0].raster;
 	case TEXTUREADDRESS:
@@ -906,8 +916,6 @@ getRwRenderState(int32 state)
 	case COLORWRITEMASK:
 		val = rwStateCache.colorwritemask;
 		break;
-	default:
-		val = 0;
 	}
 	return (void*)(uintptr)val;
 }

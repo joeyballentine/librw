@@ -143,6 +143,10 @@ im2DRenderPrimitive(PrimitiveType primType, void *vertices, int32 numVertices)
 
 	uint32 primCount = 0;
 	switch(primType){
+	case PRIMTYPENONE:
+		// Not a primitive. The count stays zero and the draw below draws
+		// nothing, which is what this did before the case was written down.
+		break;
 	case PRIMTYPELINELIST:
 		primCount = numVertices/2;
 		break;
@@ -200,6 +204,10 @@ im2DRenderIndexedPrimitive(PrimitiveType primType,
 
 	uint32 primCount = 0;
 	switch(primType){
+	case PRIMTYPENONE:
+		// Not a primitive. The count stays zero and the draw below draws
+		// nothing, which is what this did before the case was written down.
+		break;
 	case PRIMTYPELINELIST:
 		primCount = numIndices/2;
 		break;
@@ -330,6 +338,10 @@ im3DRenderPrimitive(PrimitiveType primType)
 
 	uint32 primCount = 0;
 	switch(primType){
+	case PRIMTYPENONE:
+		// Not a primitive. The count stays zero and the draw below draws
+		// nothing, which is what this did before the case was written down.
+		break;
 	case PRIMTYPELINELIST:
 		primCount = num3DVertices/2;
 		break;
@@ -370,6 +382,10 @@ im3DRenderIndexedPrimitive(PrimitiveType primType, void *indices, int32 numIndic
 
 	uint32 primCount = 0;
 	switch(primType){
+	case PRIMTYPENONE:
+		// Not a primitive. The count stays zero and the draw below draws
+		// nothing, which is what this did before the case was written down.
+		break;
 	case PRIMTYPELINELIST:
 		primCount = numIndices/2;
 		break;
