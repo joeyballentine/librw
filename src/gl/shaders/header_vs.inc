@@ -71,6 +71,11 @@ const char *header_vert_src =
 "uniform vec4 u_lightColor[MAX_LIGHTS];\n"
 "#endif\n"
 
+"// The world matrix with its scale taken out -- see setWorldMatrix. Declared\n"
+"// outside the Object block above so that the UBO and non-UBO builds share one\n"
+"// declaration.\n"
+"uniform mat4 u_normal;\n"
+
 "uniform vec4 u_matColor;\n"
 "uniform vec4 u_surfProps;	// amb, spec, diff, extra\n"
 

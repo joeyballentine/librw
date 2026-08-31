@@ -70,6 +70,11 @@ uniform vec4 u_lightDirection[MAX_LIGHTS];
 uniform vec4 u_lightColor[MAX_LIGHTS];
 #endif
 
+// The world matrix with its scale taken out -- see setWorldMatrix. Declared
+// outside the Object block above so that the UBO and non-UBO builds share one
+// declaration.
+uniform mat4 u_normal;
+
 uniform vec4 u_matColor;
 uniform vec4 u_surfProps;	// amb, spec, diff, extra
 

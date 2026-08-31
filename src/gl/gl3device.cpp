@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <math.h>
 
 #include "../rwbase.h"
 #include "../rwerror.h"
@@ -126,6 +127,9 @@ int32 u_view;
 
 // Object
 int32 u_world;
+// Outside the Object block on purpose: it is a plain uniform in both the UBO
+// and the non-UBO build, so adding it did not have to change the block layout.
+int32 u_normal;
 int32 u_ambLight;
 int32 u_lightParams;
 int32 u_lightPosition;
@@ -1032,11 +1036,51 @@ resetRenderState(void)
 	setActiveTexture(0);
 }
 
+// One row of a RawMatrix's 3x3, scaled to unit length. A degenerate axis is
+// left alone rather than divided by zero: a zero-scaled object has no surface
+// to light and any direction here is as good as another.
+static void
+normalizeRow(V3d &v)
+{
+	float32 len = sqrtf(v.x*v.x + v.y*v.y + v.z*v.z);
+	if(len > 1.0e-9f){
+		v.x /= len;
+		v.y /= len;
+		v.z /= len;
+	}
+}
+
 void
 setWorldMatrix(Matrix *mat)
 {
 	convMatrix(&uniformObject.world, mat);
 	setUniform(u_world, &uniformObject.world);
+
+	// The normal matrix is the world matrix with its scale taken out.
+	//
+	// Normals transform by the inverse transpose, not by the matrix: under a
+	// scale of s the world matrix lengthens a unit normal to s, where the
+	// correct matrix shortens it to 1/s. Neither is unit, and these shaders do
+	// not normalise what they are given -- the normal goes straight into
+	// max(0, dot(N, -L)) and, in the environment shader, straight into the
+	// reflection lookup -- so the scale lands directly on every directional
+	// term and an object is lit in proportion to how big it happens to be.
+	// Scaled down it goes black, scaled up it saturates and looks unshaded.
+	// Ambient is unaffected, which is what makes it read as a lighting bug
+	// rather than a transform one.
+	//
+	// For a rotation with a uniform scale -- which is what a model matrix is
+	// here -- dividing each axis by its own length is exactly the inverse
+	// transpose AND leaves the normal unit length, so the shader needs no
+	// normalise of its own. The GameCube gets this for free: GX normalises in
+	// the transform unit.
+	RawMatrix normal = uniformObject.world;
+	normalizeRow(normal.right);
+	normalizeRow(normal.up);
+	normalizeRow(normal.at);
+	normal.pos.set(0.0f, 0.0f, 0.0f);
+	setUniform(u_normal, &normal);
+
 	objectDirty = 1;
 }
 
@@ -2068,6 +2112,7 @@ initOpenGL(void)
 	registerBlock("Object");
 	registerBlock("State");
 #endif
+	u_normal = registerUniform("u_normal", UNIFORM_MAT4);
 	u_matColor = registerUniform("u_matColor", UNIFORM_VEC4);
 	u_surfProps = registerUniform("u_surfProps", UNIFORM_VEC4);
 
