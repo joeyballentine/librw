@@ -10,6 +10,12 @@ uniform vec4 u_uvXform[2];
 VSOUT vec4 v_color;
 VSOUT vec2 v_tex0;
 VSOUT float v_fog;
+#ifdef PERPIXEL
+// World space, and NOT normalized: interpolating two unit normals across a
+// triangle does not give a unit normal, which is why simple.frag normalizes it
+// again. skin.vert declares the same output for the same fragment shader.
+VSOUT vec3 v_normal;
+#endif
 
 void
 main(void)
@@ -26,10 +32,17 @@ main(void)
 #endif
 
 	v_color = in_color;
+#ifdef PERPIXEL
+	// Everything from the ambient term down happens in the fragment shader
+	// instead, the clamp and the material colour with it -- they come after the
+	// lighting and cannot be split from it. The prelight goes across untouched.
+	v_normal = Normal;
+#else
 	v_color.rgb += u_ambLight.rgb*surfAmbient;
 	v_color.rgb += DoDynamicLight(Vertex.xyz, Normal)*surfDiffuse;
 	v_color = clamp(v_color, 0.0, 1.0);
 	v_color *= u_matColor;
+#endif
 
 	v_fog = DoFog(gl_Position.w);
 }

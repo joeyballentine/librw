@@ -190,6 +190,22 @@ Shader *defaultShader, *defaultShader_noAT;
 Shader *defaultShader_fullLight, *defaultShader_fullLight_noAT;
 Shader *uvXformShader, *uvXformShader_noAT;
 Shader *uvXformShader_fullLight, *uvXformShader_fullLight_noAT;
+Shader *defaultShader_pp, *defaultShader_pp_noAT;
+Shader *uvXformShader_pp, *uvXformShader_pp_noAT;
+
+static bool32 perPixelLighting;
+
+void
+setPerPixelLightingEnabled(bool32 enable)
+{
+	perPixelLighting = !!enable;
+}
+
+bool32
+getPerPixelLighting(void)
+{
+	return perPixelLighting;
+}
 int32 u_uvXform;
 
 static bool32 stateDirty = 1;
@@ -2665,6 +2681,7 @@ initOpenGL(void)
 
 #include "shaders/default_vs_gl.inc"
 #include "shaders/simple_fs_gl.inc"
+#include "shaders/lighting_fs.inc"
 	const char *vs[] = { shaderDecl, header_vert_src, default_vert_src, nil };
 	const char *vs_fullLight[] = { shaderDecl, "#define DIRECTIONALS\n#define POINTLIGHTS\n#define SPOTLIGHTS\n", header_vert_src, default_vert_src, nil };
 	const char *fs[] = { shaderDecl, header_frag_src, simple_frag_src, nil };
@@ -2696,6 +2713,25 @@ initOpenGL(void)
 	uvXformShader_fullLight_noAT = Shader::create(vs_uv_fullLight, fs_noAT);
 	assert(uvXformShader_fullLight_noAT);
 
+	// The per-pixel programs. lighting.frag goes between the header and
+	// simple.frag because it declares the uniforms simple.frag's PERPIXEL block
+	// reads; it is prepended here and nowhere else, so every program above is
+	// byte for byte the source it was.
+	const char *vs_pp[] = { shaderDecl, "#define PERPIXEL\n", header_vert_src, default_vert_src, nil };
+	const char *vs_uv_pp[] = { shaderDecl, "#define PERPIXEL\n#define UVXFORM\n", header_vert_src, default_vert_src, nil };
+	const char *fs_pp[] = { shaderDecl, "#define PERPIXEL\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
+	const char *fs_pp_noAT[] = { shaderDecl, "#define PERPIXEL\n#define NO_ALPHATEST\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
+
+	defaultShader_pp = Shader::create(vs_pp, fs_pp);
+	assert(defaultShader_pp);
+	defaultShader_pp_noAT = Shader::create(vs_pp, fs_pp_noAT);
+	assert(defaultShader_pp_noAT);
+
+	uvXformShader_pp = Shader::create(vs_uv_pp, fs_pp);
+	assert(uvXformShader_pp);
+	uvXformShader_pp_noAT = Shader::create(vs_uv_pp, fs_pp_noAT);
+	assert(uvXformShader_pp_noAT);
+
 	openIm2D();
 	openIm3D();
 
@@ -2725,6 +2761,15 @@ termOpenGL(void)
 	uvXformShader_fullLight = nil;
 	uvXformShader_fullLight_noAT->destroy();
 	uvXformShader_fullLight_noAT = nil;
+
+	defaultShader_pp->destroy();
+	defaultShader_pp = nil;
+	defaultShader_pp_noAT->destroy();
+	defaultShader_pp_noAT = nil;
+	uvXformShader_pp->destroy();
+	uvXformShader_pp = nil;
+	uvXformShader_pp_noAT->destroy();
+	uvXformShader_pp_noAT = nil;
 
 	glDeleteTextures(1, &whitetex);
 	whitetex = 0;

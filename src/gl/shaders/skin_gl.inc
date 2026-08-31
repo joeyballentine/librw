@@ -6,6 +6,11 @@ const char *skin_vert_src =
 "VSOUT vec4 v_color;\n"
 "VSOUT vec2 v_tex0;\n"
 "VSOUT float v_fog;\n"
+"#ifdef PERPIXEL\n"
+"// The skinned normal, world space and not normalized. Same output as\n"
+"// default.vert's; both feed simple.frag's PERPIXEL build.\n"
+"VSOUT vec3 v_normal;\n"
+"#endif\n"
 
 "void\n"
 "main(void)\n"
@@ -24,10 +29,15 @@ const char *skin_vert_src =
 "	v_tex0 = in_tex0;\n"
 
 "	v_color = in_color;\n"
+"#ifdef PERPIXEL\n"
+"	// As in default.vert: the lighting moves to the fragment shader whole.\n"
+"	v_normal = Normal;\n"
+"#else\n"
 "	v_color.rgb += u_ambLight.rgb*surfAmbient;\n"
 "	v_color.rgb += DoDynamicLight(Vertex.xyz, Normal)*surfDiffuse;\n"
 "	v_color = clamp(v_color, 0.0, 1.0);\n"
 "	v_color *= u_matColor;\n"
+"#endif\n"
 
 "	v_fog = DoFog(gl_Position.w);\n"
 "}\n"

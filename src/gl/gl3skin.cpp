@@ -29,6 +29,8 @@ namespace gl3 {
 // stands between rather than a copy of either.
 Shader *skinShader, *skinShader_noAT;
 Shader *skinShader_fullLight, *skinShader_fullLight_noAT;
+// Skinning with the lighting left to the fragment shader.
+Shader *skinShader_pp, *skinShader_pp_noAT;
 static int32 u_boneMatrices;
 
 void
@@ -276,11 +278,18 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 
 		setPipelineVertexAlpha(inst->vertexAlpha || m->color.alpha != 0xFF);
 
+		// Same rule as the default pipeline in gl3render.cpp: per-pixel
+		// replaces the directional-only case and nothing else.
 		if((vsBits & VSLIGHT_MASK) == 0){
 			if(getAlphaTest())
 				skinShader->use();
 			else
 				skinShader_noAT->use();
+		}else if(getPerPixelLighting() && (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT){
+			if(getAlphaTest())
+				skinShader_pp->use();
+			else
+				skinShader_pp_noAT->use();
 		}else{
 			if(getAlphaTest())
 				skinShader_fullLight->use();
@@ -302,6 +311,7 @@ skinOpen(void *o, int32, int32)
 
 #include "shaders/simple_fs_gl.inc"
 #include "shaders/skin_gl.inc"
+#include "shaders/lighting_fs.inc"
 	const char *vs[] = { shaderDecl, header_vert_src, skin_vert_src, nil };
 	const char *vs_fullLight[] = { shaderDecl, "#define DIRECTIONALS\n#define POINTLIGHTS\n#define SPOTLIGHTS\n", header_vert_src, skin_vert_src, nil };
 	const char *fs[] = { shaderDecl, header_frag_src, simple_frag_src, nil };
@@ -316,6 +326,17 @@ skinOpen(void *o, int32, int32)
 	assert(skinShader_fullLight);
 	skinShader_fullLight_noAT = Shader::create(vs_fullLight, fs_noAT);
 	assert(skinShader_fullLight_noAT);
+
+	// Per-pixel. One vertex shader rather than two: it does no lighting, so
+	// there is nothing for DIRECTIONALS to switch on.
+	const char *vs_pp[] = { shaderDecl, "#define PERPIXEL\n", header_vert_src, skin_vert_src, nil };
+	const char *fs_pp[] = { shaderDecl, "#define PERPIXEL\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
+	const char *fs_pp_noAT[] = { shaderDecl, "#define PERPIXEL\n#define NO_ALPHATEST\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
+
+	skinShader_pp = Shader::create(vs_pp, fs_pp);
+	assert(skinShader_pp);
+	skinShader_pp_noAT = Shader::create(vs_pp, fs_pp_noAT);
+	assert(skinShader_pp_noAT);
 
 	createSkinMatFXShaders();
 
@@ -341,6 +362,10 @@ skinClose(void *o, int32, int32)
 	skinShader_fullLight = nil;
 	skinShader_fullLight_noAT->destroy();
 	skinShader_fullLight_noAT = nil;
+	skinShader_pp->destroy();
+	skinShader_pp = nil;
+	skinShader_pp_noAT->destroy();
+	skinShader_pp_noAT = nil;
 
 	return o;
 }

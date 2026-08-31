@@ -177,11 +177,21 @@ renderCB(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 
 		setPipelineVertexAlpha(inst->vertexAlpha || m->color.alpha != 0xFF);
 
+		// Per-pixel lighting replaces exactly one of the light cases:
+		// directional and nothing else. Ambient alone is the same colour at
+		// every fragment and has nothing to gain, and the per-pixel fragment
+		// shader does not do point or spot lights, so anything reached by one
+		// keeps the per-vertex path.
 		if((vsBits & VSLIGHT_MASK) == 0){
 			if(getAlphaTest())
 				(uvXform ? uvXformShader : defaultShader)->use();
 			else
 				(uvXform ? uvXformShader_noAT : defaultShader_noAT)->use();
+		}else if(getPerPixelLighting() && (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT){
+			if(getAlphaTest())
+				(uvXform ? uvXformShader_pp : defaultShader_pp)->use();
+			else
+				(uvXform ? uvXformShader_pp_noAT : defaultShader_pp_noAT)->use();
 		}else{
 			if(getAlphaTest())
 				(uvXform ? uvXformShader_fullLight : defaultShader_fullLight)->use();

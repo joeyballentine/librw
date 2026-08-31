@@ -16,6 +16,9 @@ void skinRenderCB(Atomic *atomic, InstanceDataHeader *header);
 void uploadSkinMatrices(Atomic *atomic);
 extern Shader *skinShader, *skinShader_noAT;
 extern Shader *skinShader_fullLight, *skinShader_fullLight_noAT;
+// Skinning with the lighting left to the fragment shader; pairs with the
+// PERPIXEL build of simple.frag, as the default pipeline's does.
+extern Shader *skinShader_pp, *skinShader_pp_noAT;
 
 ObjPipeline *makeSkinMatFXPipeline(void);
 void skinMatfxRenderCB(Atomic *atomic, InstanceDataHeader *header);

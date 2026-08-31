@@ -119,6 +119,19 @@ extern Shader *defaultShader, *defaultShader_noAT;
 extern Shader *defaultShader_fullLight, *defaultShader_fullLight_noAT;
 extern Shader *uvXformShader, *uvXformShader_noAT;
 extern Shader *uvXformShader_fullLight, *uvXformShader_fullLight_noAT;
+// The per-pixel lighting path. One pair each and not two, because these do no
+// lighting in the vertex shader and so have nothing for DIRECTIONALS to switch
+// on. Their fragment shader is not simple.frag as the others' is -- it is
+// simple.frag with PERPIXEL, which needs lighting.frag ahead of it.
+extern Shader *defaultShader_pp, *defaultShader_pp_noAT;
+extern Shader *uvXformShader_pp, *uvXformShader_pp_noAT;
+
+// Evaluate lighting per fragment rather than per vertex, in the default,
+// uvxform and skin pipelines. Directional lights only: an atomic reached by a
+// point or spot light keeps the per-vertex path for that draw, and one lit by
+// ambient alone has nothing to gain. Safe to call before the device exists.
+void setPerPixelLightingEnabled(bool32 enable);
+bool32 getPerPixelLighting(void);
 extern int32 u_uvXform;
 
 struct Im3DVertex

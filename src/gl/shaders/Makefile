@@ -1,4 +1,9 @@
-all: header_vs.inc header_fs.inc im2d_gl.inc im3d_gl.inc default_vs_gl.inc simple_fs_gl.inc matfx_gl.inc skin_gl.inc skinmatfx_gl.inc
+all: header_vs.inc header_fs.inc lighting_fs.inc im2d_gl.inc im3d_gl.inc default_vs_gl.inc simple_fs_gl.inc matfx_gl.inc skin_gl.inc skinmatfx_gl.inc
+
+lighting_fs.inc: lighting.frag
+	(echo 'const char *lighting_frag_src =';\
+	 sed 's/..*/"&\\n"/' lighting.frag;\
+	 echo ';') >lighting_fs.inc
 
 header_vs.inc: header.vert
 	(echo 'const char *header_vert_src =';\
