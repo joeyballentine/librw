@@ -334,12 +334,24 @@ public:
 	void (*instanceCB)(Geometry *geo, InstanceDataHeader *header, bool32 reinstance);
 	void (*uninstanceCB)(Geometry *geo, InstanceDataHeader *header);
 	void (*renderCB)(Atomic *atomic, InstanceDataHeader *header);
+	// What to draw with instead while setDepthPassEnabled is on.
+	//
+	// A separate callback and not a branch inside renderCB, because the answer
+	// belongs to the pipeline: a skinned one has to move its vertices first, an
+	// env-mapped one has nothing to add to a depth value and uses the plain
+	// one. nil means this pipeline does not cast, which is a safe default -- a
+	// pipeline added later is left out of the shadow map rather than
+	// dereferencing a world the caster camera does not have.
+	void (*depthRenderCB)(Atomic *atomic, InstanceDataHeader *header);
 };
 
 void defaultInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance);
 void defaultUninstanceCB(Geometry *geo, InstanceDataHeader *header);
 void defaultRenderCB(Atomic *atomic, InstanceDataHeader *header);
 void uvTransformRenderCB(Atomic *atomic, InstanceDataHeader *header);
+// The caster pass for anything whose vertices are already where they belong.
+// The skin pipeline has its own; everything else uses this, matfx included.
+void defaultRenderDepthCB(Atomic *atomic, InstanceDataHeader *header);
 int32 lightingCB(Atomic *atomic);
 int32 lightingCB(void);
 

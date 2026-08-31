@@ -187,6 +187,9 @@ makeSkinMatFXPipeline(void)
 	pipe->instanceCB = skinInstanceCB;
 	pipe->uninstanceCB = nil;
 	pipe->renderCB = skinMatfxRenderCB;
+	// Skinned, so the bones still have to move the vertices; the env map has
+	// nothing to say about depth.
+	pipe->depthRenderCB = skinRenderDepthCB;
 	// The plugin ID the pipeline is streamed out under. It is the skin plugin's
 	// because this is a skinning pipeline; pluginData is the same 1 the plain
 	// skinning pipeline writes, so a DFF written with an atomic on this reads

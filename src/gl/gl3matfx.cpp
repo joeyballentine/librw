@@ -156,6 +156,8 @@ makeMatFXPipeline(void)
 	pipe->instanceCB = defaultInstanceCB;
 	pipe->uninstanceCB = defaultUninstanceCB;
 	pipe->renderCB = matfxRenderCB;
+	// An environment map contributes nothing to a depth value.
+	pipe->depthRenderCB = defaultRenderDepthCB;
 	pipe->pluginID = ID_MATFX;
 	pipe->pluginData = 0;
 	return pipe;

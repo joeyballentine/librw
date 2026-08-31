@@ -143,6 +143,17 @@ render(rw::ObjPipeline *rwpipe, Atomic *atomic)
 	pipe->instance(atomic);
 	assert(geo->instData != nil);
 	assert(geo->instData->platform == PLATFORM_GL3);
+
+	// One place decides this for every pipeline. Putting the test inside each
+	// renderCB instead is how the matfx path came to draw its env map into a
+	// shadow map and then crash enumerating lights against a camera that has no
+	// world -- a pipeline is easy to add and easy to forget.
+	if(getDepthPass()){
+		if(pipe->depthRenderCB)
+			pipe->depthRenderCB(atomic, (InstanceDataHeader*)geo->instData);
+		return;
+	}
+
 	if(pipe->renderCB)
 		pipe->renderCB(atomic, (InstanceDataHeader*)geo->instData);
 }
@@ -157,6 +168,9 @@ ObjPipeline::init(void)
 	this->instanceCB = nil;
 	this->uninstanceCB = nil;
 	this->renderCB = nil;
+	// nil until a pipeline says otherwise, so a new one does not silently
+	// acquire a caster it was never written for.
+	this->depthRenderCB = nil;
 }
 
 ObjPipeline*
@@ -322,6 +336,7 @@ makeDefaultPipeline(void)
 	pipe->instanceCB = defaultInstanceCB;
 	pipe->uninstanceCB = defaultUninstanceCB;
 	pipe->renderCB = defaultRenderCB;
+	pipe->depthRenderCB = defaultRenderDepthCB;
 	return pipe;
 }
 
@@ -336,6 +351,8 @@ makeUVTransformPipeline(void)
 	pipe->instanceCB = defaultInstanceCB;
 	pipe->uninstanceCB = defaultUninstanceCB;
 	pipe->renderCB = uvTransformRenderCB;
+	// The transform moves texture coordinates, which depth does not read.
+	pipe->depthRenderCB = defaultRenderDepthCB;
 	return pipe;
 }
 

@@ -154,20 +154,7 @@ renderCB(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 
 	uint32 flags = atomic->geometry->flags;
 	setWorldMatrix(atomic->getFrame()->getLTM());
-
-	// The caster pass enumerates no lights, and MUST not.
-	//
-	// Not an optimisation, though it is one: enumerateLights dereferences
-	// engine->currentWorld, which Camera::beginUpdate takes from the camera's
-	// own world -- and a camera rendering to an offscreen target need not
-	// belong to one. A shadow map camera that does not is a null dereference
-	// here rather than anywhere near the code that made it.
-	//
-	// setWorldMatrix above already marks the uniform block dirty, so nothing
-	// downstream depends on having been through here.
-	int32 vsBits = 0;
-	if(!getDepthPass())
-		vsBits = lightingCB(atomic);
+	int32 vsBits = lightingCB(atomic);
 
 	setupVertexInput(header);
 
@@ -189,18 +176,6 @@ renderCB(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 		setTexture(0, m->texture);
 
 		setPipelineVertexAlpha(inst->vertexAlpha || m->color.alpha != 0xFF);
-
-		// The caster pass wants depth and nothing else, so it takes
-		// precedence over every light case below. Material colour, texture and
-		// alpha test are all still set above and all ignored: depth.frag reads
-		// none of them, and leaving the calls in place keeps the state cache
-		// consistent for whatever draws next.
-		if(getDepthPass()){
-			depthShader->use();
-			drawInst(header, inst);
-			inst++;
-			continue;
-		}
 
 		// Per-pixel lighting replaces exactly one of the light cases:
 		// directional and nothing else. Ambient alone is the same colour at
@@ -227,6 +202,32 @@ renderCB(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 		drawInst(header, inst);
 		inst++;
 	}
+	teardownVertexInput(header);
+}
+
+// The caster pass for a pipeline whose vertices need no moving. matfx shares
+// it: an environment map has nothing to contribute to a depth value.
+//
+// Deliberately does NOT call lightingCB. That reads engine->currentWorld, which
+// Camera::beginUpdate takes from the camera's own world, and a camera rendering
+// an offscreen target need not belong to one -- the shadow map's does not.
+// setWorldMatrix marks the uniform block dirty by itself, so nothing here
+// depends on having been through the lighting.
+void
+defaultRenderDepthCB(Atomic *atomic, InstanceDataHeader *header)
+{
+	setWorldMatrix(atomic->getFrame()->getLTM());
+	setupVertexInput(header);
+
+	depthShader->use();
+
+	InstanceData *inst = header->inst;
+	int32 n = header->numMeshes;
+	while(n--){
+		drawInst(header, inst);
+		inst++;
+	}
+
 	teardownVertexInput(header);
 }
 

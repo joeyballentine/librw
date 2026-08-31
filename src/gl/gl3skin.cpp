@@ -256,6 +256,30 @@ uploadSkinMatrices(Atomic *a)
 	setUniform(u_boneMatrices, skinMatrices);
 }
 
+// The caster pass for a skinned atomic. The one thing it cannot share with
+// gl3render.cpp's is the bones: without them every vertex casts from its bind
+// pose, which is a shadow of a character standing still inside one that is not.
+//
+// No lightingCB here either -- see the comment on defaultRenderDepthCB.
+void
+skinRenderDepthCB(Atomic *atomic, InstanceDataHeader *header)
+{
+	setWorldMatrix(atomic->getFrame()->getLTM());
+	setupVertexInput(header);
+	uploadSkinMatrices(atomic);
+
+	skinDepthShader->use();
+
+	InstanceData *inst = header->inst;
+	int32 n = header->numMeshes;
+	while(n--){
+		drawInst(header, inst);
+		inst++;
+	}
+
+	teardownVertexInput(header);
+}
+
 void
 skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 {
@@ -263,13 +287,7 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 
 	uint32 flags = atomic->geometry->flags;
 	setWorldMatrix(atomic->getFrame()->getLTM());
-
-	// No lights in the caster pass, for the reason gl3render.cpp gives: the
-	// enumeration reads engine->currentWorld, and the camera drawing a shadow
-	// map does not have to belong to a world.
-	int32 vsBits = 0;
-	if(!getDepthPass())
-		vsBits = lightingCB(atomic);
+	int32 vsBits = lightingCB(atomic);
 
 	setupVertexInput(header);
 
@@ -286,14 +304,6 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 		setTexture(0, m->texture);
 
 		setPipelineVertexAlpha(inst->vertexAlpha || m->color.alpha != 0xFF);
-
-		// The caster pass, ahead of every light case, as in gl3render.cpp.
-		if(getDepthPass()){
-			skinDepthShader->use();
-			drawInst(header, inst);
-			inst++;
-			continue;
-		}
 
 		// Same rule as the default pipeline in gl3render.cpp: per-pixel
 		// replaces the directional-only case and nothing else.
@@ -416,6 +426,7 @@ makeSkinPipeline(void)
 	pipe->instanceCB = skinInstanceCB;
 	pipe->uninstanceCB = skinUninstanceCB;
 	pipe->renderCB = skinRenderCB;
+	pipe->depthRenderCB = skinRenderDepthCB;
 	pipe->pluginID = ID_SKIN;
 	pipe->pluginData = 1;
 	return pipe;
