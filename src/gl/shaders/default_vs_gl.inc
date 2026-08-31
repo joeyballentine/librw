@@ -1,6 +1,13 @@
 const char *default_vert_src =
 "VSIN(ATTRIB_POS)	vec3 in_pos;\n"
 
+"#ifdef UVXFORM\n"
+"// The texture coordinate transform, as the two rows of a 2x4 matrix that\n"
+"// multiplies (u, v, 1, 1). rwrender.h says what the two constant columns mean\n"
+"// and why there are two of them.\n"
+"uniform vec4 u_uvXform[2];\n"
+"#endif\n"
+
 "VSOUT vec4 v_color;\n"
 "VSOUT vec2 v_tex0;\n"
 "VSOUT float v_fog;\n"
@@ -12,7 +19,12 @@ const char *default_vert_src =
 "	gl_Position = u_proj * u_view * Vertex;\n"
 "	vec3 Normal = mat3(u_normal) * in_normal;\n"
 
+"#ifdef UVXFORM\n"
+"	vec4 uv = vec4(in_tex0, 1.0, 1.0);\n"
+"	v_tex0 = vec2(dot(u_uvXform[0], uv), dot(u_uvXform[1], uv));\n"
+"#else\n"
 "	v_tex0 = in_tex0;\n"
+"#endif\n"
 
 "	v_color = in_color;\n"
 "	v_color.rgb += u_ambLight.rgb*surfAmbient;\n"

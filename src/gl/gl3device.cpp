@@ -144,6 +144,9 @@ bool32 constantVertexColorWhite;
 
 Shader *defaultShader, *defaultShader_noAT;
 Shader *defaultShader_fullLight, *defaultShader_fullLight_noAT;
+Shader *uvXformShader, *uvXformShader_noAT;
+Shader *uvXformShader_fullLight, *uvXformShader_fullLight_noAT;
+int32 u_uvXform;
 
 static bool32 stateDirty = 1;
 static bool32 sceneDirty = 1;
@@ -2115,6 +2118,7 @@ initOpenGL(void)
 	registerBlock("State");
 #endif
 	u_normal = registerUniform("u_normal", UNIFORM_MAT4);
+	u_uvXform = registerUniform("u_uvXform", UNIFORM_VEC4, 2);
 	u_matColor = registerUniform("u_matColor", UNIFORM_VEC4);
 	u_surfProps = registerUniform("u_surfProps", UNIFORM_VEC4);
 
@@ -2194,6 +2198,22 @@ initOpenGL(void)
 	defaultShader_fullLight_noAT = Shader::create(vs_fullLight, fs_noAT);
 	assert(defaultShader_fullLight_noAT);
 
+	// The same vertex shader again with the texture coordinate transform
+	// compiled in. Separate programs rather than a branch, so a model with no
+	// animated UVs pays nothing for the ones that have them.
+	const char *vs_uv[] = { shaderDecl, "#define UVXFORM\n", header_vert_src, default_vert_src, nil };
+	const char *vs_uv_fullLight[] = { shaderDecl, "#define UVXFORM\n#define DIRECTIONALS\n#define POINTLIGHTS\n#define SPOTLIGHTS\n", header_vert_src, default_vert_src, nil };
+
+	uvXformShader = Shader::create(vs_uv, fs);
+	assert(uvXformShader);
+	uvXformShader_noAT = Shader::create(vs_uv, fs_noAT);
+	assert(uvXformShader_noAT);
+
+	uvXformShader_fullLight = Shader::create(vs_uv_fullLight, fs);
+	assert(uvXformShader_fullLight);
+	uvXformShader_fullLight_noAT = Shader::create(vs_uv_fullLight, fs_noAT);
+	assert(uvXformShader_fullLight_noAT);
+
 	openIm2D();
 	openIm3D();
 
@@ -2214,6 +2234,15 @@ termOpenGL(void)
 	defaultShader_fullLight = nil;
 	defaultShader_fullLight_noAT->destroy();
 	defaultShader_fullLight_noAT = nil;
+
+	uvXformShader->destroy();
+	uvXformShader = nil;
+	uvXformShader_noAT->destroy();
+	uvXformShader_noAT = nil;
+	uvXformShader_fullLight->destroy();
+	uvXformShader_fullLight = nil;
+	uvXformShader_fullLight_noAT->destroy();
+	uvXformShader_fullLight_noAT = nil;
 
 	glDeleteTextures(1, &whitetex);
 	whitetex = 0;

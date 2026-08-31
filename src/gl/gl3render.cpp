@@ -144,8 +144,11 @@ lightingCB(void)
 }
 
 
-void
-defaultRenderCB(Atomic *atomic, InstanceDataHeader *header)
+// The default pipeline's render, and the UV-transforming one's. They differ by
+// four shader programs and one uniform upload, so they are one function rather
+// than a copy that will drift.
+static void
+renderCB(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 {
 	Material *m;
 
@@ -154,6 +157,13 @@ defaultRenderCB(Atomic *atomic, InstanceDataHeader *header)
 	int32 vsBits = lightingCB(atomic);
 
 	setupVertexInput(header);
+
+	// Uploaded per atomic and not cached, because the transform is state the
+	// application changes between draws -- that is what makes a surface
+	// animate -- so there is nothing here that stays the same long enough to
+	// be worth comparing against.
+	if(uvXform)
+		setUniform(u_uvXform, uvTransform);
 
 	InstanceData *inst = header->inst;
 	int32 n = header->numMeshes;
@@ -169,20 +179,32 @@ defaultRenderCB(Atomic *atomic, InstanceDataHeader *header)
 
 		if((vsBits & VSLIGHT_MASK) == 0){
 			if(getAlphaTest())
-				defaultShader->use();
+				(uvXform ? uvXformShader : defaultShader)->use();
 			else
-				defaultShader_noAT->use();
+				(uvXform ? uvXformShader_noAT : defaultShader_noAT)->use();
 		}else{
 			if(getAlphaTest())
-				defaultShader_fullLight->use();
+				(uvXform ? uvXformShader_fullLight : defaultShader_fullLight)->use();
 			else
-				defaultShader_fullLight_noAT->use();
+				(uvXform ? uvXformShader_fullLight_noAT : defaultShader_fullLight_noAT)->use();
 		}
 
 		drawInst(header, inst);
 		inst++;
 	}
 	teardownVertexInput(header);
+}
+
+void
+defaultRenderCB(Atomic *atomic, InstanceDataHeader *header)
+{
+	renderCB(atomic, header, 0);
+}
+
+void
+uvTransformRenderCB(Atomic *atomic, InstanceDataHeader *header)
+{
+	renderCB(atomic, header, 1);
 }
 
 

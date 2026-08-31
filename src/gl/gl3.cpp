@@ -9,6 +9,7 @@
 #include "../rwpipeline.h"
 #include "../rwobjects.h"
 #include "../rwengine.h"
+#include "../rwrender.h"
 
 #include "rwgl3.h"
 #include "rwgl3shader.h"
@@ -25,6 +26,7 @@ driverOpen(void *o, int32, int32)
 {
 #ifdef RW_OPENGL
 	engine->driver[PLATFORM_GL3]->defaultPipeline = makeDefaultPipeline();
+	uvTransformPipelines[PLATFORM_GL3] = makeUVTransformPipeline();
 #endif
 	engine->driver[PLATFORM_GL3]->rasterNativeOffset = nativeRasterOffset;
 	engine->driver[PLATFORM_GL3]->rasterCreate       = rasterCreate;
@@ -41,6 +43,12 @@ driverOpen(void *o, int32, int32)
 static void*
 driverClose(void *o, int32, int32)
 {
+#ifdef RW_OPENGL
+	if(uvTransformPipelines[PLATFORM_GL3]){
+		uvTransformPipelines[PLATFORM_GL3]->destroy();
+		uvTransformPipelines[PLATFORM_GL3] = nil;
+	}
+#endif
 	return o;
 }
 

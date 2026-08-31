@@ -117,6 +117,9 @@ struct Shader;
 
 extern Shader *defaultShader, *defaultShader_noAT;
 extern Shader *defaultShader_fullLight, *defaultShader_fullLight_noAT;
+extern Shader *uvXformShader, *uvXformShader_noAT;
+extern Shader *uvXformShader_fullLight, *uvXformShader_fullLight_noAT;
+extern int32 u_uvXform;
 
 struct Im3DVertex
 {
@@ -250,6 +253,7 @@ public:
 void defaultInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance);
 void defaultUninstanceCB(Geometry *geo, InstanceDataHeader *header);
 void defaultRenderCB(Atomic *atomic, InstanceDataHeader *header);
+void uvTransformRenderCB(Atomic *atomic, InstanceDataHeader *header);
 int32 lightingCB(Atomic *atomic);
 int32 lightingCB(void);
 
@@ -263,6 +267,7 @@ void drawInst(InstanceDataHeader *header, InstanceData *inst);
 void *destroyNativeData(void *object, int32, int32);
 
 ObjPipeline *makeDefaultPipeline(void);
+ObjPipeline *makeUVTransformPipeline(void);
 
 // Native Texture and Raster
 

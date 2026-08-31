@@ -325,6 +325,20 @@ makeDefaultPipeline(void)
 	return pipe;
 }
 
+// The default pipeline that also applies rw::uvTransform. Same instancing --
+// an atomic can be handed this pipeline and handed back the default one
+// between frames without its vertex buffer being rebuilt either way, which is
+// exactly what a game that turns the effect on per surface does.
+ObjPipeline*
+makeUVTransformPipeline(void)
+{
+	ObjPipeline *pipe = ObjPipeline::create();
+	pipe->instanceCB = defaultInstanceCB;
+	pipe->uninstanceCB = defaultUninstanceCB;
+	pipe->renderCB = uvTransformRenderCB;
+	return pipe;
+}
+
 #else
 void *destroyNativeData(void *object, int32, int32) { return object; }
 #endif
