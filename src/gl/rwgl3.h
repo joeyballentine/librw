@@ -238,7 +238,27 @@ bool32 copyVirtualScreen(Raster *dst);
 
 uint32 virtualScreenFramebuffer(void);
 uint32 virtualScreenTexture(void);
+// Where to read the frame, as against virtualScreenFramebuffer, which is where
+// to draw it. They differ only when the scene is drawn multisampled.
+uint32 virtualScreenResolvedFramebuffer(void);
 void destroyVirtualScreen(void);
+
+// How many samples the scene is drawn with. Set before the engine opens; the
+// count the driver granted is what getVirtualScreenSamples answers, and it is
+// 1 when there is no multisampling.
+void setVirtualScreenSamples(int32 samples);
+int32 getVirtualScreenSamples(void);
+// Fold the samples into the single-sample picture every reader of the frame
+// sees. Called for you by showRaster and by copyVirtualScreen.
+void resolveVirtualScreen(void);
+
+// Spread a texture's own transparency over a pixel's samples instead of
+// blending it. Refused silently at one sample per pixel.
+void setAlphaToCoverageEnabled(bool32 enable);
+bool32 getAlphaToCoverage(void);
+// Bracket a 2D primitive, which has no place in the depth buffer and whose
+// edges are placed rather than found. See setIm2DActive's own comment.
+void setIm2DActive(bool32 active);
 
 extern const char *shaderDecl;	// #version stuff
 extern const char *header_vert_src;
@@ -325,6 +345,10 @@ struct Gl3Raster
 
 	bool isCompressed;
 	bool hasAlpha;
+	// One of rw::AlphaKind: what the texels actually hold, as opposed to what
+	// the pixel format has room for. ALPHAGRADED is the safe default -- it is
+	// how every raster with an alpha channel behaved before this existed.
+	uint8 alphaKind;
 	bool autogenMipmap;
 	int8 numLevels;
 	// cached filtermode and addressing
@@ -353,6 +377,7 @@ extern Gl3Caps gl3Caps;
 extern bool32 needToReadBackTextures;
 
 void allocateDXT(Raster *raster, int32 dxt, int32 numLevels, bool32 hasAlpha);
+void setRasterAlphaKind(Raster *raster, int32 kind);
 
 Texture *readNativeTexture(Stream *stream);
 void writeNativeTexture(Texture *tex, Stream *stream);

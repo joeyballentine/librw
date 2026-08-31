@@ -144,14 +144,46 @@ bool32 constantVertexColorWhite;
 
 int32 virtualScreenWidth;
 int32 virtualScreenHeight;
+
+// The single-sample picture, and the framebuffer that owns it. This is what
+// every reader of the frame sees -- the blit to the window, the loading-screen
+// still -- whether or not the scene was drawn multisampled.
 static uint32 virtualScreenFbo;
 static uint32 virtualScreenTex;
+
+// The multisampled pair the scene is actually drawn into, when there is one,
+// resolved into virtualScreenFbo on the way out. Zero at one sample per pixel,
+// and then the scene is drawn straight into virtualScreenFbo.
+static uint32 virtualScreenDepth;
+static uint32 virtualScreenMSFbo;
+static uint32 virtualScreenMSColor;
+static uint32 virtualScreenMSDepth;
+
+// What was asked for, and what the driver granted. They differ when the card
+// will not take the count; falling back is not a failure, it is the same
+// picture drawn with fewer samples.
+static int32 virtualScreenSamplesWanted = 1;
+static int32 virtualScreenSamples = 1;
 
 void
 setVirtualScreen(int32 width, int32 height)
 {
 	virtualScreenWidth = width;
 	virtualScreenHeight = height;
+}
+
+// How many samples the scene is drawn with. Takes effect the next time the
+// framebuffer is built, which is why the port calls it before the engine opens.
+void
+setVirtualScreenSamples(int32 samples)
+{
+	virtualScreenSamplesWanted = samples < 1 ? 1 : samples;
+}
+
+int32
+getVirtualScreenSamples(void)
+{
+	return virtualScreenSamples;
 }
 
 Shader *defaultShader, *defaultShader_noAT;
@@ -184,6 +216,11 @@ struct RwStateCache {
 	uint32 alphaTestEnable;
 	uint32 alphaFunc;
 	bool32 textureAlpha;
+	// The bound texture's alpha is keyed rather than graded -- see AlphaKind
+	// in rwbase.h. Held apart from textureAlpha because the two answer
+	// different questions: whether there is transparency at all, and whether
+	// it wants to be cut or blended.
+	bool32 textureKeyed;
 	bool32 blendEnable;
 	uint32 srcblend, destblend;
 	uint32 zwrite;
@@ -231,6 +268,8 @@ enum
 	RWGL_STENCILMASK,
 	RWGL_STENCILWRITEMASK,
 	RWGL_COLORMASK,
+	RWGL_MULTISAMPLE,
+	RWGL_SAMPLEALPHATOCOVERAGE,
 
 	// uniforms
 	RWGL_ALPHAFUNC,
@@ -270,6 +309,13 @@ struct GlState {
 
 	// glColorMask, as a mask of ColorWriteMask bits
 	uint32 colorMask;
+
+	// Whether the rasterizer finds coverage per sample or gives every sample
+	// in a pixel the same answer. Off is what a single-sampled target does,
+	// and what a 2D primitive wants -- see setIm2DActive.
+	bool32 multisample;
+	// Whether a fragment's alpha becomes a coverage mask. See updateAlphaStates.
+	bool32 sampleAlphaToCoverage;
 };
 static GlState curGlState, oldGlState;
 
@@ -344,6 +390,8 @@ setGlRenderState(uint32 state, uint32 value)
 	case RWGL_STENCILMASK: curGlState.stencilMask = value; break;
 	case RWGL_STENCILWRITEMASK: curGlState.stencilWriteMask = value; break;
 	case RWGL_COLORMASK: curGlState.colorMask = value; break;
+	case RWGL_MULTISAMPLE: curGlState.multisample = value; break;
+	case RWGL_SAMPLEALPHATOCOVERAGE: curGlState.sampleAlphaToCoverage = value; break;
 	}
 }
 
@@ -400,6 +448,16 @@ flushGlRenderState(void)
 		glStencilMask(oldGlState.stencilWriteMask);
 	}
 
+	if(oldGlState.multisample != curGlState.multisample){
+		oldGlState.multisample = curGlState.multisample;
+		(oldGlState.multisample ? glEnable : glDisable)(GL_MULTISAMPLE);
+	}
+
+	if(oldGlState.sampleAlphaToCoverage != curGlState.sampleAlphaToCoverage){
+		oldGlState.sampleAlphaToCoverage = curGlState.sampleAlphaToCoverage;
+		(oldGlState.sampleAlphaToCoverage ? glEnable : glDisable)(GL_SAMPLE_ALPHA_TO_COVERAGE);
+	}
+
 	if(oldGlState.colorMask != curGlState.colorMask){
 		oldGlState.colorMask = curGlState.colorMask;
 		glColorMask(!!(oldGlState.colorMask & COLORWRITERED),
@@ -437,6 +495,10 @@ getAlphaBlend(void)
 
 bool32 getAlphaTest(void) { return rwStateCache.alphaTestEnable; }
 
+// Defined below, beside the rest of the transparency states, and called from
+// setDepthWrite above it: whether a draw writes depth is one of its inputs.
+static void updateAlphaStates(void);
+
 static void
 setDepthTest(bool32 enable)
 {
@@ -459,6 +521,9 @@ setDepthWrite(bool32 enable)
 	enable = enable ? GL_TRUE : GL_FALSE;
 	if(rwStateCache.zwrite != enable){
 		rwStateCache.zwrite = enable;
+		// Coverage is only claimed by a draw that writes depth, so this is one
+		// of its inputs. See updateAlphaStates.
+		updateAlphaStates();
 		if(enable && !rwStateCache.ztest){
 			// Have to switch on ztest so writing can work
 			setGlRenderState(RWGL_DEPTHTEST, true);
@@ -498,15 +563,112 @@ setAlphaTestFunction(uint32 function)
 	}
 }
 
+// Set while a 2D primitive is being drawn. Coverage is a statement about a
+// surface's place in the depth buffer, and a screen-space quad has none.
+static bool32 im2DActive;
+
+// Whether the application wants coverage at all. On by default, so a caller
+// that never asks gets what the device and the sample count allow.
+static bool32 alphaToCoverageWanted = 1;
+
+// Coverage needs samples to spread itself across, so the virtual screen has to
+// be multisampled. GL_SAMPLE_ALPHA_TO_COVERAGE is core, so unlike D3D9 there is
+// no vendor question to ask -- only whether there is more than one sample.
+static bool32
+alphaToCoverageUsable(void)
+{
+	return alphaToCoverageWanted && virtualScreenSamples > 1 && !im2DActive;
+}
+
+// Ask for coverage, or ask for it not to be used. It is refused silently when
+// there is nothing to spread it across -- one sample per pixel is not a
+// mistake to report, it is just an answer of no.
+void
+setAlphaToCoverageEnabled(bool32 enable)
+{
+	if(alphaToCoverageWanted == enable)
+		return;
+	alphaToCoverageWanted = enable;
+	updateAlphaStates();
+}
+
+bool32
+getAlphaToCoverage(void)
+{
+	return alphaToCoverageUsable();
+}
+
+void
+setIm2DActive(bool32 active)
+{
+	if(im2DActive != active){
+		im2DActive = active;
+
+		// And no edge antialiasing while it lasts. A 2D quad's edges are
+		// PLACED, in pixels, rather than found by the rasterizer: a letterbox
+		// bar ends where the game said it ends. Antialiasing an edge that lands
+		// between two pixel centres turns that line into a row of partly
+		// covered samples, which resolves to a soft one you can see through --
+		// on a black bar or a fade to black, exactly where the artwork has a
+		// hard edge.
+		//
+		// Disabling GL_MULTISAMPLE gives every sample in the pixel the same
+		// coverage answer, which is what a single-sampled target would have
+		// done. It is the same statement D3DRS_MULTISAMPLEANTIALIAS makes.
+		setGlRenderState(RWGL_MULTISAMPLE, !active);
+		updateAlphaStates();
+	}
+}
+
+// The transparency states, from the two things that can ask for them.
+//
+// Both used to write the blend and the test themselves, each guarded on the
+// other being off so either could hold them on. That is an OR and is written as
+// one here, because coverage makes the two sources mean different things: a
+// texture's own transparency can be spread over the pixel's samples where the
+// application's own request always asks for a blend.
+static void
+updateAlphaStates(void)
+{
+	// A texture's own transparency on a draw the application is NOT blending.
+	//
+	// The driver used to answer that with a blend, which is wrong twice over
+	// at any size above the one the art was drawn for. Magnifying a shape
+	// punched out of a texture leaves a band of filtered alpha around its
+	// edge; blending that band composites the surface over whatever happens to
+	// be in the frame buffer already, and because the band writes depth, the
+	// geometry that belonged behind it never draws at all. In a cave that
+	// reads as the level's own sky showing through the wall.
+	//
+	// Coverage answers it properly. The band becomes a fraction of the pixel's
+	// samples rather than a fraction of its colour, so the samples it does not
+	// cover keep their depth and the geometry behind draws into them.
+	//
+	// ...and only where the surface is taking part in the depth buffer. That is
+	// the whole of what coverage buys: samples the shape does not cover keep
+	// their depth, so what belongs behind draws into them. A draw that writes
+	// no depth -- the font, the interface, particles, shadows, the sorted alpha
+	// models -- is not in that argument and keeps the blend it asked for.
+	bool32 coverage = alphaToCoverageUsable() && rwStateCache.textureAlpha &&
+	                  !rwStateCache.vertexAlpha && rwStateCache.zwrite;
+	bool32 test = rwStateCache.vertexAlpha || rwStateCache.textureAlpha;
+	bool32 blend = rwStateCache.vertexAlpha ||
+	               (rwStateCache.textureAlpha && !coverage);
+
+	setAlphaBlend(blend);
+	setAlphaTest(test);
+	// The application's own reference throughout. Coverage does not replace the
+	// test, it reads the alpha that survives it, so moving the reference would
+	// cut the shape before the samples ever saw it.
+	setGlRenderState(RWGL_SAMPLEALPHATOCOVERAGE, coverage);
+}
+
 static void
 setVertexAlpha(bool32 enable)
 {
 	if(rwStateCache.vertexAlpha != enable){
-		if(!rwStateCache.textureAlpha){
-			setAlphaBlend(enable);
-			setAlphaTest(enable);
-		}
 		rwStateCache.vertexAlpha = enable;
+		updateAlphaStates();
 	}
 }
 
@@ -571,11 +733,98 @@ virtualScreenTexture(void)
 	return virtualScreenTex;
 }
 
+// Where to READ the frame, as against virtualScreenFramebuffer, which is where
+// to draw it. The two differ only when the scene is drawn multisampled.
+uint32
+virtualScreenResolvedFramebuffer(void)
+{
+	return virtualScreenFbo;
+}
+
+// The multisampled pair, when one was asked for and the driver will grant it.
+//
+// Both attachments are renderbuffers: a multisample texture needs GL 3.2 and a
+// sampler the shaders do not have, and nothing samples this surface -- it is
+// resolved into virtualScreenTex, which is what readers see.
+//
+// The depth is owned here rather than taken from the camera's ZBUFFER raster,
+// as D3D9 owns virtualScreenDepth rather than using the camera's. A single-
+// sample depth attachment beside a multisample colour one is an incomplete
+// framebuffer, and the camera's raster is single-sampled.
+static void
+acquireVirtualScreenMS(void)
+{
+	if(virtualScreenSamplesWanted <= 1)
+		return;
+
+	int32 maxSamples = 0;
+	glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+	int32 want = virtualScreenSamplesWanted;
+	if(want > maxSamples)
+		want = maxSamples;
+	if(want <= 1)
+		return;
+
+	glGenRenderbuffers(1, &virtualScreenMSColor);
+	glBindRenderbuffer(GL_RENDERBUFFER, virtualScreenMSColor);
+	glRenderbufferStorageMultisample(GL_RENDERBUFFER, want, GL_RGB8,
+	                                 virtualScreenWidth, virtualScreenHeight);
+
+	glGenRenderbuffers(1, &virtualScreenMSDepth);
+	glBindRenderbuffer(GL_RENDERBUFFER, virtualScreenMSDepth);
+	glRenderbufferStorageMultisample(GL_RENDERBUFFER, want, GL_DEPTH24_STENCIL8,
+	                                 virtualScreenWidth, virtualScreenHeight);
+	glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+	glGenFramebuffers(1, &virtualScreenMSFbo);
+	uint32 prevFbo = currentFramebuffer;
+	bindFramebuffer(virtualScreenMSFbo);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+	                          GL_RENDERBUFFER, virtualScreenMSColor);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+	                          GL_RENDERBUFFER, virtualScreenMSDepth);
+
+	// Refused, the scene is drawn into the single-sample buffer instead. That
+	// is the picture without the extra samples, not a broken one.
+	if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE){
+		bindFramebuffer(prevFbo);
+		glDeleteFramebuffers(1, &virtualScreenMSFbo);
+		glDeleteRenderbuffers(1, &virtualScreenMSColor);
+		glDeleteRenderbuffers(1, &virtualScreenMSDepth);
+		virtualScreenMSFbo = 0;
+		virtualScreenMSColor = 0;
+		virtualScreenMSDepth = 0;
+		return;
+	}
+
+	bindFramebuffer(prevFbo);
+	virtualScreenSamples = want;
+}
+
+// Fold the samples down into virtualScreenTex, so that everything reading the
+// frame reads one picture whatever it was drawn with. A no-op at one sample.
+void
+resolveVirtualScreen(void)
+{
+	if(virtualScreenMSFbo == 0 || virtualScreenFbo == 0)
+		return;
+
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, virtualScreenMSFbo);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, virtualScreenFbo);
+	// The scissor is forced off for the reason clearCamera forces it: a blit
+	// obeys it, and a frame that ended with one set would resolve a corner.
+	glDisable(GL_SCISSOR_TEST);
+	glBlitFramebuffer(0, 0, virtualScreenWidth, virtualScreenHeight,
+	                  0, 0, virtualScreenWidth, virtualScreenHeight,
+	                  GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	glBindFramebuffer(GL_FRAMEBUFFER, currentFramebuffer);
+}
+
 uint32
 virtualScreenFramebuffer(void)
 {
 	if(virtualScreenFbo)
-		return virtualScreenFbo;
+		return virtualScreenMSFbo ? virtualScreenMSFbo : virtualScreenFbo;
 	if(virtualScreenWidth <= 0 || virtualScreenHeight <= 0)
 		return 0;
 
@@ -583,8 +832,12 @@ virtualScreenFramebuffer(void)
 	// frame is worth sampling: every effect that reads the frame buffer back --
 	// glow, heat haze, a loading-screen still -- wants exactly this.
 	//
-	// No depth attachment. The camera's own ZBUFFER raster is attached by
-	// setFrameBuffer, which is where a camera's depth has always come from.
+	// The depth is attached here rather than left to setFrameBuffer, which used
+	// to hand over the camera's own ZBUFFER raster. Every camera raster shares
+	// this one framebuffer, so the pairing setFrameBuffer keeps on the raster
+	// stopped describing the framebuffer as soon as a second camera appeared --
+	// and a multisampled colour buffer cannot take a single-sample raster as
+	// its depth at all. D3D9 owns virtualScreenDepth for the same reason.
 	glGenTextures(1, &virtualScreenTex);
 	uint32 prev = bindTexture(virtualScreenTex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, virtualScreenWidth, virtualScreenHeight,
@@ -595,11 +848,19 @@ virtualScreenFramebuffer(void)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	bindTexture(prev);
 
+	glGenRenderbuffers(1, &virtualScreenDepth);
+	glBindRenderbuffer(GL_RENDERBUFFER, virtualScreenDepth);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8,
+	                      virtualScreenWidth, virtualScreenHeight);
+	glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
 	glGenFramebuffers(1, &virtualScreenFbo);
 	uint32 prevFbo = currentFramebuffer;
 	bindFramebuffer(virtualScreenFbo);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
 	                       GL_TEXTURE_2D, virtualScreenTex, 0);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+	                          GL_RENDERBUFFER, virtualScreenDepth);
 
 	// A driver that will not take this combination gets the window's own
 	// framebuffer back rather than a camera that draws nowhere. The picture
@@ -609,13 +870,16 @@ virtualScreenFramebuffer(void)
 		bindFramebuffer(prevFbo);
 		glDeleteFramebuffers(1, &virtualScreenFbo);
 		glDeleteTextures(1, &virtualScreenTex);
+		glDeleteRenderbuffers(1, &virtualScreenDepth);
 		virtualScreenFbo = 0;
 		virtualScreenTex = 0;
+		virtualScreenDepth = 0;
 		return 0;
 	}
 
 	bindFramebuffer(prevFbo);
-	return virtualScreenFbo;
+	acquireVirtualScreenMS();
+	return virtualScreenMSFbo ? virtualScreenMSFbo : virtualScreenFbo;
 }
 
 bool32
@@ -635,6 +899,9 @@ copyVirtualScreen(Raster *dst)
 	// Extents are equal, so this is a copy and not a scale; GL_NEAREST says so.
 	// The scissor is forced off for the reason clearCamera forces it -- a blit
 	// obeys it -- and the colour mask is not, because a blit does not.
+	// The resolved buffer, not the multisampled one: glBlitFramebuffer will
+	// not scale a multisample source, and this is the same picture.
+	resolveVirtualScreen();
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, virtualScreenFbo);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, natdst->fbo);
 	glDisable(GL_SCISSOR_TEST);
@@ -652,6 +919,19 @@ copyVirtualScreen(Raster *dst)
 void
 destroyVirtualScreen(void)
 {
+	if(virtualScreenMSFbo){
+		glDeleteFramebuffers(1, &virtualScreenMSFbo);
+		virtualScreenMSFbo = 0;
+	}
+	if(virtualScreenMSColor){
+		glDeleteRenderbuffers(1, &virtualScreenMSColor);
+		virtualScreenMSColor = 0;
+	}
+	if(virtualScreenMSDepth){
+		glDeleteRenderbuffers(1, &virtualScreenMSDepth);
+		virtualScreenMSDepth = 0;
+	}
+	virtualScreenSamples = 1;
 	if(virtualScreenFbo){
 		glDeleteFramebuffers(1, &virtualScreenFbo);
 		virtualScreenFbo = 0;
@@ -659,6 +939,10 @@ destroyVirtualScreen(void)
 	if(virtualScreenTex){
 		glDeleteTextures(1, &virtualScreenTex);
 		virtualScreenTex = 0;
+	}
+	if(virtualScreenDepth){
+		glDeleteRenderbuffers(1, &virtualScreenDepth);
+		virtualScreenDepth = 0;
 	}
 }
 
@@ -743,7 +1027,7 @@ setAddressV(uint32 stage, int32 addressing)
 static void
 setRasterStageOnly(uint32 stage, Raster *raster)
 {
-	bool32 alpha;
+	bool32 alpha, keyed;
 	if(raster != rwStateCache.texstage[stage].raster){
 		rwStateCache.texstage[stage].raster = raster;
 		setActiveTexture(stage);
@@ -756,19 +1040,20 @@ setRasterStageOnly(uint32 stage, Raster *raster)
 			rwStateCache.texstage[stage].addressingU = (rw::Texture::Addressing)natras->addressU;
 			rwStateCache.texstage[stage].addressingV = (rw::Texture::Addressing)natras->addressV;
 
-			alpha = natras->hasAlpha;
+			alpha = natras->alphaKind != ALPHAOPAQUE;
+			keyed = natras->alphaKind == ALPHAKEYED;
 		}else{
 			bindTexture(whitetex);
 			alpha = 0;
+			keyed = 0;
 		}
 
 		if(stage == 0){
-			if(alpha != rwStateCache.textureAlpha){
+			if(alpha != rwStateCache.textureAlpha ||
+			   keyed != rwStateCache.textureKeyed){
 				rwStateCache.textureAlpha = alpha;
-				if(!rwStateCache.vertexAlpha){
-					setAlphaBlend(alpha);
-					setAlphaTest(alpha);
-				}
+				rwStateCache.textureKeyed = keyed;
+				updateAlphaStates();
 			}
 		}
 	}
@@ -777,7 +1062,7 @@ setRasterStageOnly(uint32 stage, Raster *raster)
 static void
 setRasterStage(uint32 stage, Raster *raster)
 {
-	bool32 alpha;
+	bool32 alpha, keyed;
 	if(raster != rwStateCache.texstage[stage].raster){
 		rwStateCache.texstage[stage].raster = raster;
 		setActiveTexture(stage);
@@ -806,19 +1091,20 @@ setRasterStage(uint32 stage, Raster *raster)
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, addressConvMap[addrV]);
 				natras->addressV = addrV;
 			}
-			alpha = natras->hasAlpha;
+			alpha = natras->alphaKind != ALPHAOPAQUE;
+			keyed = natras->alphaKind == ALPHAKEYED;
 		}else{
 			bindTexture(whitetex);
 			alpha = 0;
+			keyed = 0;
 		}
 
 		if(stage == 0){
-			if(alpha != rwStateCache.textureAlpha){
+			if(alpha != rwStateCache.textureAlpha ||
+			   keyed != rwStateCache.textureKeyed){
 				rwStateCache.textureAlpha = alpha;
-				if(!rwStateCache.vertexAlpha){
-					setAlphaBlend(alpha);
-					setAlphaTest(alpha);
-				}
+				rwStateCache.textureKeyed = keyed;
+				updateAlphaStates();
 			}
 		}
 	}
@@ -1106,6 +1392,7 @@ resetRenderState(void)
 	rwStateCache.alphaFunc = ALPHAGREATEREQUAL;
 	alphaFunc = 0;
 	alphaRef = 10.0f/255.0f;
+	rwStateCache.textureKeyed = 0;
 	uniformStateDirty[RWGL_ALPHAREF] = true;
 	uniformState.fogDisable = 1.0f;
 	uniformState.fogStart = 0.0f;
@@ -1160,6 +1447,8 @@ resetRenderState(void)
 
 	rwStateCache.colorwritemask = COLORWRITEALL;
 	setGlRenderState(RWGL_COLORMASK, COLORWRITEALL);
+	setGlRenderState(RWGL_MULTISAMPLE, true);
+	setGlRenderState(RWGL_SAMPLEALPHATOCOVERAGE, false);
 
 	activeTexture = -1;
 	for(int i = 0; i < MAXNUMSTAGES; i++){
@@ -1396,8 +1685,18 @@ setFrameBuffer(Camera *cam)
 	Gl3Raster *natzb = PLUGINOFFSET(Gl3Raster, zbuf, nativeRasterOffset);
 	assert(fbuf->type == Raster::CAMERA || fbuf->type == Raster::CAMERATEXTURE);
 
-	// Have to make sure depth buffer is attached to FB's fbo
 	bindFramebuffer(natfb->fbo);
+
+	// The virtual screen owns its depth -- see virtualScreenFramebuffer -- so
+	// there is nothing to pair here. Every camera raster shares that one
+	// framebuffer, and the pairing below is per-raster: a second camera would
+	// swap the attachment out from under the first, whose fboMate still claims
+	// it. It is also the only way a multisampled colour buffer can have depth
+	// at all, the camera's own ZBUFFER raster being single-sampled.
+	if(natfb->fbo != 0 && natfb->fbo == virtualScreenFramebuffer())
+		return;
+
+	// Have to make sure depth buffer is attached to FB's fbo
 	if(zbuf){
 		if(natfb->fboMate == zbuf){
 			// all good
@@ -1658,7 +1957,11 @@ blitVirtualScreen(Raster *raster)
 	int32 dx = (winw - dw)/2;
 	int32 dy = (winh - dh)/2;
 
-	glBindFramebuffer(GL_READ_FRAMEBUFFER, natfb->fbo);
+	// The resolved buffer rather than natfb->fbo, which is the multisampled one
+	// when there is one: glBlitFramebuffer will not scale a multisample source,
+	// and this blit scales to the window.
+	resolveVirtualScreen();
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, virtualScreenFbo);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 
 	glDisable(GL_SCISSOR_TEST);

@@ -128,6 +128,10 @@ im2DSetXform(void)
 void
 im2DRenderPrimitive(PrimitiveType primType, void *vertices, int32 numVertices)
 {
+	// Coverage and edge antialiasing are both statements about a surface in the
+	// depth buffer, and a screen-space quad is not one. See setIm2DActive.
+	setIm2DActive(1);
+
 #ifdef RW_GL_USE_VAOS
 	glBindVertexArray(im2DVao);
 #endif
@@ -151,6 +155,7 @@ im2DRenderPrimitive(PrimitiveType primType, void *vertices, int32 numVertices)
 #ifndef RW_GL_USE_VAOS
 	disableAttribPointers(im2dattribDesc, 3);
 #endif
+	setIm2DActive(0);
 }
 
 void
@@ -158,6 +163,10 @@ im2DRenderIndexedPrimitive(PrimitiveType primType,
 	void *vertices, int32 numVertices,
 	void *indices, int32 numIndices)
 {
+	// Coverage and edge antialiasing are both statements about a surface in the
+	// depth buffer, and a screen-space quad is not one. See setIm2DActive.
+	setIm2DActive(1);
+
 #ifdef RW_GL_USE_VAOS
 	glBindVertexArray(im2DVao);
 #endif
@@ -186,6 +195,7 @@ im2DRenderIndexedPrimitive(PrimitiveType primType,
 #ifndef RW_GL_USE_VAOS
 	disableAttribPointers(im2dattribDesc, 3);
 #endif
+	setIm2DActive(0);
 }
 
 
