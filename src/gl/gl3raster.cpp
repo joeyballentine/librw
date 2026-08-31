@@ -227,54 +227,14 @@ rasterCreateCamera(Raster *raster)
 	natras->fbo = 0;
 	natras->fboMate = nil;
 
-	// A virtual screen gives this raster a framebuffer of its own rather than
-	// leaving it as the window's. Built at the RASTER's size, not at the size
-	// setVirtualScreen was given: those have to agree, and taking it from here
-	// means a disagreement renders correctly at the game's size instead of
-	// silently at some other one. See setVirtualScreen in rwgl3.h.
-	//
-	// The colour attachment is a texture rather than a renderbuffer because the
-	// frame is worth sampling: every effect that reads the frame buffer back --
-	// glow, heat haze, a loading-screen still -- wants exactly this.
-	//
-	// No depth attachment here. The camera's own ZBUFFER raster is attached by
-	// setFrameBuffer, which is where a camera's depth has always come from.
-	if(virtualScreenWidth > 0 && virtualScreenHeight > 0 &&
-	   raster->width > 0 && raster->height > 0){
-		glGenTextures(1, &natras->texid);
-		uint32 prev = bindTexture(natras->texid);
-		glTexImage2D(GL_TEXTURE_2D, 0, natras->internalFormat,
-		             raster->width, raster->height,
-		             0, natras->format, natras->type, nil);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		natras->filterMode = Texture::LINEAR;
-		natras->addressU = Texture::CLAMP;
-		natras->addressV = Texture::CLAMP;
-		natras->maxAnisotropy = 1;
-		bindTexture(prev);
-
-		glGenFramebuffers(1, &natras->fbo);
-		bindFramebuffer(natras->fbo);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-		                       GL_TEXTURE_2D, natras->texid, 0);
-
-		// A driver that will not take this combination gets the window's own
-		// framebuffer back rather than a camera that draws nowhere. The
-		// picture then stretches on a resize, which is the behaviour before
-		// there was a virtual screen and is a great deal better than a black
-		// screen.
-		if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE){
-			bindFramebuffer(0);
-			glDeleteFramebuffers(1, &natras->fbo);
-			glDeleteTextures(1, &natras->texid);
-			natras->fbo = 0;
-			natras->texid = 0;
-		}else
-			bindFramebuffer(0);
-	}
+	// Every camera raster points at the ONE virtual screen, the way every D3D9
+	// camera raster points at the one default render target. Not one each: an
+	// application makes several cameras -- a movie player, an offscreen
+	// instancer, a dummy for bucket sorting -- and they all draw onto the same
+	// picture. Zero when there is no virtual screen, which is the window's own
+	// framebuffer and the behaviour this device has always had.
+	natras->fbo = virtualScreenFramebuffer();
+	natras->texid = virtualScreenTexture();
 
 	return raster;
 }
@@ -926,11 +886,8 @@ destroyNativeRaster(void *object, int32 offset, int32)
 			zras->fboMate = nil;
 			natras->fboMate = nil;
 		}
-		// Both are zero unless this raster is a virtual screen.
-		if(natras->fbo)
-			glDeleteFramebuffers(1, &natras->fbo);
-		if(natras->texid)
-			glDeleteTextures(1, &natras->texid);
+		// The fbo and texture are the virtual screen's, shared by every camera
+		// raster, and go with the device rather than with any one of them.
 		break;
 	}
 	natras->texid = 0;

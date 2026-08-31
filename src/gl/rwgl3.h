@@ -216,6 +216,30 @@ enum
 void setVirtualScreen(int32 width, int32 height);
 extern int32 virtualScreenWidth, virtualScreenHeight;
 
+// The ONE framebuffer every Raster::CAMERA draws into when there is a virtual
+// screen, and the texture behind it. Created on first use, because
+// setVirtualScreen is called before there is a GL context to create it in.
+// Zero when there is no virtual screen.
+//
+// Device-wide and shared, exactly as the D3D9 virtual screen is one surface
+// that every camera raster points at rather than one per raster. An
+// application makes several cameras -- a movie player, an offscreen instancer,
+// a dummy for bucket sorting -- and they all draw onto the same picture.
+// Copy the frame as it stands into a Raster::CAMERATEXTURE, which is how an
+// effect gets the picture it is about to distort, blur or hold on screen. The
+// source is the virtual screen, NOT whatever framebuffer happens to be bound:
+// the last thing drawn before a present is often a camera texture -- a shadow
+// buffer, say -- and reading that would capture the shadow buffer.
+//
+// False when there is no virtual screen to read, when the destination is not a
+// camera texture, or when the two disagree about size. A caller that gets
+// false has no picture and must fall back, not draw whatever was there before.
+bool32 copyVirtualScreen(Raster *dst);
+
+uint32 virtualScreenFramebuffer(void);
+uint32 virtualScreenTexture(void);
+void destroyVirtualScreen(void);
+
 extern const char *shaderDecl;	// #version stuff
 extern const char *header_vert_src;
 extern const char *header_frag_src;

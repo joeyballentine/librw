@@ -144,6 +144,8 @@ bool32 constantVertexColorWhite;
 
 int32 virtualScreenWidth;
 int32 virtualScreenHeight;
+static uint32 virtualScreenFbo;
+static uint32 virtualScreenTex;
 
 void
 setVirtualScreen(int32 width, int32 height)
@@ -562,6 +564,103 @@ static GLint filterConvMap_MIP[] = {
 	   GL_NEAREST_MIPMAP_NEAREST, GL_LINEAR_MIPMAP_NEAREST,
 	   GL_NEAREST_MIPMAP_LINEAR, GL_LINEAR_MIPMAP_LINEAR
 };
+
+uint32
+virtualScreenTexture(void)
+{
+	return virtualScreenTex;
+}
+
+uint32
+virtualScreenFramebuffer(void)
+{
+	if(virtualScreenFbo)
+		return virtualScreenFbo;
+	if(virtualScreenWidth <= 0 || virtualScreenHeight <= 0)
+		return 0;
+
+	// The colour attachment is a texture rather than a renderbuffer because the
+	// frame is worth sampling: every effect that reads the frame buffer back --
+	// glow, heat haze, a loading-screen still -- wants exactly this.
+	//
+	// No depth attachment. The camera's own ZBUFFER raster is attached by
+	// setFrameBuffer, which is where a camera's depth has always come from.
+	glGenTextures(1, &virtualScreenTex);
+	uint32 prev = bindTexture(virtualScreenTex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, virtualScreenWidth, virtualScreenHeight,
+	             0, GL_RGB, GL_UNSIGNED_BYTE, nil);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	bindTexture(prev);
+
+	glGenFramebuffers(1, &virtualScreenFbo);
+	uint32 prevFbo = currentFramebuffer;
+	bindFramebuffer(virtualScreenFbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+	                       GL_TEXTURE_2D, virtualScreenTex, 0);
+
+	// A driver that will not take this combination gets the window's own
+	// framebuffer back rather than a camera that draws nowhere. The picture
+	// then stretches on a resize, which is the behaviour before there was a
+	// virtual screen and a great deal better than a black screen.
+	if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE){
+		bindFramebuffer(prevFbo);
+		glDeleteFramebuffers(1, &virtualScreenFbo);
+		glDeleteTextures(1, &virtualScreenTex);
+		virtualScreenFbo = 0;
+		virtualScreenTex = 0;
+		return 0;
+	}
+
+	bindFramebuffer(prevFbo);
+	return virtualScreenFbo;
+}
+
+bool32
+copyVirtualScreen(Raster *dst)
+{
+	if(dst == nil || dst->type != Raster::CAMERATEXTURE)
+		return 0;
+	if(virtualScreenFbo == 0)
+		return 0;
+	if(dst->width != virtualScreenWidth || dst->height != virtualScreenHeight)
+		return 0;
+
+	Gl3Raster *natdst = PLUGINOFFSET(Gl3Raster, dst, nativeRasterOffset);
+	if(natdst->fbo == 0)
+		return 0;
+
+	// Extents are equal, so this is a copy and not a scale; GL_NEAREST says so.
+	// The scissor is forced off for the reason clearCamera forces it -- a blit
+	// obeys it -- and the colour mask is not, because a blit does not.
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, virtualScreenFbo);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, natdst->fbo);
+	glDisable(GL_SCISSOR_TEST);
+	glBlitFramebuffer(0, 0, virtualScreenWidth, virtualScreenHeight,
+	                  0, 0, virtualScreenWidth, virtualScreenHeight,
+	                  GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+	// The read and draw bindings went round bindFramebuffer's cache, so it no
+	// longer describes the binding. Put both back by hand.
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	currentFramebuffer = 0;
+	return 1;
+}
+
+void
+destroyVirtualScreen(void)
+{
+	if(virtualScreenFbo){
+		glDeleteFramebuffers(1, &virtualScreenFbo);
+		virtualScreenFbo = 0;
+	}
+	if(virtualScreenTex){
+		glDeleteTextures(1, &virtualScreenTex);
+		virtualScreenTex = 0;
+	}
+}
 
 static GLint addressConvMap[] = {
 	0, GL_REPEAT, GL_MIRRORED_REPEAT,
@@ -1338,10 +1437,11 @@ getFramebufferRect(Raster *frameBuffer)
 	Raster *fb = frameBuffer->parent;
 	Gl3Raster *natfb = PLUGINOFFSET(Gl3Raster, fb, nativeRasterOffset);
 	if(fb->type == Raster::CAMERA && natfb->fbo){
-		// A virtual screen. The picture is the raster's size and the window's
-		// shape has nothing to do with it until showRaster blits it out.
-		r.w = fb->width;
-		r.h = fb->height;
+		// A virtual screen. The picture is ITS size -- not the raster's, which
+		// several cameras disagree about -- and the window's shape has nothing
+		// to do with it until showRaster blits it out.
+		r.w = virtualScreenWidth;
+		r.h = virtualScreenHeight;
 	}else if(fb->type == Raster::CAMERA){
 #ifdef LIBRW_SDL2
 		SDL_GetWindowSize(glGlobals.window, &r.w, &r.h);
@@ -1542,8 +1642,8 @@ blitVirtualScreen(Raster *raster)
 	if(winw <= 0 || winh <= 0)
 		return;
 
-	int32 vw = fb->width;
-	int32 vh = fb->height;
+	int32 vw = virtualScreenWidth;
+	int32 vh = virtualScreenHeight;
 	if(vw <= 0 || vh <= 0)
 		return;
 
@@ -2318,6 +2418,8 @@ termOpenGL(void)
 
 	glDeleteTextures(1, &whitetex);
 	whitetex = 0;
+
+	destroyVirtualScreen();
 
 	return 1;
 }
