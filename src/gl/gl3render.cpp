@@ -154,7 +154,20 @@ renderCB(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 
 	uint32 flags = atomic->geometry->flags;
 	setWorldMatrix(atomic->getFrame()->getLTM());
-	int32 vsBits = lightingCB(atomic);
+
+	// The caster pass enumerates no lights, and MUST not.
+	//
+	// Not an optimisation, though it is one: enumerateLights dereferences
+	// engine->currentWorld, which Camera::beginUpdate takes from the camera's
+	// own world -- and a camera rendering to an offscreen target need not
+	// belong to one. A shadow map camera that does not is a null dereference
+	// here rather than anywhere near the code that made it.
+	//
+	// setWorldMatrix above already marks the uniform block dirty, so nothing
+	// downstream depends on having been through here.
+	int32 vsBits = 0;
+	if(!getDepthPass())
+		vsBits = lightingCB(atomic);
 
 	setupVertexInput(header);
 

@@ -263,7 +263,13 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 
 	uint32 flags = atomic->geometry->flags;
 	setWorldMatrix(atomic->getFrame()->getLTM());
-	int32 vsBits = lightingCB(atomic);
+
+	// No lights in the caster pass, for the reason gl3render.cpp gives: the
+	// enumeration reads engine->currentWorld, and the camera drawing a shadow
+	// map does not have to belong to a world.
+	int32 vsBits = 0;
+	if(!getDepthPass())
+		vsBits = lightingCB(atomic);
 
 	setupVertexInput(header);
 
