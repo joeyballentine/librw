@@ -72,6 +72,7 @@ rasterCreateTexture(Raster *raster)
 		natras->format = GL_RGBA;
 		natras->type = GL_UNSIGNED_BYTE;
 		natras->hasAlpha = 1;
+		natras->alphaKind = ALPHAGRADED;
 		natras->bpp = 4;
 		raster->depth = 32;
 		break;
@@ -80,6 +81,7 @@ rasterCreateTexture(Raster *raster)
 		natras->format = GL_RGB;
 		natras->type = GL_UNSIGNED_BYTE;
 		natras->hasAlpha = 0;
+		natras->alphaKind = ALPHAOPAQUE;
 		natras->bpp = 3;
 		raster->depth = 24;
 		break;
@@ -88,6 +90,7 @@ rasterCreateTexture(Raster *raster)
 		natras->format = GL_RGBA;
 		natras->type = GL_UNSIGNED_SHORT_5_5_5_1;
 		natras->hasAlpha = 1;
+		natras->alphaKind = ALPHAGRADED;
 		natras->bpp = 2;
 		raster->depth = 16;
 		break;
@@ -152,6 +155,7 @@ rasterCreateCameraTexture(Raster *raster)
 		natras->format = GL_RGBA;
 		natras->type = GL_UNSIGNED_BYTE;
 		natras->hasAlpha = 1;
+		natras->alphaKind = ALPHAGRADED;
 		natras->bpp = 4;
 		break;
 	case Raster::C888:
@@ -160,6 +164,7 @@ rasterCreateCameraTexture(Raster *raster)
 		natras->format = GL_RGB;
 		natras->type = GL_UNSIGNED_BYTE;
 		natras->hasAlpha = 0;
+		natras->alphaKind = ALPHAOPAQUE;
 		natras->bpp = 3;
 		break;
 	case Raster::C1555:
@@ -167,6 +172,7 @@ rasterCreateCameraTexture(Raster *raster)
 		natras->format = GL_RGBA;
 		natras->type = GL_UNSIGNED_SHORT_5_5_5_1;
 		natras->hasAlpha = 1;
+		natras->alphaKind = ALPHAGRADED;
 		natras->bpp = 2;
 		break;
 	}
@@ -219,6 +225,7 @@ rasterCreateCamera(Raster *raster)
 	natras->format = GL_RGB;
 	natras->type = GL_UNSIGNED_BYTE;
 	natras->hasAlpha = 0;
+	natras->alphaKind = ALPHAOPAQUE;
 	natras->bpp = 3;
 
 	natras->autogenMipmap = 0;
@@ -280,6 +287,17 @@ rasterCreateZbuffer(Raster *raster)
 
 
 void
+setRasterAlphaKind(Raster *raster, int32 kind)
+{
+	Gl3Raster *natras = GETGL3RASTEREXT(raster);
+	natras->alphaKind = (uint8)kind;
+	// hasAlpha is what the rest of the driver still reads, so keep the two
+	// agreeing: a surface with nothing but opaque texels has no alpha whatever
+	// its format says.
+	natras->hasAlpha = kind != ALPHAOPAQUE;
+}
+
+void
 allocateDXT(Raster *raster, int32 dxt, int32 numLevels, bool32 hasAlpha)
 {
 #ifdef RW_OPENGL
@@ -316,6 +334,9 @@ allocateDXT(Raster *raster, int32 dxt, int32 numLevels, bool32 hasAlpha)
 	}
 	natras->type = GL_UNSIGNED_BYTE;
 	natras->hasAlpha = hasAlpha;
+	// Nothing here has seen a texel. classifyDXTAlpha is how a caller that
+	// holds the blocks says what is really in them.
+	natras->alphaKind = hasAlpha ? ALPHAGRADED : ALPHAOPAQUE;
 	natras->bpp = 2;
 	raster->depth = 16;
 
@@ -401,6 +422,7 @@ rasterCreate(Raster *raster)
 
 	natras->isCompressed = 0;
 	natras->hasAlpha = 0;
+	natras->alphaKind = ALPHAOPAQUE;
 	natras->numLevels = 1;
 
 	Raster *ret = raster;
@@ -520,7 +542,10 @@ assert(natras->format == GL_RGBA);
 		// The window's back buffer holds a scaled copy with black bars round
 		// it; the frame itself is in the virtual screen's FBO.
 		if(natras->fbo){
-			glBindFramebuffer(GL_READ_FRAMEBUFFER, natras->fbo);
+			// The resolved picture, not the multisampled buffer natras->fbo
+			// names: glReadPixels cannot read a multisample attachment.
+			resolveVirtualScreen();
+			glBindFramebuffer(GL_READ_FRAMEBUFFER, virtualScreenResolvedFramebuffer());
 			glReadBuffer(GL_COLOR_ATTACHMENT0);
 		}else
 			glReadBuffer(GL_BACK);
@@ -715,6 +740,13 @@ rasterFromImage(Raster *raster, Image *image)
 	}
 
 	natras->hasAlpha = image->hasAlpha();
+	// What the texels actually hold, now that they have been seen. The format
+	// this raster was created with is already the narrowest one that fits the
+	// image -- imageFindRasterFormat drops to C888 when nothing is transparent
+	// -- so the only question left is whether the transparency that IS here is
+	// keyed or graded.
+	natras->alphaKind = natras->hasAlpha ?
+		(image->alphaIsBinary() ? ALPHAKEYED : ALPHAGRADED) : ALPHAOPAQUE;
 
 	bool unlock = false;
 	if(raster->pixels == nil){
