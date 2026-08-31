@@ -25,6 +25,12 @@ struct VS_out {
 	float4 Position		: POSITION;
 	float3 TexCoord0	: TEXCOORD0;	// also fog
 	float4 Color		: COLOR0;
+#ifdef PERPIXEL
+	// World space, and NOT normalized: interpolating two unit normals across a
+	// triangle does not give a unit normal, which is the whole reason the pixel
+	// shader normalizes it again. Must match default_PS.hlsl's VS_out.
+	float3 Normal		: TEXCOORD1;
+#endif
 };
 
 
@@ -44,6 +50,14 @@ VS_out main(in VS_in input)
 #endif
 
 	output.Color = input.Prelight;
+
+#ifdef PERPIXEL
+	// Everything from the ambient term down happens in the pixel shader
+	// instead, including the clamp and the material colour -- they come after
+	// the lighting and so cannot be split from it. The prelight goes across
+	// untouched.
+	output.Normal = Normal;
+#else
 	output.Color.rgb += ambientLight.rgb * surfAmbient;
 
 	int i;
@@ -62,6 +76,7 @@ VS_out main(in VS_in input)
 	// PS2 clamps before material color
 	output.Color = clamp(output.Color, 0.0, 1.0);
 	output.Color *= matCol;
+#endif
 
 	output.TexCoord0.z = clamp((output.Position.w - fogEnd)*fogRange, fogDisable, 1.0);
 

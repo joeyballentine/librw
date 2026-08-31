@@ -165,9 +165,19 @@ renderCB_Shader(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 		d3ddevice->SetVertexShaderConstantF(VSLOC_uvXform, uvTransform,
 		                                    NUMUVTRANSFORMELEMENTS/4);
 
-	// Pick a shader
+	// Pick a shader.
+	//
+	// Per-pixel lighting replaces exactly one of the three cases: directional
+	// lights and nothing else. Ambient alone is the same colour at every pixel
+	// and has nothing to gain, and the per-pixel shaders do not do point or
+	// spot lights, so anything reached by one keeps the per-vertex path.
+	bool32 perPixel = getPerPixelLighting() &&
+	                  (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT;
+
 	if((vsBits & VSLIGHT_MASK) == 0)
 		setVertexShader(uvXform ? uvxform_amb_VS : default_amb_VS);
+	else if(perPixel)
+		setVertexShader(uvXform ? uvxform_pp_VS : default_pp_VS);
 	else if((vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT)
 		setVertexShader(uvXform ? uvxform_amb_dir_VS : default_amb_dir_VS);
 	else
@@ -183,9 +193,9 @@ renderCB_Shader(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 
 		if(m->texture){
 			d3d::setTexture(0, m->texture);
-			setPixelShader(default_tex_PS);
+			setPixelShader(perPixel ? default_tex_pp_PS : default_tex_PS);
 		}else
-			setPixelShader(default_PS);
+			setPixelShader(perPixel ? default_pp_PS : default_PS);
 
 		drawInst(header, inst);
 		inst++;

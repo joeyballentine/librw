@@ -28,11 +28,29 @@ void *default_all_VS;
 void *uvxform_amb_VS;
 void *uvxform_amb_dir_VS;
 void *uvxform_all_VS;
+void *default_pp_VS;
+void *uvxform_pp_VS;
 void *default_PS;
 void *default_tex_PS;
+void *default_pp_PS;
+void *default_tex_pp_PS;
 void *im2d_VS;
 void *im2d_PS;
 void *im2d_tex_PS;
+
+static bool32 perPixelLighting;
+
+void
+setPerPixelLightingEnabled(bool32 enable)
+{
+	perPixelLighting = !!enable;
+}
+
+bool32
+getPerPixelLighting(void)
+{
+	return perPixelLighting;
+}
 
 
 void
@@ -78,6 +96,19 @@ createDefaultShaders(void)
 
 	{
 		static
+#include "shaders/default_pp_VS.h"
+		default_pp_VS = createVertexShader((void*)VS_NAME);
+		assert(default_pp_VS);
+	}
+	{
+		static
+#include "shaders/uvxform_pp_VS.h"
+		uvxform_pp_VS = createVertexShader((void*)VS_NAME);
+		assert(uvxform_pp_VS);
+	}
+
+	{
+		static
 #include "shaders/default_PS.h"
 		default_PS = createPixelShader((void*)PS_NAME);
 		assert(default_PS);
@@ -87,6 +118,18 @@ createDefaultShaders(void)
 #include "shaders/default_tex_PS.h"
 		default_tex_PS = createPixelShader((void*)PS_NAME);
 		assert(default_tex_PS);
+	}
+	{
+		static
+#include "shaders/default_pp_PS.h"
+		default_pp_PS = createPixelShader((void*)PS_NAME);
+		assert(default_pp_PS);
+	}
+	{
+		static
+#include "shaders/default_tex_pp_PS.h"
+		default_tex_pp_PS = createPixelShader((void*)PS_NAME);
+		assert(default_tex_pp_PS);
 	}
 
 	{
@@ -124,11 +167,19 @@ destroyDefaultShaders(void)
 	uvxform_amb_dir_VS = nil;
 	destroyVertexShader(uvxform_all_VS);
 	uvxform_all_VS = nil;
+	destroyVertexShader(default_pp_VS);
+	default_pp_VS = nil;
+	destroyVertexShader(uvxform_pp_VS);
+	uvxform_pp_VS = nil;
 
 	destroyPixelShader(default_PS);
 	default_PS = nil;
 	destroyPixelShader(default_tex_PS);
 	default_tex_PS = nil;
+	destroyPixelShader(default_pp_PS);
+	default_pp_PS = nil;
+	destroyPixelShader(default_tex_pp_PS);
+	default_tex_pp_PS = nil;
 
 	destroyVertexShader(im2d_VS);
 	im2d_VS = nil;
@@ -261,6 +312,11 @@ setAmbient(const RGBAf &color)
 	if(!equal(d3dShaderState.ambient, color)){
 		d3dShaderState.ambient = color;
 		d3ddevice->SetVertexShaderConstantF(VSLOC_ambLight, (float*)&color, 1);
+		// The pixel stage gets it too, whether or not per-pixel lighting is on
+		// right now. Both uploads sit inside the same cache test on purpose: if
+		// this one were conditional, turning the setting on would not upload
+		// until the ambient next changed, which for most levels is never.
+		d3ddevice->SetPixelShaderConstantF(PSLOC_ppAmbient, (float*)&color, 1);
 	}
 }
 
@@ -354,6 +410,34 @@ uploadLights(WorldLights *lightData)
 		d3dShaderState.lightOffset[1] = firstLight[1];
 		d3dShaderState.lightOffset[2] = firstLight[2];
 		d3ddevice->SetVertexShaderConstantF(VSLOC_lightOffset, firstLight, 1);
+	}
+
+	// The per-pixel path's copy of the directional lights.
+	//
+	// All MAX_LIGHTS slots go up every time, not just the ones in use: the
+	// pixel shader is ps_2_0, which has neither loops nor branches, so it
+	// evaluates a fixed eight lights and the only way to say "no light here" is
+	// a colour of zero. Uploading the whole array also means there is nothing
+	// stale to correct when the light count drops between atomics.
+	//
+	// Unconditional on the setting would cost 16 registers per atomic for
+	// nothing, and there is no staleness to fear from skipping it: this runs
+	// per atomic, so the frame after the setting changes is already right.
+	if(perPixelLighting){
+		float32 psColor[MAX_LIGHTS*4];
+		float32 psDir[MAX_LIGHTS*4];
+		memset(psColor, 0, sizeof(psColor));
+		memset(psDir, 0, sizeof(psDir));
+		for(i = 0; i < lightData->numDirectionals; i++){
+			psColor[i*4+0] = directionals[i].color.x;
+			psColor[i*4+1] = directionals[i].color.y;
+			psColor[i*4+2] = directionals[i].color.z;
+			psDir[i*4+0] = directionals[i].direction.x;
+			psDir[i*4+1] = directionals[i].direction.y;
+			psDir[i*4+2] = directionals[i].direction.z;
+		}
+		d3ddevice->SetPixelShaderConstantF(PSLOC_ppLightColor, psColor, MAX_LIGHTS);
+		d3ddevice->SetPixelShaderConstantF(PSLOC_ppLightDirection, psDir, MAX_LIGHTS);
 	}
 
 	int32 off = VSLOC_lights;

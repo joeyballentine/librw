@@ -33,6 +33,7 @@ void skinRenderCB(Atomic *atomic, InstanceDataHeader *header) {}
 void *skin_amb_VS;
 void *skin_amb_dir_VS;
 void *skin_all_VS;
+void *skin_pp_VS;
 
 #define NUMDECLELT 14
 
@@ -304,9 +305,15 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 
 	uploadSkinMatrices(atomic);
 
-	// Pick a shader
+	// Pick a shader. Same rule as the default pipeline in d3d9render.cpp:
+	// per-pixel replaces the directional-only case and nothing else.
+	bool32 perPixel = getPerPixelLighting() &&
+	                  (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT;
+
 	if((vsBits & VSLIGHT_MASK) == 0)
 		setVertexShader(skin_amb_VS);
+	else if(perPixel)
+		setVertexShader(skin_pp_VS);
 	else if((vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT)
 		setVertexShader(skin_amb_dir_VS);
 	else
@@ -322,9 +329,9 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 
 		if(inst->material->texture){
 			d3d::setTexture(0, m->texture);
-			setPixelShader(default_tex_PS);
+			setPixelShader(perPixel ? default_tex_pp_PS : default_tex_PS);
 		}else
-			setPixelShader(default_PS);
+			setPixelShader(perPixel ? default_pp_PS : default_PS);
 
 		drawInst(header, inst);
 		inst++;
@@ -357,6 +364,14 @@ createSkinShaders(void)
 		skin_all_VS = createVertexShader((void*)VS_NAME);
 //		assert(skin_all_VS);
 	}
+	// This one has room the note above worries about: it does no lighting at
+	// all, only carrying the skinned normal out to the pixel shader.
+	{
+		static
+#include "shaders/skin_pp_VS.h"
+		skin_pp_VS = createVertexShader((void*)VS_NAME);
+		assert(skin_pp_VS);
+	}
 }
 
 void
@@ -372,6 +387,9 @@ destroySkinShaders(void)
 		destroyVertexShader(skin_all_VS);
 		skin_all_VS = nil;
 	}
+
+	destroyVertexShader(skin_pp_VS);
+	skin_pp_VS = nil;
 }
 
 #endif

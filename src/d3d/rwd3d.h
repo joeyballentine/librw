@@ -60,6 +60,20 @@ void setAlphaToCoverageEnabled(bool32 enable);
 // Whether it is actually in force: asked for, understood by the device, AND
 // with samples to spread across.
 bool32 getAlphaToCoverage(void);
+// Evaluate lighting per pixel rather than per vertex, in the default, uvxform
+// and skin pipelines.
+//
+// Only where it can change the picture: an atomic lit by ambient alone gets
+// nothing from it, and one reached by a point or a spot light falls back to the
+// per-vertex path for that draw, because the per-pixel shaders do directional
+// lights only. Geometry with no normals enumerates no directional lights at
+// all, so it is never affected either.
+//
+// Safe to call before the device exists, and safe to change at any time -- the
+// lights are uploaded fresh per atomic and the material constants go to both
+// shader stages whatever this says.
+void setPerPixelLightingEnabled(bool32 enable);
+bool32 getPerPixelLighting(void);
 // The single-sampled picture, for anything that needs to read the frame back:
 // the samples are collapsed into it on the way out. nil when there is no
 // virtual screen, in which case the back buffer is what was drawn into.
@@ -436,7 +450,23 @@ enum
 
 	VSLOC_numLights	= 0,
 
-	PSLOC_fogColor = 0
+	PSLOC_fogColor = 0,
+
+	// The per-pixel lighting path's copy of what the vertex shader is given
+	// above. It starts at 8 and not at 1 because c1 upwards is scratch for
+	// whoever is drawing -- d3d9matfx.cpp's shininess is c1, and the port's
+	// glow and distortion passes take c1 to c3. PSLOC_ppMatColor and
+	// PSLOC_ppSurfProps are uploaded only when the material changes, so a pass
+	// that wrote over them would not be corrected until the next material
+	// change. Keep this block clear of anything transient.
+	//
+	// ps_2_0 allows 32 float constants and this ends at c26. A ninth light
+	// does not fit.
+	PSLOC_ppMatColor = 8,
+	PSLOC_ppSurfProps = 9,
+	PSLOC_ppAmbient = 10,
+	PSLOC_ppLightColor = 11,
+	PSLOC_ppLightDirection = PSLOC_ppLightColor + 8
 };
 
 // Vertex shader bits
@@ -471,8 +501,16 @@ extern void *default_all_VS;
 extern void *uvxform_amb_VS;
 extern void *uvxform_amb_dir_VS;
 extern void *uvxform_all_VS;
+// The per-pixel lighting path: one vertex shader each rather than three,
+// because these do no lighting to switch on. They must be paired with a _pp_
+// pixel shader -- they emit a normal the others do not and leave the ambient
+// term, the clamp and the material colour undone.
+extern void *default_pp_VS;
+extern void *uvxform_pp_VS;
 extern void *default_PS;
 extern void *default_tex_PS;
+extern void *default_pp_PS;
+extern void *default_tex_pp_PS;
 extern void *im2d_VS;
 extern void *im2d_PS;
 extern void *im2d_tex_PS;

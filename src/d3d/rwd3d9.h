@@ -114,6 +114,9 @@ ObjPipeline *makeSkinPipeline(void);
 extern void *skin_amb_VS;
 extern void *skin_amb_dir_VS;
 extern void *skin_all_VS;
+// Skinning with the lighting left to the pixel shader. Pairs with the _pp_
+// pixel shaders in rwd3d.h, as the default pipeline's does.
+extern void *skin_pp_VS;
 
 // Skin plugin, combined with MatFX
 

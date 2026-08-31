@@ -792,6 +792,12 @@ setMaterial(const RGBA &color, const SurfaceProperties &surfaceprops, float extr
 		rw::RGBAf col;
 		convColor(&col, &color);
 		d3ddevice->SetVertexShaderConstantF(VSLOC_matColor, (float*)&col, 1);
+		// And to the pixel stage, for the per-pixel lighting path, which
+		// applies the material colour after lighting the pixel. Uploaded
+		// whether or not that path is on: this is behind a cache test, so
+		// making it conditional would leave the constant stale from whenever
+		// the setting last changed until the material next changed.
+		d3ddevice->SetPixelShaderConstantF(PSLOC_ppMatColor, (float*)&col, 1);
 		d3dShaderState.matColor = color;
 	}
 
@@ -805,6 +811,7 @@ setMaterial(const RGBA &color, const SurfaceProperties &surfaceprops, float extr
 		surfProps[2] = surfaceprops.diffuse;
 		surfProps[3] = extraSurfProp;
 		d3ddevice->SetVertexShaderConstantF(VSLOC_surfProps, surfProps, 1);
+		d3ddevice->SetPixelShaderConstantF(PSLOC_ppSurfProps, surfProps, 1);
 		d3dShaderState.surfProps = surfaceprops;
 		d3dShaderState.extraSurfProp = extraSurfProp;
 	}

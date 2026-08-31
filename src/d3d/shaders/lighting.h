@@ -11,6 +11,16 @@ float3 DoDirLight(Light L, float3 N)
 	return l*L.color.xyz;
 }
 
+// The same light, for the pixel shader, which is handed colour and direction
+// loose rather than as a Light -- see perPixelConstants.h. Kept next to the one
+// above so the two cannot drift apart unnoticed: they must stay the same
+// equation or the per-pixel setting changes more than where the maths happens.
+float3 DoDirLightPP(float3 color, float3 direction, float3 N)
+{
+	float l = max(0.0, dot(N, -direction));
+	return l*color;
+}
+
 float3 DoDirLightSpec(Light L, float3 N, float3 V, float power)
 {
 	return pow(saturate(dot(N, normalize(V + -L.direction.xyz))), power)*L.color.xyz;

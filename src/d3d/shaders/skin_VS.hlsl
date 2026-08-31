@@ -16,6 +16,12 @@ struct VS_out {
 	float4 Position		: POSITION;
 	float3 TexCoord0	: TEXCOORD0;	// also fog
 	float4 Color		: COLOR0;
+#ifdef PERPIXEL
+	// The skinned normal, in world space and not normalized. See the same
+	// member in default_VS.hlsl; both feed default_PS.hlsl's PERPIXEL build,
+	// so the three structs have to agree.
+	float3 Normal		: TEXCOORD1;
+#endif
 };
 
 
@@ -38,6 +44,12 @@ VS_out main(in VS_in input)
 	output.TexCoord0.xy = input.TexCoord;
 
 	output.Color = input.Prelight;
+
+#ifdef PERPIXEL
+	// As in default_VS.hlsl: the lighting moves to the pixel shader whole,
+	// clamp and material colour with it.
+	output.Normal = Normal;
+#else
 	output.Color.rgb += ambientLight.rgb * surfAmbient;
 
 	int i;
@@ -56,6 +68,7 @@ VS_out main(in VS_in input)
 	// PS2 clamps before material color
 	output.Color = clamp(output.Color, 0.0, 1.0);
 	output.Color *= matCol;
+#endif
 
 	output.TexCoord0.z = clamp((output.Position.w - fogEnd)*fogRange, fogDisable, 1.0);
 
