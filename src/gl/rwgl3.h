@@ -204,6 +204,9 @@ int32 setLights(WorldLights *lightData);
 
 // per Mesh
 void setTexture(int32 n, Texture *tex);
+// Object pipelines announce what the instanced geometry needs here; it is
+// combined with the application's own VERTEXALPHA request, never replaces it.
+void setPipelineVertexAlpha(bool32 enable);
 void setMaterial(const RGBA &color, const SurfaceProperties &surfaceprops, float extraSurfProp = 0.0f);
 inline void setMaterial(uint32 flags, const RGBA &color, const SurfaceProperties &surfaceprops, float extraSurfProp = 0.0f)
 {

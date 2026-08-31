@@ -155,6 +155,11 @@ struct RwRasterStateCache {
 // cached RW render states
 struct RwStateCache {
 	bool32 vertexAlpha;
+	// What the APPLICATION last asked for, kept apart from the effective
+	// state above. The object pipelines overwrite vertexAlpha per mesh from
+	// the instanced geometry, which on its own throws away a blend the app
+	// explicitly requested; keeping the request lets them OR it back in.
+	bool32 appVertexAlpha;
 	uint32 alphaTestEnable;
 	uint32 alphaFunc;
 	bool32 textureAlpha;
@@ -484,6 +489,21 @@ setVertexAlpha(bool32 enable)
 	}
 }
 
+// The object pipelines' way in. `enable` is what the instanced geometry needs
+// -- vertex alpha in the mesh, or a material that is not fully opaque -- and
+// it is OR'd with what the application asked for rather than replacing it.
+//
+// Without that, a mesh whose own data says "opaque" switches blending off
+// again after the app has set up a blend for it, and the src/dest factors it
+// just chose never reach the framebuffer. Real RenderWare's console drivers
+// leave blending to the application; only the PC pipelines here infer it, so
+// the inference has to be additive to the request, not a substitute for it.
+void
+setPipelineVertexAlpha(bool32 enable)
+{
+	setVertexAlpha(enable || rwStateCache.appVertexAlpha);
+}
+
 static void
 setActiveTexture(int32 n)
 {
@@ -722,6 +742,7 @@ setRenderState(int32 state, void *pvalue)
 		setFilterMode(0, value);
 		break;
 	case VERTEXALPHA:
+		rwStateCache.appVertexAlpha = value;
 		setVertexAlpha(value);
 		break;
 	case SRCBLEND:
@@ -959,6 +980,7 @@ resetRenderState(void)
 	stateDirty = 1;
 
 	rwStateCache.vertexAlpha = 0;
+	rwStateCache.appVertexAlpha = 0;
 	rwStateCache.textureAlpha = 0;
 	rwStateCache.alphaTestEnable = 0;
 

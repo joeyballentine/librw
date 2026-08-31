@@ -41,7 +41,7 @@ matfxDefaultRender(InstanceDataHeader *header, InstanceData *inst, int32 vsBits,
 
 	setTexture(0, m->texture);
 
-	rw::SetRenderState(VERTEXALPHA, inst->vertexAlpha || m->color.alpha != 0xFF);
+	setPipelineVertexAlpha(inst->vertexAlpha || m->color.alpha != 0xFF);
 
 	if((vsBits & VSLIGHT_MASK) == 0){
 		if(getAlphaTest())
@@ -129,7 +129,7 @@ matfxEnvRender(InstanceDataHeader *header, InstanceData *inst, int32 vsBits, uin
 		convColor(envcol, &MatFX::envMapColor);
 	setUniform(u_envColor, envcol);
 
-	rw::SetRenderState(VERTEXALPHA, 1);
+	setPipelineVertexAlpha(1);
 	rw::SetRenderState(SRCBLEND, BLENDONE);
 
 	if((vsBits & VSLIGHT_MASK) == 0){

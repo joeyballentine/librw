@@ -271,7 +271,7 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 
 		setTexture(0, m->texture);
 
-		rw::SetRenderState(VERTEXALPHA, inst->vertexAlpha || m->color.alpha != 0xFF);
+		setPipelineVertexAlpha(inst->vertexAlpha || m->color.alpha != 0xFF);
 
 		if((vsBits & VSLIGHT_MASK) == 0){
 			if(getAlphaTest())
