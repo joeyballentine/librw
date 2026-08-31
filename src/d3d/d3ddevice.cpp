@@ -39,8 +39,17 @@ D3d9Globals d3d9Globals;
 // when the surfaces are handed back before a device reset.
 int32 virtualScreenWidth;
 int32 virtualScreenHeight;
+// The surface everything READS: the resolved, single-sampled picture. When
+// multisampling is off it is also the one the scene draws into.
 static IDirect3DSurface9 *virtualScreenTarget;
+// The surface the scene DRAWS into when multisampling is on, and nil when it
+// is not. Nothing can sample a multisampled surface, so it is resolved into
+// virtualScreenTarget on the way out -- see resolveVirtualScreen.
+static IDirect3DSurface9 *virtualScreenMS;
 static IDirect3DSurface9 *virtualScreenDepth;
+// Samples asked for, and the D3DMULTISAMPLE_TYPE actually granted.
+static int32 virtualScreenSamples;
+static D3DMULTISAMPLE_TYPE virtualScreenMSType = D3DMULTISAMPLE_NONE;
 static IDirect3DSurface9 *realBackBuffer;
 static IDirect3DSurface9 *realDepthSurf;
 
@@ -490,12 +499,6 @@ setDepthWrite(bool32 enable)
 	}
 }
 
-// Where a keyed texture is cut. Magnifying a shape punched out of a texture
-// leaves a band of filtered alpha a texel wide around its edge, and 128 is the
-// middle of that band -- the silhouette on screen stays the silhouette in the
-// artwork whatever the render size is.
-#define KEYEDALPHAREF 128
-
 // The transparency states, from the two things that can ask for them.
 //
 // Both used to write D3DRS_ALPHABLENDENABLE and D3DRS_ALPHATESTENABLE
@@ -503,29 +506,74 @@ setDepthWrite(bool32 enable)
 // on. That is an OR and is written as one here, because a KEYED texture makes
 // the two sources mean different things: it asks to be cut where the
 // application's own request always asks for a blend.
+// D3D9 has no render state for alpha to coverage, so the two vendors that
+// implement it each took an unrelated state and a magic four-cc. Both are
+// asked about with CheckDeviceFormat and a usage of ZERO -- asking with a
+// render target usage is a different question, and it is answered no.
+#define FOURCC_ATOC ((D3DFORMAT)MAKEFOURCC('A','T','O','C'))
+#define FOURCC_A2M1 ((D3DFORMAT)MAKEFOURCC('A','2','M','1'))
+#define FOURCC_A2M0 ((D3DFORMAT)MAKEFOURCC('A','2','M','0'))
+
+enum {
+	A2C_NONE = 0,
+	A2C_NVIDIA,	// D3DRS_ADAPTIVETESS_Y carries the four-cc
+	A2C_AMD		// D3DRS_POINTSIZE carries it
+};
+// Which of the two the device understands, decided once at startup.
+static int32 alphaToCoverageKind;
+
+// Coverage needs samples to spread itself across, so the virtual screen has to
+// be multisampled as well as the device willing.
+static bool32
+alphaToCoverageUsable(void)
+{
+	return alphaToCoverageKind != A2C_NONE && virtualScreenMS != nil;
+}
+
+static void
+setAlphaToCoverage(bool32 enable)
+{
+	switch(alphaToCoverageKind){
+	case A2C_NVIDIA:
+		setRenderState(D3DRS_ADAPTIVETESS_Y, enable ? FOURCC_ATOC : D3DFMT_UNKNOWN);
+		break;
+	case A2C_AMD:
+		setRenderState(D3DRS_POINTSIZE, enable ? FOURCC_A2M1 : FOURCC_A2M0);
+		break;
+	}
+}
+
 static void
 updateAlphaStates(void)
 {
-	// A keyed texture on a draw the application is not blending. Blending the
-	// filtered band at its edge composites the surface over whatever happened
-	// to be in the frame buffer -- and since the band writes depth, whatever
-	// belonged behind it never draws at all.
-	bool32 cutout = rwStateCache.textureKeyed && !rwStateCache.vertexAlpha;
+	// A texture's own transparency on a draw the application is NOT blending.
+	//
+	// The driver used to answer that with a blend, which is wrong twice over
+	// at any size above the one the art was drawn for. Magnifying a shape
+	// punched out of a texture leaves a band of filtered alpha around its
+	// edge; blending that band composites the surface over whatever happens to
+	// be in the frame buffer already, and because the band writes depth, the
+	// geometry that belonged behind it never draws at all. In a cave that
+	// reads as the level's own sky showing through the wall.
+	//
+	// Coverage answers it properly. The band becomes a fraction of the pixel's
+	// samples rather than a fraction of its colour, so the samples it does not
+	// cover keep their depth and the geometry behind draws into them. What the
+	// resolve produces is the surface composited over what is genuinely behind
+	// it, in whatever order the two were drawn.
+	bool32 coverage = alphaToCoverageUsable() && rwStateCache.textureAlpha &&
+	                  !rwStateCache.vertexAlpha;
 	bool32 test = rwStateCache.vertexAlpha || rwStateCache.textureAlpha;
 	bool32 blend = rwStateCache.vertexAlpha ||
-	               (rwStateCache.textureAlpha && !cutout);
-
-	// A floor, not an assignment: a draw already asking to be cut harder than
-	// this is not made softer by it. rwStateCache.alpharef still holds what
-	// the application asked for, because GetRenderState answers out of it and
-	// the game's save/restore idiom depends on getting its own value back.
-	uint32 ref = rwStateCache.alpharef;
-	if(cutout && ref < KEYEDALPHAREF)
-		ref = KEYEDALPHAREF;
+	               (rwStateCache.textureAlpha && !coverage);
 
 	setRenderState(D3DRS_ALPHABLENDENABLE, blend);
 	setRenderState(D3DRS_ALPHATESTENABLE, test);
-	setRenderState(D3DRS_ALPHAREF, ref);
+	// The application's own reference throughout. Coverage does not replace the
+	// test, it reads the alpha that survives it, so moving the reference would
+	// cut the shape before the samples ever saw it.
+	setRenderState(D3DRS_ALPHAREF, rwStateCache.alpharef);
+	setAlphaToCoverage(coverage);
 }
 
 static void
@@ -1328,20 +1376,82 @@ acquireVirtualScreen(void)
 		return;
 	}
 
+	// The multisampled pair, when asked for and when the device will grant it.
+	// Falling back to none is not a failure: the picture is the same one, drawn
+	// without the extra samples.
+	virtualScreenMSType = D3DMULTISAMPLE_NONE;
+	if(virtualScreenSamples > 1){
+		D3DMULTISAMPLE_TYPE want = (D3DMULTISAMPLE_TYPE)virtualScreenSamples;
+		DWORD quality;
+		if(SUCCEEDED(d3d9Globals.d3d9->CheckDeviceMultiSampleType(D3DADAPTER_DEFAULT,
+			D3DDEVTYPE_HAL, d3d9Globals.present.BackBufferFormat,
+			!(d3d9Globals.startMode.flags & VIDEOMODEEXCLUSIVE), want, &quality)) &&
+		   SUCCEEDED(d3d9Globals.d3d9->CheckDeviceMultiSampleType(D3DADAPTER_DEFAULT,
+			D3DDEVTYPE_HAL, d3d9Globals.present.AutoDepthStencilFormat,
+			!(d3d9Globals.startMode.flags & VIDEOMODEEXCLUSIVE), want, &quality))){
+			hr = d3ddevice->CreateRenderTarget(virtualScreenWidth, virtualScreenHeight,
+				d3d9Globals.present.BackBufferFormat, want, 0, FALSE,
+				&virtualScreenMS, nil);
+			if(SUCCEEDED(hr))
+				virtualScreenMSType = want;
+			else
+				virtualScreenMS = nil;
+		}
+	}
+
+	// The depth surface has to agree with what is being drawn into, so it
+	// follows the multisampled target when there is one.
 	hr = d3ddevice->CreateDepthStencilSurface(virtualScreenWidth, virtualScreenHeight,
-		d3d9Globals.present.AutoDepthStencilFormat, D3DMULTISAMPLE_NONE, 0, TRUE,
+		d3d9Globals.present.AutoDepthStencilFormat, virtualScreenMSType, 0, TRUE,
 		&virtualScreenDepth, nil);
 	if(FAILED(hr)){
 		virtualScreenTarget->Release();
 		virtualScreenTarget = nil;
+		if(virtualScreenMS){
+			virtualScreenMS->Release();
+			virtualScreenMS = nil;
+		}
+		virtualScreenMSType = D3DMULTISAMPLE_NONE;
 		virtualScreenDepth = nil;
 		return;
 	}
 
-	d3d9Globals.defaultRenderTarget = virtualScreenTarget;
+	IDirect3DSurface9 *scene = virtualScreenMS ? virtualScreenMS : virtualScreenTarget;
+	d3d9Globals.defaultRenderTarget = scene;
 	d3d9Globals.defaultDepthSurf = virtualScreenDepth;
-	setRenderTarget(0, virtualScreenTarget);
+	setRenderTarget(0, scene);
 	setDepthSurface(virtualScreenDepth);
+}
+
+// The single-sampled picture, for anything that needs to READ what has been
+// drawn: the present-time blit, and the effects that take a copy of the frame
+// to sample it as a texture.
+//
+// Not cached. The effects read the frame and then keep drawing into it, so a
+// resolve held from earlier in the frame would hand back a stale picture --
+// and a hardware resolve of one surface is not worth the bookkeeping to find
+// out whether it is needed.
+IDirect3DSurface9*
+resolveVirtualScreen(void)
+{
+	if(virtualScreenTarget == nil)
+		return nil;
+	if(virtualScreenMS == nil)
+		return virtualScreenTarget;
+	d3ddevice->StretchRect(virtualScreenMS, nil, virtualScreenTarget, nil, D3DTEXF_NONE);
+	return virtualScreenTarget;
+}
+
+int32
+getVirtualScreenSamples(void)
+{
+	return virtualScreenMSType == D3DMULTISAMPLE_NONE ? 1 : (int32)virtualScreenMSType;
+}
+
+bool32
+getAlphaToCoverage(void)
+{
+	return alphaToCoverageUsable();
 }
 
 // Give the back buffer back and drop the surfaces.
@@ -1361,6 +1471,11 @@ releaseVirtualScreen(void)
 
 	virtualScreenTarget->Release();
 	virtualScreenTarget = nil;
+	if(virtualScreenMS){
+		virtualScreenMS->Release();
+		virtualScreenMS = nil;
+	}
+	virtualScreenMSType = D3DMULTISAMPLE_NONE;
 	virtualScreenDepth->Release();
 	virtualScreenDepth = nil;
 }
@@ -1393,6 +1508,23 @@ setVirtualScreen(int32 width, int32 height)
 		setRenderTarget(0, d3d9Globals.defaultRenderTarget);
 		setDepthSurface(d3d9Globals.defaultDepthSurf);
 	}
+}
+
+// How many samples the virtual screen is drawn with. Takes effect the next
+// time the surfaces are made, so it has to be set before the size is -- which
+// is the order the engine starts in anyway.
+void
+setVirtualScreenSamples(int32 samples)
+{
+	if(samples < 1)
+		samples = 1;
+	if(samples == virtualScreenSamples)
+		return;
+	virtualScreenSamples = samples;
+	if(d3ddevice == nil || virtualScreenTarget == nil)
+		return;
+	releaseVirtualScreen();
+	acquireVirtualScreen();
 }
 
 void
@@ -1663,15 +1795,21 @@ blitVirtualScreen(void)
 	dest.right = dest.left + fitWidth;
 	dest.bottom = dest.top + fitHeight;
 
+	// The samples are collapsed BEFORE the render target changes: a resolve is
+	// a copy between two surfaces and does not care what is bound, but reading
+	// it afterwards would mean stretching from a surface the device no longer
+	// considers current.
+	IDirect3DSurface9 *resolved = resolveVirtualScreen();
+
 	setDepthSurface(nil);
 	setRenderTarget(0, backBuffer);
 	d3ddevice->Clear(0, nil, D3DCLEAR_TARGET, 0, 1.0f, 0);
-	d3ddevice->StretchRect(virtualScreenTarget, nil, backBuffer, &dest, D3DTEXF_LINEAR);
+	d3ddevice->StretchRect(resolved, nil, backBuffer, &dest, D3DTEXF_LINEAR);
 
 	// Back to the virtual screen. beginUpdate would rebind it through
 	// setRenderSurfaces in any case, but leaving the back buffer bound means any
 	// clear between now and then lands on the wrong surface.
-	setRenderTarget(0, virtualScreenTarget);
+	setRenderTarget(0, d3d9Globals.defaultRenderTarget);
 	setDepthSurface(virtualScreenDepth);
 
 	backBuffer->Release();
@@ -2011,6 +2149,26 @@ initD3D(void)
 	memcpy(lockedvertices, &constants, sizeof(constants));
 	unlockVertices(constantVertexStream);
 	setStreamSource(2, constantVertexStream, 0, 0);
+
+	// Alpha to coverage, asked about once. A device that does not know the
+	// four-cc answers not-supported rather than failing.
+	alphaToCoverageKind = A2C_NONE;
+	{
+		// The ADAPTER's format, which is the display mode's, not the back
+		// buffer's. The two differ by the alpha byte and asking with the wrong
+		// one is answered not-supported, which reads exactly like a card that
+		// cannot do it.
+		D3DDISPLAYMODE adapterMode;
+		memset(&adapterMode, 0, sizeof(adapterMode));
+		d3d9Globals.d3d9->GetAdapterDisplayMode(d3d9Globals.adapter, &adapterMode);
+		if(SUCCEEDED(d3d9Globals.d3d9->CheckDeviceFormat(d3d9Globals.adapter,
+			D3DDEVTYPE_HAL, adapterMode.Format, 0, D3DRTYPE_SURFACE, FOURCC_ATOC)))
+			alphaToCoverageKind = A2C_NVIDIA;
+		else if(SUCCEEDED(d3d9Globals.d3d9->CheckDeviceFormat(d3d9Globals.adapter,
+			D3DDEVTYPE_HAL, adapterMode.Format, 0, D3DRTYPE_SURFACE, FOURCC_A2M1)))
+			alphaToCoverageKind = A2C_AMD;
+	}
+	d3ddevice->SetRenderState(D3DRS_ADAPTIVETESS_Y, D3DFMT_UNKNOWN);
 
 	d3ddevice->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATEREQUAL);
 	rwStateCache.alphafunc = ALPHAGREATEREQUAL;

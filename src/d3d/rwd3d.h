@@ -48,6 +48,18 @@ extern bool32 isP8supported;
 // device exists; the surfaces are created with it and recreated across a reset.
 void setVirtualScreen(int32 width, int32 height);
 void getVirtualScreen(int32 *width, int32 *height);
+// Samples the virtual screen is drawn with. Set before the size, because the
+// surfaces are made when the size is set.
+void setVirtualScreenSamples(int32 samples);
+// What was actually granted -- 1 when multisampling is off or was refused.
+int32 getVirtualScreenSamples(void);
+// Whether alpha to coverage is in force: the device understands it AND there
+// are samples for it to spread coverage across.
+bool32 getAlphaToCoverage(void);
+// The single-sampled picture, for anything that needs to read the frame back:
+// the samples are collapsed into it on the way out. nil when there is no
+// virtual screen, in which case the back buffer is what was drawn into.
+struct IDirect3DSurface9 *resolveVirtualScreen(void);
 
 extern Device renderdevice;
 
