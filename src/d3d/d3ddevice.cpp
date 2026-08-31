@@ -531,12 +531,29 @@ static int32 alphaToCoverageKind;
 // surface's place in the depth buffer, and a screen-space quad has none.
 static bool32 im2DActive;
 
+// Whether the application wants coverage at all. On by default, so a caller
+// that never asks gets what the device and the sample count allow.
+static bool32 alphaToCoverageWanted = 1;
+
 // Coverage needs samples to spread itself across, so the virtual screen has to
 // be multisampled as well as the device willing.
 static bool32
 alphaToCoverageUsable(void)
 {
-	return alphaToCoverageKind != A2C_NONE && virtualScreenMS != nil && !im2DActive;
+	return alphaToCoverageWanted && alphaToCoverageKind != A2C_NONE &&
+	       virtualScreenMS != nil && !im2DActive;
+}
+
+// Ask for coverage, or ask for it not to be used. It is refused silently when
+// there is nothing to spread it across -- one sample per pixel is not a
+// mistake to report, it is just an answer of no.
+void
+setAlphaToCoverageEnabled(bool32 enable)
+{
+	if(alphaToCoverageWanted == enable)
+		return;
+	alphaToCoverageWanted = enable;
+	updateAlphaStates();
 }
 
 void

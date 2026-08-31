@@ -53,8 +53,12 @@ void getVirtualScreen(int32 *width, int32 *height);
 void setVirtualScreenSamples(int32 samples);
 // What was actually granted -- 1 when multisampling is off or was refused.
 int32 getVirtualScreenSamples(void);
-// Whether alpha to coverage is in force: the device understands it AND there
-// are samples for it to spread coverage across.
+// Ask for alpha to coverage. Refused silently when the device does not have it
+// or the virtual screen carries one sample -- there is nothing to spread
+// coverage across, which is an answer rather than a mistake.
+void setAlphaToCoverageEnabled(bool32 enable);
+// Whether it is actually in force: asked for, understood by the device, AND
+// with samples to spread across.
 bool32 getAlphaToCoverage(void);
 // The single-sampled picture, for anything that needs to read the frame back:
 // the samples are collapsed into it on the way out. nil when there is no
