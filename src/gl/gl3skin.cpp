@@ -31,6 +31,9 @@ Shader *skinShader, *skinShader_noAT;
 Shader *skinShader_fullLight, *skinShader_fullLight_noAT;
 // Skinning with the lighting left to the fragment shader.
 Shader *skinShader_pp, *skinShader_pp_noAT;
+// A skinned caster. Shares depth.frag with the unskinned one -- only the
+// vertex stage differs, and only because the bones do.
+Shader *skinDepthShader;
 static int32 u_boneMatrices;
 
 void
@@ -278,6 +281,14 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 
 		setPipelineVertexAlpha(inst->vertexAlpha || m->color.alpha != 0xFF);
 
+		// The caster pass, ahead of every light case, as in gl3render.cpp.
+		if(getDepthPass()){
+			skinDepthShader->use();
+			drawInst(header, inst);
+			inst++;
+			continue;
+		}
+
 		// Same rule as the default pipeline in gl3render.cpp: per-pixel
 		// replaces the directional-only case and nothing else.
 		if((vsBits & VSLIGHT_MASK) == 0){
@@ -338,6 +349,14 @@ skinOpen(void *o, int32, int32)
 	skinShader_pp_noAT = Shader::create(vs_pp, fs_pp_noAT);
 	assert(skinShader_pp_noAT);
 
+	// The skinned caster: skin.vert as it is, plus the shared depth shader.
+	{
+#include "shaders/depth_fs.inc"
+		const char *fs_depth[] = { shaderDecl, header_frag_src, depth_frag_src, nil };
+		skinDepthShader = Shader::create(vs, fs_depth);
+		assert(skinDepthShader);
+	}
+
 	createSkinMatFXShaders();
 
 	return o;
@@ -366,6 +385,8 @@ skinClose(void *o, int32, int32)
 	skinShader_pp = nil;
 	skinShader_pp_noAT->destroy();
 	skinShader_pp_noAT = nil;
+	skinDepthShader->destroy();
+	skinDepthShader = nil;
 
 	return o;
 }

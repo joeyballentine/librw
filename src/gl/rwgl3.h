@@ -125,6 +125,17 @@ extern Shader *uvXformShader_fullLight, *uvXformShader_fullLight_noAT;
 // simple.frag with PERPIXEL, which needs lighting.frag ahead of it.
 extern Shader *defaultShader_pp, *defaultShader_pp_noAT;
 extern Shader *uvXformShader_pp, *uvXformShader_pp_noAT;
+// The caster pass: depth packed into an ordinary colour target. Paired with the
+// plain vertex shader, and with skin.vert's in gl3skin.cpp.
+extern Shader *depthShader;
+
+// Draw atomics as depth rather than as a picture, for the shadow map's caster
+// pass. While this is on, the default and skin pipelines ignore lighting,
+// material colour and texture and write packed depth instead.
+//
+// Turn it off again before rendering anything the player sees.
+void setDepthPassEnabled(bool32 enable);
+bool32 getDepthPass(void);
 
 // Evaluate lighting per fragment rather than per vertex, in the default,
 // uvxform and skin pipelines. Directional lights only: an atomic reached by a

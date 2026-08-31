@@ -192,8 +192,22 @@ Shader *uvXformShader, *uvXformShader_noAT;
 Shader *uvXformShader_fullLight, *uvXformShader_fullLight_noAT;
 Shader *defaultShader_pp, *defaultShader_pp_noAT;
 Shader *uvXformShader_pp, *uvXformShader_pp_noAT;
+Shader *depthShader;
 
 static bool32 perPixelLighting;
+static bool32 depthPass;
+
+void
+setDepthPassEnabled(bool32 enable)
+{
+	depthPass = !!enable;
+}
+
+bool32
+getDepthPass(void)
+{
+	return depthPass;
+}
 
 void
 setPerPixelLightingEnabled(bool32 enable)
@@ -2732,6 +2746,18 @@ initOpenGL(void)
 	uvXformShader_pp_noAT = Shader::create(vs_uv_pp, fs_pp_noAT);
 	assert(uvXformShader_pp_noAT);
 
+	// The caster pass. The vertex shader is the plain one -- no light defines,
+	// no UV transform -- because depth.frag reads none of its outputs and a
+	// fragment shader may declare fewer inputs than the vertex stage writes.
+	// That is what lets one fragment shader serve both this and the skinned
+	// caster in gl3skin.cpp.
+	{
+#include "shaders/depth_fs.inc"
+		const char *fs_depth[] = { shaderDecl, header_frag_src, depth_frag_src, nil };
+		depthShader = Shader::create(vs, fs_depth);
+		assert(depthShader);
+	}
+
 	openIm2D();
 	openIm3D();
 
@@ -2770,6 +2796,8 @@ termOpenGL(void)
 	uvXformShader_pp = nil;
 	uvXformShader_pp_noAT->destroy();
 	uvXformShader_pp_noAT = nil;
+	depthShader->destroy();
+	depthShader = nil;
 
 	glDeleteTextures(1, &whitetex);
 	whitetex = 0;

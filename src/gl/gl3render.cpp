@@ -177,6 +177,18 @@ renderCB(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 
 		setPipelineVertexAlpha(inst->vertexAlpha || m->color.alpha != 0xFF);
 
+		// The caster pass wants depth and nothing else, so it takes
+		// precedence over every light case below. Material colour, texture and
+		// alpha test are all still set above and all ignored: depth.frag reads
+		// none of them, and leaving the calls in place keeps the state cache
+		// consistent for whatever draws next.
+		if(getDepthPass()){
+			depthShader->use();
+			drawInst(header, inst);
+			inst++;
+			continue;
+		}
+
 		// Per-pixel lighting replaces exactly one of the light cases:
 		// directional and nothing else. Ambient alone is the same colour at
 		// every fragment and has nothing to gain, and the per-pixel fragment
