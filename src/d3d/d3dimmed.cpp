@@ -139,6 +139,10 @@ im2DRenderPrimitive(PrimitiveType primType, void *vertices, int32 numVertices)
 	else
 		setPixelShader(im2d_PS);
 
+	// 2D for the length of the draw. Alpha to coverage is a statement about a
+	// surface's place in the depth buffer, and a screen-space quad has none:
+	// the interface and the font ask for a blend and have to get one.
+	setIm2DActive(1);
 	d3d::flushCache();
 
 	uint32 primCount = 0;
@@ -167,6 +171,7 @@ im2DRenderPrimitive(PrimitiveType primType, void *vertices, int32 numVertices)
 		break;
 	}
 	d3ddevice->DrawPrimitive((D3DPRIMITIVETYPE)primTypeMap[primType], 0, primCount);
+	setIm2DActive(0);
 }
 
 void
@@ -200,6 +205,10 @@ im2DRenderIndexedPrimitive(PrimitiveType primType,
 	else
 		setPixelShader(im2d_PS);
 
+	// 2D for the length of the draw. Alpha to coverage is a statement about a
+	// surface's place in the depth buffer, and a screen-space quad has none:
+	// the interface and the font ask for a blend and have to get one.
+	setIm2DActive(1);
 	d3d::flushCache();
 
 	uint32 primCount = 0;
@@ -230,6 +239,7 @@ im2DRenderIndexedPrimitive(PrimitiveType primType,
 	d3ddevice->DrawIndexedPrimitive((D3DPRIMITIVETYPE)primTypeMap[primType], 0,
 	                                0, numVertices,
 	                                0, primCount);
+	setIm2DActive(0);
 }
 
 

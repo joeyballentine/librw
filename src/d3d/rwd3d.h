@@ -365,6 +365,9 @@ void setTexture(uint32 stage, Texture *tex);
 // Object pipelines announce what the instanced geometry needs here; it is
 // combined with the application's own VERTEXALPHA request, never replaces it.
 void setPipelineVertexAlpha(bool32 enable);
+// Bracket a 2D primitive. Alpha to coverage is a statement about a surface's
+// place in the depth buffer, and a screen-space quad has none.
+void setIm2DActive(bool32 active);
 void setMaterial(const RGBA &color, const SurfaceProperties &surfaceprops, float extraSurfProp = 0.0f);
 inline void setMaterial(uint32 flags, const RGBA &color, const SurfaceProperties &surfaceprops, float extraSurfProp = 0.0f)
 {

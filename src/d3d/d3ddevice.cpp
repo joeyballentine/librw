@@ -485,6 +485,8 @@ setDepthTest(bool32 enable)
 	}
 }
 
+static void updateAlphaStates(void);
+
 static void
 setDepthWrite(bool32 enable)
 {
@@ -496,6 +498,9 @@ setDepthWrite(bool32 enable)
 			setRenderState(D3DRS_ZFUNC, D3DCMP_ALWAYS);
 		}
 		setRenderState(D3DRS_ZWRITEENABLE, rwStateCache.zwrite);
+		// Whether depth is being written is half of whether coverage means
+		// anything -- see updateAlphaStates.
+		updateAlphaStates();
 	}
 }
 
@@ -522,12 +527,25 @@ enum {
 // Which of the two the device understands, decided once at startup.
 static int32 alphaToCoverageKind;
 
+// Set while a 2D primitive is being drawn. Coverage is a statement about a
+// surface's place in the depth buffer, and a screen-space quad has none.
+static bool32 im2DActive;
+
 // Coverage needs samples to spread itself across, so the virtual screen has to
 // be multisampled as well as the device willing.
 static bool32
 alphaToCoverageUsable(void)
 {
-	return alphaToCoverageKind != A2C_NONE && virtualScreenMS != nil;
+	return alphaToCoverageKind != A2C_NONE && virtualScreenMS != nil && !im2DActive;
+}
+
+void
+setIm2DActive(bool32 active)
+{
+	if(im2DActive != active){
+		im2DActive = active;
+		updateAlphaStates();
+	}
 }
 
 static void
@@ -561,8 +579,13 @@ updateAlphaStates(void)
 	// cover keep their depth and the geometry behind draws into them. What the
 	// resolve produces is the surface composited over what is genuinely behind
 	// it, in whatever order the two were drawn.
+	// ...and only where the surface is taking part in the depth buffer. That is
+	// the whole of what coverage buys: samples the shape does not cover keep
+	// their depth, so what belongs behind draws into them. A draw that writes
+	// no depth -- the font, the interface, particles, shadows, the sorted alpha
+	// models -- is not in that argument and keeps the blend it asked for.
 	bool32 coverage = alphaToCoverageUsable() && rwStateCache.textureAlpha &&
-	                  !rwStateCache.vertexAlpha;
+	                  !rwStateCache.vertexAlpha && rwStateCache.zwrite;
 	bool32 test = rwStateCache.vertexAlpha || rwStateCache.textureAlpha;
 	bool32 blend = rwStateCache.vertexAlpha ||
 	               (rwStateCache.textureAlpha && !coverage);
