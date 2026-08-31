@@ -594,7 +594,17 @@ setAddressU(uint32 stage, int32 addressing)
 		Raster *raster = rwStateCache.texstage[stage].raster;
 		if(raster){
 			Gl3Raster *natras = PLUGINOFFSET(Gl3Raster, raster, nativeRasterOffset);
-			if(natras->addressU == addressing){
+			// != , not ==. glTexParameteri is what actually changes the
+			// texture, and it is needed exactly when the raster does not
+			// already have the addressing being asked for -- the comparison
+			// was the wrong way round, so the call was made only when it
+			// would have done nothing and skipped whenever it mattered. The
+			// cache above was updated either way, so the state looked set and
+			// the texture kept whatever it was created with. A texture the
+			// game asks to CLAMP stayed on GL_REPEAT: the character shadows
+			// are a projected texture whose coordinates leave 0..1, and they
+			// tiled into a grid around the character.
+			if(natras->addressU != addressing){
 				setActiveTexture(stage);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, addressConvMap[addressing]);
 				natras->addressU = addressing;
@@ -611,7 +621,8 @@ setAddressV(uint32 stage, int32 addressing)
 		Raster *raster = rwStateCache.texstage[stage].raster;
 		if(raster){
 			Gl3Raster *natras = PLUGINOFFSET(Gl3Raster, rwStateCache.texstage[stage].raster, nativeRasterOffset);
-			if(natras->addressV == addressing){
+			// The same inversion as setAddressU above; see the note there.
+			if(natras->addressV != addressing){
 				setActiveTexture(stage);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, addressConvMap[addressing]);
 				natras->addressV = addressing;
