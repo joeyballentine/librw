@@ -69,6 +69,13 @@ enum AttribIndices
 };
 
 // default uniform indices
+// The colour the vertices of a non-PRELIT geometry are given, for a platform
+// that has no per-vertex colour to read. Zero -- black -- is the default and
+// means lighting is the only thing that can brighten such a model. An
+// application whose art expects an unlit vertex to start white rather than
+// black sets this before the engine is started.
+extern bool32 constantVertexColorWhite;
+
 extern int32 u_matColor;
 extern int32 u_surfProps;
 

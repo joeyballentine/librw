@@ -140,6 +140,8 @@ int32 u_lightColor;
 int32 u_matColor;
 int32 u_surfProps;
 
+bool32 constantVertexColorWhite;
+
 Shader *defaultShader, *defaultShader_noAT;
 Shader *defaultShader_fullLight, *defaultShader_fullLight_noAT;
 
@@ -2130,6 +2132,18 @@ initOpenGL(void)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1,
 	             0, GL_RGBA, GL_UNSIGNED_BYTE, &whitepixel);
+
+	// Geometry without the PRELIT flag has no colour attribute in its vertex
+	// buffer at all, so every one of its vertices reads the generic value set
+	// here. That value is black, which means such a model can only be
+	// brightened by lighting and never merely tinted by it -- see
+	// constantVertexColorWhite for why an application might want the other
+	// answer. It is context state, not vertex array state, so setting it once
+	// covers every draw whether or not VAOs are in use.
+	{
+		float32 base = constantVertexColorWhite ? 1.0f : 0.0f;
+		glVertexAttrib4f(ATTRIB_COLOR, base, base, base, 1.0f);
+	}
 
 	resetRenderState();
 
