@@ -111,7 +111,9 @@ matfxEnvRender(InstanceDataHeader *header, InstanceData *inst, int32 vsBits, uin
 
 	float fxparams[4];
 	fxparams[0] = env->coefficient;
-	fxparams[1] = env->fbAlpha ? 0.0f : 1.0f;
+	// disableFBA = 0 makes the shader's `fba` term the diffuse alpha; 1 pins
+	// it to one and the environment pass ignores the alpha entirely.
+	fxparams[1] = (env->fbAlpha || MatFX::envMapModulateByAlpha) ? 0.0f : 1.0f;
 	fxparams[2] = fxparams[3] = 0.0f;
 
 	setUniform(u_fxparams, fxparams);
