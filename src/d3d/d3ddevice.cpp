@@ -471,8 +471,6 @@ setDepthTest(bool32 enable)
 	}
 }
 
-static void updateAlphaStates(void);
-
 static void
 setDepthWrite(bool32 enable)
 {
@@ -484,52 +482,18 @@ setDepthWrite(bool32 enable)
 			setRenderState(D3DRS_ZFUNC, D3DCMP_ALWAYS);
 		}
 		setRenderState(D3DRS_ZWRITEENABLE, rwStateCache.zwrite);
-		// Depth writing is half of what tells the cutout that a surface is
-		// being drawn as an opaque one.
-		updateAlphaStates();
 	}
-}
-
-// Cutout transparency: an alpha reference, or 0 for the driver's usual
-// behaviour. See setAlphaCutout below.
-static int32 alphaCutoutRef;
-
-// The transparency states, derived from the two things that can turn them on.
-//
-// Both sources used to write D3DRS_ALPHABLENDENABLE and D3DRS_ALPHATESTENABLE
-// themselves, each guarded on the other being off so that either could hold
-// them on. That is an OR, and it is written as one here, because the cutout
-// makes the two sources mean DIFFERENT things: a texture's own alpha can ask
-// for a cut where the application's request always asks for a blend.
-static void
-updateAlphaStates(void)
-{
-	// Only geometry the application is treating as OPAQUE -- it asked for no
-	// blend of its own, and it is writing depth. A translucent surface fails
-	// both tests and keeps the blend it has always had.
-	bool32 cutout = alphaCutoutRef != 0 && rwStateCache.textureAlpha &&
-	                !rwStateCache.vertexAlpha && rwStateCache.zwrite;
-	bool32 test = rwStateCache.vertexAlpha || rwStateCache.textureAlpha;
-	bool32 blend = rwStateCache.vertexAlpha ||
-	               (rwStateCache.textureAlpha && !cutout);
-
-	// A floor, not an assignment: a bucket that already asked to be cut at a
-	// HIGHER reference than the cutout is asking for is not made softer by it.
-	uint32 ref = rwStateCache.alpharef;
-	if(cutout && (uint32)alphaCutoutRef > ref)
-		ref = (uint32)alphaCutoutRef;
-
-	setRenderState(D3DRS_ALPHABLENDENABLE, blend);
-	setRenderState(D3DRS_ALPHATESTENABLE, test);
-	setRenderState(D3DRS_ALPHAREF, ref);
 }
 
 static void
 setVertexAlpha(bool32 enable)
 {
 	if(rwStateCache.vertexAlpha != enable){
+		if(!rwStateCache.textureAlpha){
+			setRenderState(D3DRS_ALPHABLENDENABLE, enable);
+			setRenderState(D3DRS_ALPHATESTENABLE, enable);
+		}
 		rwStateCache.vertexAlpha = enable;
-		updateAlphaStates();
 	}
 }
 
@@ -546,27 +510,6 @@ void
 setPipelineVertexAlpha(bool32 enable)
 {
 	setVertexAlpha(enable || rwStateCache.appVertexAlpha);
-}
-
-// Draw a texture's own transparency as a CUTOUT rather than a blend, on
-// geometry the application is treating as opaque, cutting at `ref`. 0, the
-// default, is the driver's usual behaviour and leaves every state below
-// exactly as it was.
-//
-// The states this picks between are not equivalent at different resolutions.
-// A texture that is transparent in some texels and opaque in others has a
-// one-texel band between the two once it is filtered, and blending that band
-// draws the background through it: at 640x480 the band is about a pixel wide
-// and reads as an edge, and at 4K it is six and reads as a hole. Cutting
-// instead keeps the band opaque up to `ref` and drops the rest, so the shape
-// on screen is the shape in the artwork at any size.
-void
-setAlphaCutout(int32 ref)
-{
-	if(alphaCutoutRef != ref){
-		alphaCutoutRef = ref;
-		updateAlphaStates();
-	}
 }
 
 void
@@ -589,7 +532,10 @@ setRasterStage(uint32 stage, Raster *raster)
 		if(stage == 0){
 			if(rwStateCache.textureAlpha != alpha){
 				rwStateCache.textureAlpha = alpha;
-				updateAlphaStates();
+				if(!rwStateCache.vertexAlpha){
+					setRenderState(D3DRS_ALPHABLENDENABLE, alpha);
+					setRenderState(D3DRS_ALPHATESTENABLE, alpha);
+				}
 			}
 		}
 	}
@@ -850,12 +796,8 @@ setRwRenderState(int32 state, void *pvalue)
 		break;
 	case ALPHATESTREF:
 		if(rwStateCache.alpharef != value){
-			// The cache keeps what the APPLICATION asked for -- GetRenderState
-			// answers out of it, and the game's save/restore idiom depends on
-			// getting its own value back -- while what reaches D3DRS_ALPHAREF
-			// may be the cutout's floor instead.
 			rwStateCache.alpharef = value;
-			updateAlphaStates();
+			setRenderState(D3DRS_ALPHAREF, rwStateCache.alpharef);
 		}
 		break;
 	case GSALPHATEST:
@@ -2026,11 +1968,10 @@ initD3D(void)
 	d3ddevice->SetRenderState(D3DRS_ALPHAREF, 10);
 	rwStateCache.alpharef = 10;
 
-	// The depth states, which D3D defaults to ON and the cache said were OFF.
-	// Nothing read them before they were first set, so the disagreement never
-	// showed; the cutout reads zwrite -- it is half of "is this surface being
-	// drawn as an opaque one" -- and needs the answer from the first frame
-	// rather than from whenever the application happens to set it.
+	// The depth states, which D3D defaults to ON while the cache said OFF.
+	// setDepthTest and setDepthWrite skip the device write when the cache
+	// already agrees, so an application switching either off before it ever
+	// switched it on left the device where D3D put it.
 	d3ddevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
 	rwStateCache.ztest = 1;
 	d3ddevice->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
