@@ -179,6 +179,8 @@ struct RwStateCache {
 	bool32 gsalpha;
 	uint32 gsalpharef;
 
+	uint32 colorwritemask;
+
 	RwRasterStateCache texstage[MAXNUMSTAGES];
 };
 static RwStateCache rwStateCache;
@@ -202,6 +204,7 @@ enum
 	RWGL_STENCILREF,
 	RWGL_STENCILMASK,
 	RWGL_STENCILWRITEMASK,
+	RWGL_COLORMASK,
 
 	// uniforms
 	RWGL_ALPHAFUNC,
@@ -238,6 +241,9 @@ struct GlState {
 	uint32 stencilZFail;
 	// glStencilMask
 	uint32 stencilWriteMask;
+
+	// glColorMask, as a mask of ColorWriteMask bits
+	uint32 colorMask;
 };
 static GlState curGlState, oldGlState;
 
@@ -311,6 +317,7 @@ setGlRenderState(uint32 state, uint32 value)
 	case RWGL_STENCILREF: curGlState.stencilRef = value; break;
 	case RWGL_STENCILMASK: curGlState.stencilMask = value; break;
 	case RWGL_STENCILWRITEMASK: curGlState.stencilWriteMask = value; break;
+	case RWGL_COLORMASK: curGlState.colorMask = value; break;
 	}
 }
 
@@ -365,6 +372,14 @@ flushGlRenderState(void)
 	if(oldGlState.stencilWriteMask != curGlState.stencilWriteMask){
 		oldGlState.stencilWriteMask = curGlState.stencilWriteMask;
 		glStencilMask(oldGlState.stencilWriteMask);
+	}
+
+	if(oldGlState.colorMask != curGlState.colorMask){
+		oldGlState.colorMask = curGlState.colorMask;
+		glColorMask(!!(oldGlState.colorMask & COLORWRITERED),
+			!!(oldGlState.colorMask & COLORWRITEGREEN),
+			!!(oldGlState.colorMask & COLORWRITEBLUE),
+			!!(oldGlState.colorMask & COLORWRITEALPHA));
 	}
 
 	if(oldGlState.cullEnable != curGlState.cullEnable){
@@ -821,6 +836,13 @@ setRenderState(int32 state, void *pvalue)
 		break;
 	case GSALPHATESTREF:
 		rwStateCache.gsalpharef = value;
+		break;
+	case COLORWRITEMASK:
+		if(rwStateCache.colorwritemask != value){
+			rwStateCache.colorwritemask = value;
+			setGlRenderState(RWGL_COLORMASK, value);
+		}
+		break;
 	}
 }
 
@@ -911,6 +933,9 @@ getRenderState(int32 state)
 	case GSALPHATESTREF:
 		val = rwStateCache.gsalpharef;
 		break;
+	case COLORWRITEMASK:
+		val = rwStateCache.colorwritemask;
+		break;
 	default:
 		val = 0;
 	}
@@ -973,6 +998,9 @@ resetRenderState(void)
 	setGlRenderState(RWGL_STENCILMASK, 0xFFFFFFFF);
 	rwStateCache.stencilwritemask = 0xFFFFFFFF;
 	setGlRenderState(RWGL_STENCILWRITEMASK, 0xFFFFFFFF);
+
+	rwStateCache.colorwritemask = COLORWRITEALL;
+	setGlRenderState(RWGL_COLORMASK, COLORWRITEALL);
 
 	activeTexture = -1;
 	for(int i = 0; i < MAXNUMSTAGES; i++){
@@ -1396,9 +1424,19 @@ clearCamera(Camera *cam, RGBA *col, uint32 mode)
 		mask |= GL_DEPTH_BUFFER_BIT;
 	if(mode & Camera::CLEARSTENCIL)
 		mask |= GL_STENCIL_BUFFER_BIT;
+	// glClear obeys both write masks, so a clear issued while either is off
+	// would do nothing. D3D9's Clear() obeys neither, and a clear that clears
+	// is what a caller of this means either way.
 	glDepthMask(GL_TRUE);
+	if(rwStateCache.colorwritemask != COLORWRITEALL)
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	glClear(mask);
 	glDepthMask(rwStateCache.zwrite);
+	if(rwStateCache.colorwritemask != COLORWRITEALL)
+		glColorMask(!!(rwStateCache.colorwritemask & COLORWRITERED),
+			!!(rwStateCache.colorwritemask & COLORWRITEGREEN),
+			!!(rwStateCache.colorwritemask & COLORWRITEBLUE),
+			!!(rwStateCache.colorwritemask & COLORWRITEALPHA));
 
 	if(setScissor)
 		glDisable(GL_SCISSOR_TEST);
