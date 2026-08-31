@@ -292,6 +292,25 @@ void unlockTexture(void *texture, int32 level);
 
 // Native Texture and Raster
 
+// What a texture's alpha channel actually contains, as opposed to whether the
+// pixel format has room for one.
+//
+// hasAlpha above is the format's answer and it is far too generous: a DXT3 or
+// DXT5 raster reports alpha whether or not a single texel uses it, because the
+// flag is carried over from the pixel format rather than read out of the
+// texels. Blending is switched on from that answer, so opaque art ends up
+// blended and keyed art ends up blended when it wants to be cut.
+enum AlphaKind
+{
+	// Every texel is opaque. Nothing to test and nothing to blend.
+	ALPHAOPAQUE = 0,
+	// Every texel is fully transparent or fully opaque -- a shape punched out
+	// of the texture. Wants an alpha test, not a blend.
+	ALPHAKEYED,
+	// Something in between exists somewhere. Genuinely translucent; blend it.
+	ALPHAGRADED
+};
+
 struct D3dRaster
 {
 	void *texture;
@@ -302,10 +321,17 @@ struct D3dRaster
 	bool hasAlpha;
 	bool customFormat;
 	bool autogenMipmap;
+	// One of AlphaKind. ALPHAGRADED is the safe default: it is what every
+	// raster with an alpha channel was treated as before this existed.
+	uint8 alphaKind;
 };
 
 int32 getLevelSize(Raster *raster, int32 level);
 void allocateDXT(Raster *raster, int32 dxt, int32 numLevels, bool32 hasAlpha);
+// Read the alpha out of a DXT surface's top level and say which of the three
+// kinds it is. `blocks` is level 0 as stored, `dxt` is 1, 3 or 5.
+int32 classifyDXTAlpha(int32 dxt, const uint8 *blocks, int32 width, int32 height);
+void setRasterAlphaKind(Raster *raster, int32 kind);
 void setPalette(Raster *raster, void *palette, int32 size);
 void setTexels(Raster *raster, void *texels, int32 level);
 

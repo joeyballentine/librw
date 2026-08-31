@@ -413,6 +413,17 @@ xbox_to_d3d(rw::Raster *ras)
 		uint8 *srcpx = ras->lock(i, Raster::LOCKREAD);
 	//	uint8 *dstpx = newras->lock(i, Raster::LOCKWRITE | Raster::LOCKNOFETCH);
 		d3d::setTexels(newras, srcpx, i);
+		// The blocks go across untouched, so nothing on the way here has read
+		// the alpha out of them. Do it once, from the top level: a mip chain
+		// filters a keyed edge into a graded one, and the artwork's own
+		// intent is in level 0.
+		//
+		// DXT1 with the flag clear is opaque by decree -- rasterToImage calls
+		// removeMask on it -- whatever the block modes say.
+		if(i == 0)
+			d3d::setRasterAlphaKind(newras,
+				dxt == 1 && !xboxras->hasAlpha ? d3d::ALPHAOPAQUE :
+				d3d::classifyDXTAlpha(dxt, srcpx, ras->width, ras->height));
 	//	flipDXT(dxt, dstpx, srcpx, ras->width, ras->height);
 		ras->unlock(i);
 	//	newras->unlock(i);

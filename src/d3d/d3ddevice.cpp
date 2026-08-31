@@ -111,6 +111,11 @@ struct RwStateCache {
 	// explicitly requested; keeping the request lets them OR it back in.
 	bool32 appVertexAlpha;
 	bool32 textureAlpha;
+	// The bound texture's alpha is keyed rather than graded -- see AlphaKind
+	// in rwd3d.h. Held apart from textureAlpha because the two answer
+	// different questions: whether there is transparency at all, and whether
+	// it wants to be cut or blended.
+	bool32 textureKeyed;
 	uint32 srcblend, destblend;
 	uint32 zwrite;
 	uint32 ztest;
@@ -485,15 +490,50 @@ setDepthWrite(bool32 enable)
 	}
 }
 
+// Where a keyed texture is cut. Magnifying a shape punched out of a texture
+// leaves a band of filtered alpha a texel wide around its edge, and 128 is the
+// middle of that band -- the silhouette on screen stays the silhouette in the
+// artwork whatever the render size is.
+#define KEYEDALPHAREF 128
+
+// The transparency states, from the two things that can ask for them.
+//
+// Both used to write D3DRS_ALPHABLENDENABLE and D3DRS_ALPHATESTENABLE
+// themselves, each guarded on the other being off so either could hold them
+// on. That is an OR and is written as one here, because a KEYED texture makes
+// the two sources mean different things: it asks to be cut where the
+// application's own request always asks for a blend.
+static void
+updateAlphaStates(void)
+{
+	// A keyed texture on a draw the application is not blending. Blending the
+	// filtered band at its edge composites the surface over whatever happened
+	// to be in the frame buffer -- and since the band writes depth, whatever
+	// belonged behind it never draws at all.
+	bool32 cutout = rwStateCache.textureKeyed && !rwStateCache.vertexAlpha;
+	bool32 test = rwStateCache.vertexAlpha || rwStateCache.textureAlpha;
+	bool32 blend = rwStateCache.vertexAlpha ||
+	               (rwStateCache.textureAlpha && !cutout);
+
+	// A floor, not an assignment: a draw already asking to be cut harder than
+	// this is not made softer by it. rwStateCache.alpharef still holds what
+	// the application asked for, because GetRenderState answers out of it and
+	// the game's save/restore idiom depends on getting its own value back.
+	uint32 ref = rwStateCache.alpharef;
+	if(cutout && ref < KEYEDALPHAREF)
+		ref = KEYEDALPHAREF;
+
+	setRenderState(D3DRS_ALPHABLENDENABLE, blend);
+	setRenderState(D3DRS_ALPHATESTENABLE, test);
+	setRenderState(D3DRS_ALPHAREF, ref);
+}
+
 static void
 setVertexAlpha(bool32 enable)
 {
 	if(rwStateCache.vertexAlpha != enable){
-		if(!rwStateCache.textureAlpha){
-			setRenderState(D3DRS_ALPHABLENDENABLE, enable);
-			setRenderState(D3DRS_ALPHATESTENABLE, enable);
-		}
 		rwStateCache.vertexAlpha = enable;
+		updateAlphaStates();
 	}
 }
 
@@ -515,7 +555,7 @@ setPipelineVertexAlpha(bool32 enable)
 void
 setRasterStage(uint32 stage, Raster *raster)
 {
-	bool32 alpha;
+	bool32 alpha, keyed;
 	D3dRaster *d3draster = nil;
 	if(raster != rwStateCache.texstage[stage].raster){
 		rwStateCache.texstage[stage].raster = raster;
@@ -524,18 +564,19 @@ setRasterStage(uint32 stage, Raster *raster)
 				raster->platform == PLATFORM_D3D9);
 			d3draster = GETD3DRASTEREXT(raster);
 			d3ddevice->SetTexture(stage, (IDirect3DTexture9*)d3draster->texture);
-			alpha = d3draster->hasAlpha;
+			alpha = d3draster->alphaKind != ALPHAOPAQUE;
+			keyed = d3draster->alphaKind == ALPHAKEYED;
 		}else{
 			d3ddevice->SetTexture(stage, whiteTex);
 			alpha = 0;
+			keyed = 0;
 		}
 		if(stage == 0){
-			if(rwStateCache.textureAlpha != alpha){
+			if(rwStateCache.textureAlpha != alpha ||
+			   rwStateCache.textureKeyed != keyed){
 				rwStateCache.textureAlpha = alpha;
-				if(!rwStateCache.vertexAlpha){
-					setRenderState(D3DRS_ALPHABLENDENABLE, alpha);
-					setRenderState(D3DRS_ALPHATESTENABLE, alpha);
-				}
+				rwStateCache.textureKeyed = keyed;
+				updateAlphaStates();
 			}
 		}
 	}
@@ -805,7 +846,7 @@ setRwRenderState(int32 state, void *pvalue)
 	case ALPHATESTREF:
 		if(rwStateCache.alpharef != value){
 			rwStateCache.alpharef = value;
-			setRenderState(D3DRS_ALPHAREF, rwStateCache.alpharef);
+			updateAlphaStates();
 		}
 		break;
 	case GSALPHATEST:
@@ -2009,6 +2050,7 @@ initD3D(void)
 	rwStateCache.vertexAlpha = 0;
 	rwStateCache.appVertexAlpha = 0;
 	rwStateCache.textureAlpha = 0;
+	rwStateCache.textureKeyed = 0;
 
 	rwStateCache.stencilenable = 0;
 	d3ddevice->SetRenderState(D3DRS_STENCILENABLE, FALSE);

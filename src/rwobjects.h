@@ -144,6 +144,10 @@ struct Image
 	void setPalette(uint8 *palette);
 	void compressPalette(void);	// turn 8 bit into 4 bit if possible
 	bool32 hasAlpha(void);
+	// True when every alpha is 0 or 255 -- a keyed image rather than a
+	// graded one. Vacuously true for a format that cannot express anything
+	// in between.
+	bool32 alphaIsBinary(void);
 	void convertTo32(void);
 	void palettize(int32 depth);
 	void unpalettize(bool forceAlpha = false);

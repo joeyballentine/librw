@@ -404,6 +404,9 @@ rasterSetFormat(Raster *raster)
 	}
 	natras->bpp = raster->depth/8;
 	natras->hasAlpha = formatInfoRW[(raster->format >> 8) & 0xF].hasAlpha;
+	// The format's answer, until something that has seen the texels says
+	// otherwise. rasterFromImage and the DXT path below both do.
+	natras->alphaKind = natras->hasAlpha ? ALPHAGRADED : ALPHAOPAQUE;
 	raster->stride = raster->width*natras->bpp;
 
 	natras->autogenMipmap = (raster->format & (Raster::MIPMAP|Raster::AUTOMIPMAP)) == (Raster::MIPMAP|Raster::AUTOMIPMAP);
@@ -829,6 +832,16 @@ fprintf(stderr, "%d %x\n", image->depth, format); fflush(stdout);
 	if(unlock)
 		raster->unlock(0);
 
+	// What the texels actually hold, now that they have been seen. The format
+	// this raster was created with is already the narrowest one that fits the
+	// image -- imageFindRasterFormat drops to C888 when nothing is
+	// transparent -- so the only question left is whether the transparency
+	// that IS here is keyed or graded.
+	if(!natras->hasAlpha)
+		natras->alphaKind = ALPHAOPAQUE;
+	else
+		natras->alphaKind = image->alphaIsBinary() ? ALPHAKEYED : ALPHAGRADED;
+
 	if(truecolimg)
 		truecolimg->destroy();
 
@@ -974,6 +987,93 @@ getLevelSize(Raster *raster, int32 level)
 }
 
 void
+setRasterAlphaKind(Raster *raster, int32 kind)
+{
+	D3dRaster *ras = GETD3DRASTEREXT(raster);
+	ras->alphaKind = (uint8)kind;
+	// hasAlpha is what the rest of the driver still reads, so keep the two
+	// agreeing: a surface with nothing but opaque texels has no alpha whatever
+	// its format says.
+	ras->hasAlpha = kind != ALPHAOPAQUE;
+}
+
+// The alpha a DXT block hands back for one of its sixteen texels.
+//
+// DXT1 carries a single bit of it and only in the block mode where the two
+// colour endpoints are ordered low-to-high; DXT3 stores a nibble per texel
+// outright; DXT5 stores two endpoints and a 3-bit index, and the endpoint
+// order picks between the eight-value ramp and the six-value ramp that reserves
+// two indices for the ends of the range.
+static uint8
+dxtBlockAlpha(int32 dxt, const uint8 *block, int32 texel)
+{
+	if(dxt == 1){
+		uint32 c0 = block[0] | (block[1] << 8);
+		uint32 c1 = block[2] | (block[3] << 8);
+		if(c0 > c1)
+			return 0xFF;
+		uint32 idx = (block[4 + (texel >> 2)] >> ((texel & 3)*2)) & 3;
+		return idx == 3 ? 0 : 0xFF;
+	}
+
+	if(dxt == 3){
+		uint8 n = block[texel >> 1];
+		n = (texel & 1) ? (n >> 4) : (n & 0xF);
+		// 0..15 spread over 0..255, so 15 lands exactly on opaque.
+		return (uint8)(n*17);
+	}
+
+	// DXT5.
+	uint32 a0 = block[0];
+	uint32 a1 = block[1];
+	uint64 bits = 0;
+	for(int i = 0; i < 6; i++)
+		bits |= (uint64)block[2+i] << (i*8);
+	uint32 idx = (uint32)((bits >> (texel*3)) & 7);
+
+	if(idx == 0) return (uint8)a0;
+	if(idx == 1) return (uint8)a1;
+	if(a0 > a1)
+		return (uint8)(((8-idx)*a0 + (idx-1)*a1)/7);
+	if(idx == 6) return 0;
+	if(idx == 7) return 0xFF;
+	return (uint8)(((6-idx)*a0 + (idx-1)*a1)/5);
+}
+
+int32
+classifyDXTAlpha(int32 dxt, const uint8 *blocks, int32 width, int32 height)
+{
+	if(dxt != 1 && dxt != 3 && dxt != 5)
+		return ALPHAGRADED;
+
+	int32 blockSize = dxt == 1 ? 8 : 16;
+	// DXT5's alpha block comes first; DXT3's does too. DXT1 keeps its one bit
+	// inside the colour block.
+	int32 bw = (width + 3)/4;
+	int32 bh = (height + 3)/4;
+	bool32 anyTransparent = 0;
+
+	for(int32 by = 0; by < bh; by++){
+		for(int32 bx = 0; bx < bw; bx++){
+			const uint8 *block = blocks + (by*bw + bx)*blockSize;
+			for(int32 t = 0; t < 16; t++){
+				// A surface narrower or shorter than the block grid is
+				// padded out to it, and what the encoder put in the
+				// padding is not the artwork.
+				if(bx*4 + (t & 3) >= width || by*4 + (t >> 2) >= height)
+					continue;
+				uint8 a = dxtBlockAlpha(dxt, block, t);
+				if(a == 0)
+					anyTransparent = 1;
+				else if(a != 0xFF)
+					return ALPHAGRADED;
+			}
+		}
+	}
+	return anyTransparent ? ALPHAKEYED : ALPHAOPAQUE;
+}
+
+void
 allocateDXT(Raster *raster, int32 dxt, int32 numLevels, bool32 hasAlpha)
 {
 	static uint32 dxtMap[] = {
@@ -987,6 +1087,9 @@ allocateDXT(Raster *raster, int32 dxt, int32 numLevels, bool32 hasAlpha)
 	ras->format = dxtMap[dxt-1];
 	ras->hasAlpha = hasAlpha;
 	ras->customFormat = 1;
+	// Nothing here has seen a texel. classifyDXTAlpha is how a caller that
+	// holds the blocks says what is really in them.
+	ras->alphaKind = hasAlpha ? ALPHAGRADED : ALPHAOPAQUE;
 	if(ras->autogenMipmap)
 		numLevels = 0;
 	else if(raster->format & Raster::MIPMAP)
@@ -1025,6 +1128,7 @@ createNativeRaster(void *object, int32 offset, int32)
 	raster->format = 0;
 	raster->hasAlpha = 0;
 	raster->customFormat = 0;
+	raster->alphaKind = ALPHAGRADED;
 	return object;
 }
 
@@ -1070,6 +1174,7 @@ copyNativeRaster(void *dst, void *, int32 offset, int32)
 	raster->format = 0;
 	raster->hasAlpha = 0;
 	raster->customFormat = 0;
+	raster->alphaKind = ALPHAGRADED;
 	return dst;
 }
 

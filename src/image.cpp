@@ -622,6 +622,42 @@ Image::hasAlpha(void)
 	return ret != 0xFF;
 }
 
+bool32
+Image::alphaIsBinary(void)
+{
+	uint8 *pixels = this->pixels;
+	// 24 bits carry no alpha and 16 carry one bit of it, so neither can hold
+	// a value between the two ends.
+	if(this->depth == 24 || this->depth == 16)
+		return 1;
+	if(this->depth == 32){
+		for(int y = 0; y < this->height; y++){
+			uint8 *line = pixels;
+			for(int x = 0; x < this->width; x++){
+				if(line[3] != 0 && line[3] != 0xFF)
+					return 0;
+				line += this->bpp;
+			}
+			pixels += this->stride;
+		}
+		return 1;
+	}
+	if(this->depth <= 8){
+		for(int y = 0; y < this->height; y++){
+			uint8 *line = pixels;
+			for(int x = 0; x < this->width; x++){
+				uint8 a = this->palette[*line*4+3];
+				if(a != 0 && a != 0xFF)
+					return 0;
+				line += this->bpp;
+			}
+			pixels += this->stride;
+		}
+		return 1;
+	}
+	return 0;
+}
+
 void
 Image::convertTo32(void)
 {
