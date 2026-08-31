@@ -73,6 +73,7 @@ add_library(librw
     gl/gl3render.cpp
     gl/gl3shader.cpp
     gl/gl3skin.cpp
+    gl/gl3skinmatfx.cpp
     gl/rwgl3.h
     gl/rwgl3impl.h
     gl/rwgl3plg.h

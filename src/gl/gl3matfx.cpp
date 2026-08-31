@@ -92,22 +92,15 @@ uploadEnvMatrix(Frame *frame)
 	setUniform(u_texMatrix, &envMtx);
 }
 
+// Everything the environment pass needs in the uniform state, for either of
+// the two pipelines that draw one -- this one and the skinning one in
+// gl3skinmatfx.cpp. The texture on stage 0 and the material are the caller's,
+// because those are the same in its non-env path and this is not.
 void
-matfxEnvRender(InstanceDataHeader *header, InstanceData *inst, int32 vsBits, uint32 flags, MatFX::Env *env)
+uploadEnvMapState(Material *m, MatFX::Env *env)
 {
-	Material *m;
-	m = inst->material;
-
-	if(env->tex == nil || env->coefficient == 0.0f){
-		matfxDefaultRender(header, inst, vsBits, flags);
-		return;
-	}
-
-	setTexture(0, m->texture);
 	setTexture(1, env->tex);
 	uploadEnvMatrix(env->frame);
-
-	setMaterial(flags, m->color, m->surfaceProps);
 
 	float fxparams[4];
 	fxparams[0] = env->coefficient;
@@ -130,6 +123,23 @@ matfxEnvRender(InstanceDataHeader *header, InstanceData *inst, int32 vsBits, uin
 	else
 		convColor(envcol, &MatFX::envMapColor);
 	setUniform(u_envColor, envcol);
+}
+
+void
+matfxEnvRender(InstanceDataHeader *header, InstanceData *inst, int32 vsBits, uint32 flags, MatFX::Env *env)
+{
+	Material *m;
+	m = inst->material;
+
+	if(env->tex == nil || env->coefficient == 0.0f){
+		matfxDefaultRender(header, inst, vsBits, flags);
+		return;
+	}
+
+	setTexture(0, m->texture);
+	uploadEnvMapState(m, env);
+
+	setMaterial(flags, m->color, m->surfaceProps);
 
 	setPipelineVertexAlpha(1);
 	rw::SetRenderState(SRCBLEND, BLENDONE);
@@ -237,13 +247,23 @@ matfxClose(void *o, int32, int32)
 	return o;
 }
 
+// Called from here and from the skin plugin's init, because the pipeline that
+// does both jobs lives with the skinning one and either plugin can be the
+// first -- or the only -- one an application registers. registerUniform hands
+// back the id it already made when it is asked twice.
 void
-initMatFX(void)
+registerEnvUniforms(void)
 {
 	u_texMatrix = registerUniform("u_texMatrix", UNIFORM_MAT4);
 	u_fxparams = registerUniform("u_fxparams", UNIFORM_VEC4);
 	u_colorClamp = registerUniform("u_colorClamp", UNIFORM_VEC4);
 	u_envColor = registerUniform("u_envColor", UNIFORM_VEC4);
+}
+
+void
+initMatFX(void)
+{
+	registerEnvUniforms();
 
 	Driver::registerPlugin(PLATFORM_GL3, 0, ID_MATFX,
 	                       matfxOpen, matfxClose);

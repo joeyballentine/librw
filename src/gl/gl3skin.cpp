@@ -24,8 +24,11 @@ namespace gl3 {
 
 #ifdef RW_OPENGL
 
-static Shader *skinShader, *skinShader_noAT;
-static Shader *skinShader_fullLight, *skinShader_fullLight_noAT;
+// Not static: gl3skinmatfx.cpp draws a mesh with no effect on it with exactly
+// these, which is what keeps the combined pipeline an assembly of the two it
+// stands between rather than a copy of either.
+Shader *skinShader, *skinShader_noAT;
+Shader *skinShader_fullLight, *skinShader_fullLight_noAT;
 static int32 u_boneMatrices;
 
 void
@@ -295,6 +298,7 @@ static void*
 skinOpen(void *o, int32, int32)
 {
 	skinGlobals.pipelines[PLATFORM_GL3] = makeSkinPipeline();
+	skinGlobals.matfxPipelines[PLATFORM_GL3] = makeSkinMatFXPipeline();
 
 #include "shaders/simple_fs_gl.inc"
 #include "shaders/skin_gl.inc"
@@ -313,6 +317,8 @@ skinOpen(void *o, int32, int32)
 	skinShader_fullLight_noAT = Shader::create(vs_fullLight, fs_noAT);
 	assert(skinShader_fullLight_noAT);
 
+	createSkinMatFXShaders();
+
 	return o;
 }
 
@@ -321,6 +327,11 @@ skinClose(void *o, int32, int32)
 {
 	((ObjPipeline*)skinGlobals.pipelines[PLATFORM_GL3])->destroy();
 	skinGlobals.pipelines[PLATFORM_GL3] = nil;
+
+	((ObjPipeline*)skinGlobals.matfxPipelines[PLATFORM_GL3])->destroy();
+	skinGlobals.matfxPipelines[PLATFORM_GL3] = nil;
+
+	destroySkinMatFXShaders();
 
 	skinShader->destroy();
 	skinShader = nil;
@@ -338,6 +349,9 @@ void
 initSkin(void)
 {
 	u_boneMatrices = registerUniform("u_boneMatrices", UNIFORM_MAT4, 64);
+	// The combined pipeline's shader reads the environment uniforms, and this
+	// plugin registers it whether or not the matfx plugin is in the build.
+	registerEnvUniforms();
 
 	Driver::registerPlugin(PLATFORM_GL3, 0, ID_SKIN,
 	                       skinOpen, skinClose);

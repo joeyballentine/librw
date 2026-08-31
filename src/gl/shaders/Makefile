@@ -1,4 +1,4 @@
-all: header_vs.inc header_fs.inc im2d_gl.inc im3d_gl.inc default_vs_gl.inc simple_fs_gl.inc matfx_gl.inc skin_gl.inc
+all: header_vs.inc header_fs.inc im2d_gl.inc im3d_gl.inc default_vs_gl.inc simple_fs_gl.inc matfx_gl.inc skin_gl.inc skinmatfx_gl.inc
 
 header_vs.inc: header.vert
 	(echo 'const char *header_vert_src =';\
@@ -42,4 +42,9 @@ skin_gl.inc: skin.vert
 	(echo 'const char *skin_vert_src =';\
 	 sed 's/..*/"&\\n"/' skin.vert;\
 	 echo ';') >skin_gl.inc
+
+skinmatfx_gl.inc: skin_matfx_env.vert
+	(echo 'const char *skin_matfx_env_vert_src =';\
+	 sed 's/..*/"&\\n"/' skin_matfx_env.vert;\
+	 echo ';') >skinmatfx_gl.inc
 
