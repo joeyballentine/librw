@@ -239,6 +239,50 @@ RawMatrix::mult(RawMatrix *dst, RawMatrix *src1, RawMatrix *src2)
 	dst->posw    = src1->pos.x*src2->rightw    + src1->pos.y*src2->upw    + src1->pos.z*src2->atw  + src1->posw*src2->posw;
 }
 
+// One row of a RawMatrix's 3x3, scaled to unit length. A degenerate axis is
+// left alone rather than divided by zero: a zero-scaled object has no surface
+// to light and any direction here is as good as another.
+static void
+normalizeRow(V3d &v)
+{
+	float32 len = sqrtf(v.x*v.x + v.y*v.y + v.z*v.z);
+	if(len > 1.0e-9f){
+		v.x /= len;
+		v.y /= len;
+		v.z /= len;
+	}
+}
+
+// The world matrix with its scale taken out.
+//
+// Normals transform by the inverse transpose, not by the matrix: under a scale
+// of s the world matrix lengthens a unit normal to s, where the correct matrix
+// shortens it to 1/s. Neither is unit, and no vertex shader here normalises
+// what it is given -- the normal goes straight into max(0, dot(N, -L)), and in
+// the environment shaders straight into the reflection lookup -- so the scale
+// lands directly on every directional term and an object is lit in proportion
+// to how big it happens to be. Scaled down it goes black, scaled up it
+// saturates and looks unshaded. Ambient is unaffected, which is what makes it
+// read as a lighting bug rather than a transform one.
+//
+// For a rotation with a uniform scale -- which is what a model matrix is --
+// dividing each axis by its own length is exactly the inverse transpose AND
+// leaves the normal unit length, so the shaders need no normalise of their own.
+// The GameCube gets this for free: GX normalises in the transform unit.
+//
+// It lives here rather than in a device because it is arithmetic, not a
+// decision any device gets to make differently, and because when it lived in
+// two devices only one of them had it.
+void
+RawMatrix::normalMatrix(RawMatrix *dst, RawMatrix *src)
+{
+	*dst = *src;
+	normalizeRow(dst->right);
+	normalizeRow(dst->up);
+	normalizeRow(dst->at);
+	dst->pos.set(0.0f, 0.0f, 0.0f);
+}
+
 void
 RawMatrix::transpose(RawMatrix *dst, RawMatrix *src)
 {

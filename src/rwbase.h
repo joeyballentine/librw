@@ -339,6 +339,10 @@ struct RawMatrix
 	static void mult(RawMatrix *dst, RawMatrix *src1, RawMatrix *src2);
 	static void transpose(RawMatrix *dst, RawMatrix *src);
 	static void setIdentity(RawMatrix *dst);
+	// The matrix normals transform by, for a world matrix: each axis scaled
+	// to unit length and the translation dropped. See base.cpp for why that
+	// is the right answer and what it looks like when a device does not do it.
+	static void normalMatrix(RawMatrix *dst, RawMatrix *src);
 };
 
 struct Matrix
