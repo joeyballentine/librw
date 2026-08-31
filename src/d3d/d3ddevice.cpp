@@ -561,6 +561,19 @@ setIm2DActive(bool32 active)
 {
 	if(im2DActive != active){
 		im2DActive = active;
+
+		// And no edge antialiasing while it lasts. A 2D quad's edges are
+		// PLACED, in pixels, rather than found by the rasterizer: a letterbox
+		// bar ends where the game said it ends. Antialiasing an edge that lands
+		// between two pixel centres turns that line into a row of partly
+		// covered samples, which resolves to a soft one you can see through --
+		// on a black bar or a fade to black, exactly where the artwork has a
+		// hard edge.
+		//
+		// FALSE gives every sample in the pixel the same coverage answer, which
+		// is what a single-sampled target would have done. The numbered sample
+		// types are maskable, so the device honours it.
+		setRenderState(D3DRS_MULTISAMPLEANTIALIAS, !active);
 		updateAlphaStates();
 	}
 }
