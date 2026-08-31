@@ -1,4 +1,11 @@
 namespace rw {
+
+// Defined in rwplugins.h, which several translation units that include this
+// header do not. Forward-declared at rw scope, not inside d3d9: a declaration
+// in the inner namespace would name a different type of the same name, and the
+// error that follows says "incomplete type" rather than anything about scope.
+struct MatFXEnvState;
+
 namespace d3d9 {
 
 void registerPlatformPlugins(void);
@@ -124,9 +131,7 @@ void destroySkinMatFXShaders(void);
 
 void initMatFX(void);
 ObjPipeline *makeMatFXPipeline(void);
-void uploadEnvMatrix(Frame *frame, int32 vsloc);
-void uploadEnvMapState(Material *m, Texture *envTex, Frame *envFrame,
-                       float32 coefficient, bool32 fbAlpha, int32 vslocBase);
+void uploadEnvMapState(Texture *envTex, MatFXEnvState *es, int32 vslocBase);
 extern void *matfx_env_PS;
 extern void *matfx_env_tex_PS;
 

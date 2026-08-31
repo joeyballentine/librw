@@ -77,13 +77,14 @@ skinMatfxRender_EnvMap(InstanceDataHeader *header, InstanceData *inst, int32 vsB
 {
 	Material *m = inst->material;
 
-	if(env->tex == nil || env->coefficient == 0.0f){
+	MatFXEnvState es;
+	if(!MatFX::setupEnv(&es, m, env)){
 		skinMatfxRender_Default(header, inst, vsBits, flags);
 		return;
 	}
 
 	setTexture(0, m->texture);
-	uploadEnvMapState(m, env);
+	uploadEnvMapState(env->tex, &es);
 
 	setMaterial(flags, m->color, m->surfaceProps);
 

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <math.h>
 
 #include "rwbase.h"
 #include "rwerror.h"
@@ -30,6 +31,53 @@ bool32 MatFX::envMapUseMatColor;
 RGBA MatFX::envMapColor = { 255, 255, 255, 255 };
 bool32 MatFX::envMapModulateByAlpha;
 
+
+// The environment map's texture coordinate generation: a normal in camera
+// space mapped into the 0..1 square. Mutable because envMapFlipU flips the u
+// axis in place, which is one more reason for it to exist once.
+static RawMatrix normal2texcoord = {
+	{ 0.5f,  0.0f, 0.0f }, 0.0f,
+	{ 0.0f, -0.5f, 0.0f }, 0.0f,
+	{ 0.0f,  0.0f, 1.0f }, 0.0f,
+	{ 0.5f,  0.5f, 0.0f }, 1.0f
+};
+
+bool32
+MatFX::setupEnv(MatFXEnvState *state, Material *m, Env *env)
+{
+	if(env->tex == nil || env->coefficient == 0.0f)
+		return 0;
+
+	Frame *frame = env->frame;
+	if(frame == nil)
+		frame = engine->currentCamera->getFrame();
+
+	// Not cached across the meshes of one atomic: the frame's matrix can
+	// change under us, which is what the abandoned caches in the devices were.
+	Matrix invMat;
+	RawMatrix invMtx;
+	Matrix::invert(&invMat, frame->getLTM());
+	convMatrix(&invMtx, &invMat);
+	invMtx.pos.set(0.0f, 0.0f, 0.0f);
+	float32 uscale = (float32)fabs(normal2texcoord.right.x);
+	normal2texcoord.right.x = envMapFlipU ? -uscale : uscale;
+	RawMatrix::mult(&state->texMatrix, &invMtx, &normal2texcoord);
+
+	state->shininess = env->coefficient;
+	state->disableFBA = (env->fbAlpha || envMapModulateByAlpha) ? 0.0f : 1.0f;
+
+	// Clamping the vertex colour from below is what lets one shader draw both
+	// the PC and the PS2 style of the effect.
+	float32 clamp = envMapApplyLight ? 0.0f : 1.0f;
+	state->colorClamp.red = clamp;
+	state->colorClamp.green = clamp;
+	state->colorClamp.blue = clamp;
+	state->colorClamp.alpha = clamp;
+
+	convColor(&state->color, envMapUseMatColor ? &m->color : &envMapColor);
+
+	return 1;
+}
 
 // Atomic
 

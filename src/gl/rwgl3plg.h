@@ -7,7 +7,7 @@ void initMatFX(void);
 ObjPipeline *makeMatFXPipeline(void);
 void matfxRenderCB(Atomic *atomic, InstanceDataHeader *header);
 void registerEnvUniforms(void);
-void uploadEnvMapState(Material *m, MatFX::Env *env);
+void uploadEnvMapState(Texture *envTex, MatFXEnvState *es);
 
 void initSkin(void);
 ObjPipeline *makeSkinPipeline(void);

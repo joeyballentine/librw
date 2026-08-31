@@ -66,81 +66,31 @@ matfxRender_Default(InstanceDataHeader *header, InstanceData *inst, int32 lightB
 	drawInst(header, inst);
 }
 
-static Frame *lastEnvFrame;
-
-static RawMatrix normal2texcoord = {
-	{ 0.5f,  0.0f, 0.0f }, 0.0f,
-	{ 0.0f, -0.5f, 0.0f }, 0.0f,
-	{ 0.0f,  0.0f, 1.0f }, 0.0f,
-	{ 0.5f,  0.5f, 0.0f }, 1.0f
-};
-
-// vsloc is where the shader wants the 4x4 texture matrix. It is VSLOC_texMat
-// for every shader in this file, but the combined skin+matfx shader needs its
-// bone matrices at VSLOC_afterLights and moves the env constants aside.
-void
-uploadEnvMatrix(Frame *frame, int32 vsloc)
-{
-	Matrix invMat;
-	if(frame == nil)
-		frame = engine->currentCamera->getFrame();
-
-	// cache the matrix across multiple meshes
-// can't do it, frame matrix may change
-//	if(frame == lastEnvFrame)
-//		return;
-//	lastEnvFrame = frame;
-
-	RawMatrix envMtx, invMtx;
-	Matrix::invert(&invMat, frame->getLTM());
-	convMatrix(&invMtx, &invMat);
-	invMtx.pos.set(0.0f, 0.0f, 0.0f);
-	float uscale = fabs(normal2texcoord.right.x);
-	normal2texcoord.right.x = MatFX::envMapFlipU ? -uscale : uscale;
-	RawMatrix::mult(&envMtx, &invMtx, &normal2texcoord);
-	d3ddevice->SetVertexShaderConstantF(vsloc, (float*)&envMtx, 4);
-}
-
-// Everything an env-map shader needs that is not the shader itself: the env
-// texture in stage 1, the texture matrix, and the shininess/clamp/colour
-// constants. Split out of matfxRender_EnvMap because the combined skin+matfx
-// pipeline needs the identical state and only picks a different vertex shader.
+// WHERE an env-map shader's constants go. WHAT they are is MatFX::setupEnv's,
+// because none of it is this device's decision.
 //
 // vslocBase is the register the 4x4 texture matrix goes to; the clamp and the
 // env colour follow it at the same fixed offsets in every env shader, so one
-// base is enough to place all three. The effect is taken apart into arguments
-// rather than passed as a MatFX::Env* so that this can be declared in
-// rwd3d9.h, which several translation units include without rwplugins.h.
+// base places all three. It is VSLOC_texMat for every shader in this file, but
+// the combined skin+matfx shader needs its bone matrices at VSLOC_afterLights
+// and moves the env constants aside.
 void
-uploadEnvMapState(Material *m, Texture *envTex, Frame *envFrame,
-                  float32 coefficient, bool32 fbAlpha, int32 vslocBase)
+uploadEnvMapState(Texture *envTex, MatFXEnvState *es, int32 vslocBase)
 {
 	d3d::setTexture(1, envTex);
-	uploadEnvMatrix(envFrame, vslocBase);
+	d3ddevice->SetVertexShaderConstantF(vslocBase, (float*)&es->texMatrix, 4);
 
-	static float zero[4];
-	static float one[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 	struct  {
 		float shininess;
 		float disableFBA;
 		float unused[2];
 	} fxparams;
-	fxparams.shininess = coefficient;
-	// disableFBA = 0 makes the shader's `fba` term the diffuse alpha; 1 pins
-	// it to one and the environment pass ignores the alpha entirely.
-	fxparams.disableFBA = (fbAlpha || MatFX::envMapModulateByAlpha) ? 0.0f : 1.0f;
+	fxparams.shininess = es->shininess;
+	fxparams.disableFBA = es->disableFBA;
 	d3ddevice->SetPixelShaderConstantF(PSLOC_shininess, (float*)&fxparams, 1);
-	// This clamps the vertex color below. With it we can achieve both PC and PS2 style matfx
-	if(MatFX::envMapApplyLight)
-		d3ddevice->SetVertexShaderConstantF(vslocBase + 4, zero, 1);
-	else
-		d3ddevice->SetVertexShaderConstantF(vslocBase + 4, one, 1);
-	RGBAf envcol[4];
-	if(MatFX::envMapUseMatColor)
-		convColor(envcol, &m->color);
-	else
-		convColor(envcol, &MatFX::envMapColor);
-	d3ddevice->SetVertexShaderConstantF(vslocBase + 5, (float*)&envcol, 1);
+
+	d3ddevice->SetVertexShaderConstantF(vslocBase + 4, (float*)&es->colorClamp, 1);
+	d3ddevice->SetVertexShaderConstantF(vslocBase + 5, (float*)&es->color, 1);
 }
 
 void
@@ -148,12 +98,13 @@ matfxRender_EnvMap(InstanceDataHeader *header, InstanceData *inst, int32 lightBi
 {
 	Material *m = inst->material;
 
-	if(env->tex == nil || env->coefficient == 0.0f){
+	MatFXEnvState es;
+	if(!MatFX::setupEnv(&es, m, env)){
 		matfxRender_Default(header, inst, lightBits);
 		return;
 	}
 
-	uploadEnvMapState(m, env->tex, env->frame, env->coefficient, env->fbAlpha, VSLOC_texMat);
+	uploadEnvMapState(env->tex, &es, VSLOC_texMat);
 
 	SetRenderState(SRCBLEND, BLENDONE);
 
@@ -189,8 +140,6 @@ matfxRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header)
 	                           0, header->vertexStream[0].stride);
 	setIndices((IDirect3DIndexBuffer9*)header->indexBuffer);
 	setVertexDeclaration((IDirect3DVertexDeclaration9*)header->vertexDeclaration);
-
-	lastEnvFrame = nil;
 
 	vsBits = lightingCB_Shader(atomic);
 	uploadMatrices(atomic->getFrame()->getLTM());

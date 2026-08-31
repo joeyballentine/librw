@@ -58,71 +58,28 @@ matfxDefaultRender(InstanceDataHeader *header, InstanceData *inst, int32 vsBits,
 	drawInst(header, inst);
 }
 
-static Frame *lastEnvFrame;
-
-static RawMatrix normal2texcoord = {
-	{ 0.5f,  0.0f, 0.0f }, 0.0f,
-	{ 0.0f, -0.5f, 0.0f }, 0.0f,
-	{ 0.0f,  0.0f, 1.0f }, 0.0f,
-	{ 0.5f,  0.5f, 0.0f }, 1.0f
-};
-
+// WHERE the environment pass's uniforms go. WHAT they are is
+// MatFX::setupEnv's, because none of it is this device's decision -- and while
+// it was, envMapModulateByAlpha reached D3D9 and not here.
+//
+// Shared by both pipelines that draw an environment pass: this one and the
+// skinning one in gl3skinmatfx.cpp. The texture on stage 0 and the material
+// stay the caller's, because those are the same in its non-env path.
 void
-uploadEnvMatrix(Frame *frame)
+uploadEnvMapState(Texture *envTex, MatFXEnvState *es)
 {
-	Matrix invMat;
-	if(frame == nil)
-		frame = engine->currentCamera->getFrame();
+	setTexture(1, envTex);
 
-	// cache the matrix across multiple meshes
-	static RawMatrix envMtx;
-// can't do it, frame matrix may change
-//	if(frame != lastEnvFrame){
-//		lastEnvFrame = frame;
-	{
-
-		RawMatrix invMtx;
-		Matrix::invert(&invMat, frame->getLTM());
-		convMatrix(&invMtx, &invMat);
-		invMtx.pos.set(0.0f, 0.0f, 0.0f);
-		float uscale = fabs(normal2texcoord.right.x);
-		normal2texcoord.right.x = MatFX::envMapFlipU ? -uscale : uscale;
-		RawMatrix::mult(&envMtx, &invMtx, &normal2texcoord);
-	}
-	setUniform(u_texMatrix, &envMtx);
-}
-
-// Everything the environment pass needs in the uniform state, for either of
-// the two pipelines that draw one -- this one and the skinning one in
-// gl3skinmatfx.cpp. The texture on stage 0 and the material are the caller's,
-// because those are the same in its non-env path and this is not.
-void
-uploadEnvMapState(Material *m, MatFX::Env *env)
-{
-	setTexture(1, env->tex);
-	uploadEnvMatrix(env->frame);
+	setUniform(u_texMatrix, &es->texMatrix);
 
 	float fxparams[4];
-	fxparams[0] = env->coefficient;
-	// disableFBA = 0 makes the shader's `fba` term the diffuse alpha; 1 pins
-	// it to one and the environment pass ignores the alpha entirely.
-	fxparams[1] = (env->fbAlpha || MatFX::envMapModulateByAlpha) ? 0.0f : 1.0f;
+	fxparams[0] = es->shininess;
+	fxparams[1] = es->disableFBA;
 	fxparams[2] = fxparams[3] = 0.0f;
-
 	setUniform(u_fxparams, fxparams);
-	static float zero[4];
-	static float one[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-	// This clamps the vertex color below. With it we can achieve both PC and PS2 style matfx
-	if(MatFX::envMapApplyLight)
-		setUniform(u_colorClamp, zero);
-	else
-		setUniform(u_colorClamp, one);
-	RGBAf envcol[4];
-	if(MatFX::envMapUseMatColor)
-		convColor(envcol, &m->color);
-	else
-		convColor(envcol, &MatFX::envMapColor);
-	setUniform(u_envColor, envcol);
+
+	setUniform(u_colorClamp, &es->colorClamp);
+	setUniform(u_envColor, &es->color);
 }
 
 void
@@ -131,13 +88,14 @@ matfxEnvRender(InstanceDataHeader *header, InstanceData *inst, int32 vsBits, uin
 	Material *m;
 	m = inst->material;
 
-	if(env->tex == nil || env->coefficient == 0.0f){
+	MatFXEnvState es;
+	if(!MatFX::setupEnv(&es, m, env)){
 		matfxDefaultRender(header, inst, vsBits, flags);
 		return;
 	}
 
 	setTexture(0, m->texture);
-	uploadEnvMapState(m, env);
+	uploadEnvMapState(env->tex, &es);
 
 	setMaterial(flags, m->color, m->surfaceProps);
 
@@ -169,8 +127,6 @@ matfxRenderCB(Atomic *atomic, InstanceDataHeader *header)
 	int32 vsBits = lightingCB(atomic);
 
 	setupVertexInput(header);
-
-	lastEnvFrame = nil;
 
 	InstanceData *inst = header->inst;
 	int32 n = header->numMeshes;

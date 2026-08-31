@@ -84,6 +84,28 @@ void registerHAnimPlugin(void);
  * MatFX
  */
 
+// Everything an environment pass needs that is not a device's business: one
+// matrix and four numbers, worked out from the effect and from the MatFX
+// envMap* settings. What is left for a device is where to put them.
+//
+// At namespace scope rather than nested in MatFX because rwd3d9.h has to name
+// it, and several translation units include that without rwplugins.h -- a
+// forward declaration of a nested type is not a thing C++ has.
+struct MatFXEnvState
+{
+	// Vertex normal -> environment texture coordinate, envMapFlipU applied
+	RawMatrix texMatrix;
+	// The pass's colour. envMapUseMatColor decides whether that is the
+	// material's own or MatFX::envMapColor
+	RGBAf color;
+	float32 shininess;
+	// 0 lets the diffuse alpha scale the pass, 1 pins it to one
+	float32 disableFBA;
+	// The floor the vertex colour is clamped to before it modulates the pass:
+	// all zeroes lets lighting through, all ones shuts it out
+	RGBAf colorClamp;
+};
+
 struct MatFX
 {
 	enum {
@@ -171,6 +193,12 @@ struct MatFX
 	// to ask for it. Off by default, so nothing changes for anyone who does
 	// not set it.
 	static bool32 envMapModulateByAlpha;
+
+	// False when there is no environment pass to draw and the material should
+	// go through the plain path instead -- no texture, or a coefficient of
+	// zero. Every device asks this the same way and used to answer it once
+	// each, which is how envMapModulateByAlpha reached D3D9 and not GL3.
+	static bool32 setupEnv(MatFXEnvState *state, Material *m, Env *env);
 };
 
 struct MatFXGlobals

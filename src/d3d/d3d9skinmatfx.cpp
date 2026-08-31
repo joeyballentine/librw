@@ -94,12 +94,13 @@ skinMatfxRender_EnvMap(InstanceDataHeader *header, InstanceData *inst, int32 lig
 {
 	Material *m = inst->material;
 
-	if(env->tex == nil || env->coefficient == 0.0f){
+	MatFXEnvState es;
+	if(!MatFX::setupEnv(&es, m, env)){
 		skinMatfxRender_Default(header, inst, lightBits);
 		return;
 	}
 
-	uploadEnvMapState(m, env->tex, env->frame, env->coefficient, env->fbAlpha, VSLOC_texMat);
+	uploadEnvMapState(env->tex, &es, VSLOC_texMat);
 
 	SetRenderState(SRCBLEND, BLENDONE);
 
