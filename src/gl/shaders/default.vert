@@ -18,6 +18,11 @@ VSOUT vec4 v_shadowPos;
 // triangle does not give a unit normal, which is why simple.frag normalizes it
 // again. skin.vert declares the same output for the same fragment shader.
 VSOUT vec3 v_normal;
+#else
+// How squarely this vertex faces the light, for the shadow test. Only where
+// there is no normal going across anyway -- the per-pixel build works the same
+// number out from v_normal, and more accurately.
+VSOUT float v_shadowNdl;
 #endif
 
 void
@@ -45,6 +50,7 @@ main(void)
 	v_color.rgb += DoDynamicLight(Vertex.xyz, Normal)*surfDiffuse;
 	v_color = clamp(v_color, 0.0, 1.0);
 	v_color *= u_matColor;
+	v_shadowNdl = dot(normalize(Normal), -u_shadowLightDir.xyz);
 #endif
 
 	v_shadowPos = u_shadowMatrix * Vertex;

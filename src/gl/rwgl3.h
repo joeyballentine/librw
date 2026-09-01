@@ -137,6 +137,23 @@ extern Shader *depthShader;
 void setDepthPassEnabled(bool32 enable);
 bool32 getDepthPass(void);
 
+// What a receiver is tested with, all of it already in the map's own units so
+// the shader never has to know how deep the light volume is.
+//
+// `bias` is subtracted from the receiver's own depth before comparing, in the
+// 0..1 the map stores. `slopeBias` is added to it once per unit of tan of the
+// angle between the surface and the light, which is what one texel of the map
+// costs in depth as a surface tilts away. `texel` is one texel of the map in
+// texture coordinates, the spacing the filter taps at. `strength` is what a
+// fully shadowed pixel is multiplied by: 1 is no shadow, 0 is black.
+struct ShadowMapParams
+{
+	float32 bias;
+	float32 slopeBias;
+	float32 texel;
+	float32 strength;
+};
+
 // Hand the receivers a shadow map to test against, and the transform that puts
 // a world position into it. Set once a frame, after the caster pass; the
 // uniform registry replays it onto every shader that reads it.
@@ -145,19 +162,20 @@ bool32 getDepthPass(void);
 // the shaders take u_proj and u_view in -- so the receiver's lookup is built
 // from exactly what rasterised the casters.
 //
-// `bias` is subtracted from the receiver's own depth before comparing, and
-// `strength` is what a shadowed pixel is multiplied by: 1 is no shadow, 0 is
-// black. nil clears it, as does clearShadowMap.
 // `lightDir` is where the light travels, from it towards what it lights. It is
 // what lets a receiver with a normal skip the test on a surface facing away
 // from the light -- which is not an optimisation but the cure for the acne that
-// storing back faces leaves behind.
+// storing back faces leaves behind -- and what the slope bias is measured
+// against.
+//
+// nil clears the map, as does clearShadowMap.
 void setShadowMap(Texture *tex, float32 *matrix, float32 *lightDir,
-                  float32 bias, float32 strength);
+                  const ShadowMapParams *params);
 void clearShadowMap(void);
 
 extern int32 u_shadowMatrix;
 extern int32 u_shadowParams;
+extern int32 u_shadowParams2;
 extern int32 u_shadowLightDir;
 
 // Evaluate lighting per fragment rather than per vertex, in the default,

@@ -8,6 +8,11 @@ FSIN float v_fog;
 // same fragment shader and have no world position to transform, and reading a
 // varying the vertex stage never wrote is a link error rather than a warning.
 FSIN vec4 v_shadowPos;
+#ifndef PERPIXEL
+// How squarely the surface faces the light, interpolated. Where PERPIXEL is on
+// the normal is here already and this is worked out from that instead.
+FSIN float v_shadowNdl;
+#endif
 #endif
 #ifdef PERPIXEL
 FSIN vec3 v_normal;
@@ -48,7 +53,7 @@ main(void)
 	// caster pass recorded, so they would otherwise compare against themselves.
 	color.rgb *= ShadowFactorN(v_shadowPos, N);
 #else
-	color.rgb *= ShadowFactor(v_shadowPos);
+	color.rgb *= ShadowFactorV(v_shadowPos, v_shadowNdl);
 #endif
 #endif
 

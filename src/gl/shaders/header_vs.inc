@@ -83,6 +83,11 @@ const char *header_vert_src =
 "// Outside the Object block on purpose: it changes once a frame rather than once\n"
 "// an object, and the UBO and non-UBO builds then share one declaration.\n"
 "uniform mat4 u_shadowMatrix;\n"
+"// Where the light travels. Read here as well as in the fragment stage, so a\n"
+"// build that lights per vertex can still hand the shadow test how squarely each\n"
+"// surface faces the light -- without it, only the per-pixel build gets the\n"
+"// facing check that keeps a caster from striping itself.\n"
+"uniform vec4 u_shadowLightDir;\n"
 
 "#define surfAmbient (u_surfProps.x)\n"
 "#define surfSpecular (u_surfProps.y)\n"

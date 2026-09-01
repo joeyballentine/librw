@@ -141,6 +141,7 @@ int32 u_matColor;
 int32 u_surfProps;
 int32 u_shadowMatrix;
 int32 u_shadowParams;
+int32 u_shadowParams2;
 int32 u_shadowLightDir;
 
 bool32 constantVertexColorWhite;
@@ -213,15 +214,17 @@ setDepthPassEnabled(bool32 enable)
 // flushUniforms replays onto whichever shader is next used, so one call reaches
 // every program that reads it.
 //
-// The map goes to texture unit 1 because Shader::create binds tex0..tex3 to
-// units 0..3 by name, and unit 0 is the material's own texture.
+// The map goes to texture unit 2 because Shader::create binds tex0..tex3 to
+// units 0..3 by name, unit 0 is the material's own texture and unit 1 is
+// matfx's environment map.
 //
 // **Filtering must be nearest.** The map holds depth packed across three bytes,
 // and a linear filter would average the bytes of two unrelated depths and
 // produce a value that is neither. That is the price of packing rather than
-// using a depth texture, and it is why there is no free hardware PCF.
+// using a depth texture, and it is why header.frag compares nine taps by hand
+// instead of asking the hardware for a filtered comparison.
 void
-setShadowMap(Texture *tex, float32 *matrix, float32 *lightDir, float32 bias, float32 strength)
+setShadowMap(Texture *tex, float32 *matrix, float32 *lightDir, const ShadowMapParams *params)
 {
 	setTexture(2, tex);
 
@@ -234,12 +237,19 @@ setShadowMap(Texture *tex, float32 *matrix, float32 *lightDir, float32 bias, flo
 	dir[3] = 0.0f;
 	setUniform(u_shadowLightDir, dir);
 
-	float32 params[4];
-	params[0] = tex ? 1.0f : 0.0f;
-	params[1] = bias;
-	params[2] = strength;
-	params[3] = 0.0f;
-	setUniform(u_shadowParams, params);
+	float32 p[4];
+	p[0] = tex ? 1.0f : 0.0f;
+	p[1] = params->bias;
+	p[2] = params->strength;
+	p[3] = params->slopeBias;
+	setUniform(u_shadowParams, p);
+
+	float32 p2[4];
+	p2[0] = params->texel;
+	p2[1] = 0.0f;
+	p2[2] = 0.0f;
+	p2[3] = 0.0f;
+	setUniform(u_shadowParams2, p2);
 }
 
 void
@@ -2687,6 +2697,7 @@ initOpenGL(void)
 	// shader reads it.
 	u_shadowMatrix = registerUniform("u_shadowMatrix", UNIFORM_MAT4);
 	u_shadowParams = registerUniform("u_shadowParams", UNIFORM_VEC4);
+	u_shadowParams2 = registerUniform("u_shadowParams2", UNIFORM_VEC4);
 	u_shadowLightDir = registerUniform("u_shadowLightDir", UNIFORM_VEC4);
 
 	// for im2d

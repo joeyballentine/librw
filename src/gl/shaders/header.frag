@@ -21,8 +21,13 @@ uniform vec4  u_fogColor;
 out vec4 fragColor;
 #endif
 
-// The shadow map, and its knobs: x is on or off, y the depth bias, z what a
-// shadowed pixel is multiplied by.
+// The shadow map, and its knobs.
+//
+// u_shadowParams is (on, bias, strength, slope bias) and u_shadowParams2.x is
+// one texel of the map in texture coordinates. The two bias terms and the texel
+// are all handed over already converted into the map's own 0..1 depth units, so
+// nothing here has to know how deep the light volume is. iShadowMap.cpp does
+// that conversion, because it is the only thing that knows.
 //
 // tex2 and not a name of its own, because Shader::create binds tex0..tex3 to
 // texture units 0..3 by name. Unit 0 is the material's texture and unit 1 is
@@ -30,12 +35,15 @@ out vec4 fragColor;
 // shadow map there both redeclared the sampler and fought for the unit.
 uniform sampler2D tex2;
 uniform vec4 u_shadowParams;
+uniform vec4 u_shadowParams2;
 // Where the light travels, from it towards what it lights.
 uniform vec4 u_shadowLightDir;
 
 #define shadowEnabled (u_shadowParams.x)
 #define shadowBias (u_shadowParams.y)
 #define shadowStrength (u_shadowParams.z)
+#define shadowSlopeBias (u_shadowParams.w)
+#define shadowTexel (u_shadowParams2.x)
 
 // Undo depth.frag's packing. The dot is the encode read backwards: each channel
 // carries the fraction the ones before it could not.
@@ -45,7 +53,22 @@ UnpackDepth(vec4 c)
 	return dot(c.rgb, vec3(1.0, 1.0/255.0, 1.0/65025.0));
 }
 
-// 1.0 in light, shadowStrength in shadow.
+// One comparison against one texel: 1.0 if the light reaches here.
+float
+ShadowTap(vec2 uv, float depth)
+{
+	return depth > UnpackDepth(texture(tex2, uv)) ? 0.0 : 1.0;
+}
+
+// 1.0 in light, shadowStrength in shadow, and the values between where the
+// filter straddles an edge.
+//
+// Nine taps in a square, averaged. The map cannot be filtered by the hardware
+// -- it holds depth packed across three bytes, and a linear filter would
+// average the bytes of two unrelated depths into a number that is neither -- so
+// the comparison happens first and the RESULTS are what get averaged. That is
+// the whole of PCF, and it is why the taps are written out rather than done
+// with a wider filter mode.
 //
 // The bounds test is not an optimisation. The map covers a slab of the world
 // and CLAMP addressing means everything outside it samples the edge texel, so
@@ -53,7 +76,7 @@ UnpackDepth(vec4 c)
 // happens to hold -- the same trap xShadow.cpp's border comment describes, in
 // the other direction.
 float
-ShadowFactor(vec4 shadowPos)
+ShadowLookup(vec4 shadowPos, float bias)
 {
 	if(shadowEnabled == 0.0)
 		return 1.0;
@@ -63,27 +86,53 @@ ShadowFactor(vec4 shadowPos)
 	if(t.x < 0.0 || t.x > 1.0 || t.y < 0.0 || t.y > 1.0 || t.z > 1.0)
 		return 1.0;
 
-	float casterDepth = UnpackDepth(texture(tex2, t.xy));
+	float d = t.z - bias;
+	float o = shadowTexel;
 
-	return t.z - shadowBias > casterDepth ? shadowStrength : 1.0;
+	float lit = ShadowTap(t.xy + vec2(-o, -o), d) +
+	            ShadowTap(t.xy + vec2(0.0, -o), d) +
+	            ShadowTap(t.xy + vec2( o, -o), d) +
+	            ShadowTap(t.xy + vec2(-o, 0.0), d) +
+	            ShadowTap(t.xy, d) +
+	            ShadowTap(t.xy + vec2( o, 0.0), d) +
+	            ShadowTap(t.xy + vec2(-o,  o), d) +
+	            ShadowTap(t.xy + vec2(0.0,  o), d) +
+	            ShadowTap(t.xy + vec2( o,  o), d);
+
+	return mix(shadowStrength, 1.0, lit*(1.0/9.0));
 }
 
-// The same test, for a surface whose normal is known.
+// The test, given how squarely the surface faces the light. Two things come of
+// that number, and both matter.
 //
 // A surface facing away from the light needs no map: it cannot see the light,
 // and the lighting has already darkened it. Asking anyway is worse than
 // pointless, because those are exactly the surfaces whose depth IS the map --
 // the caster pass stores back faces -- so each one compares against its own
-// record and breaks into stripes on the rounding. That is the acne that
-// survived storing back faces, and no bias fixes it: the two numbers are meant
-// to be equal.
+// record and breaks into stripes on the rounding.
+//
+// And a surface nearly edge-on to the light needs a larger bias than one facing
+// it, because one texel of the map covers more depth the more the surface
+// slopes away. tan of the angle to the light is exactly that ratio, which is
+// the sqrt over ndl. Capped, or a surface at ninety degrees asks for infinity.
+float
+ShadowFactorV(vec4 shadowPos, float ndl)
+{
+	if(ndl <= 0.0)
+		return 1.0;
+
+	float slope = min(sqrt(max(1.0 - ndl*ndl, 0.0))/ndl, 8.0);
+
+	return ShadowLookup(shadowPos, shadowBias + shadowSlopeBias*slope);
+}
+
+// The same, worked out here from a normal the fragment stage already has.
+// Sharper than the interpolated number on a low-polygon model, which is where
+// every character in this game sits.
 float
 ShadowFactorN(vec4 shadowPos, vec3 N)
 {
-	if(dot(N, -u_shadowLightDir.xyz) <= 0.0)
-		return 1.0;
-
-	return ShadowFactor(shadowPos);
+	return ShadowFactorV(shadowPos, dot(N, -u_shadowLightDir.xyz));
 }
 
 void DoAlphaTest(float a)

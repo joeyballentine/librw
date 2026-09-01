@@ -82,6 +82,11 @@ uniform vec4 u_surfProps;	// amb, spec, diff, extra
 // Outside the Object block on purpose: it changes once a frame rather than once
 // an object, and the UBO and non-UBO builds then share one declaration.
 uniform mat4 u_shadowMatrix;
+// Where the light travels. Read here as well as in the fragment stage, so a
+// build that lights per vertex can still hand the shadow test how squarely each
+// surface faces the light -- without it, only the per-pixel build gets the
+// facing check that keeps a caster from striping itself.
+uniform vec4 u_shadowLightDir;
 
 #define surfAmbient (u_surfProps.x)
 #define surfSpecular (u_surfProps.y)

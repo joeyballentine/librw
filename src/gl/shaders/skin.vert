@@ -12,6 +12,10 @@ VSOUT vec4 v_shadowPos;
 // The skinned normal, world space and not normalized. Same output as
 // default.vert's; both feed simple.frag's PERPIXEL build.
 VSOUT vec3 v_normal;
+#else
+// How squarely this vertex faces the light, for the shadow test. As in
+// default.vert, and for the same reason.
+VSOUT float v_shadowNdl;
 #endif
 
 void
@@ -39,6 +43,7 @@ main(void)
 	v_color.rgb += DoDynamicLight(Vertex.xyz, Normal)*surfDiffuse;
 	v_color = clamp(v_color, 0.0, 1.0);
 	v_color *= u_matColor;
+	v_shadowNdl = dot(normalize(Normal), -u_shadowLightDir.xyz);
 #endif
 
 	v_shadowPos = u_shadowMatrix * Vertex;

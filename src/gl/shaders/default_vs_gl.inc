@@ -19,6 +19,11 @@ const char *default_vert_src =
 "// triangle does not give a unit normal, which is why simple.frag normalizes it\n"
 "// again. skin.vert declares the same output for the same fragment shader.\n"
 "VSOUT vec3 v_normal;\n"
+"#else\n"
+"// How squarely this vertex faces the light, for the shadow test. Only where\n"
+"// there is no normal going across anyway -- the per-pixel build works the same\n"
+"// number out from v_normal, and more accurately.\n"
+"VSOUT float v_shadowNdl;\n"
 "#endif\n"
 
 "void\n"
@@ -46,6 +51,7 @@ const char *default_vert_src =
 "	v_color.rgb += DoDynamicLight(Vertex.xyz, Normal)*surfDiffuse;\n"
 "	v_color = clamp(v_color, 0.0, 1.0);\n"
 "	v_color *= u_matColor;\n"
+"	v_shadowNdl = dot(normalize(Normal), -u_shadowLightDir.xyz);\n"
 "#endif\n"
 
 "	v_shadowPos = u_shadowMatrix * Vertex;\n"

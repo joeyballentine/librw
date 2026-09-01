@@ -13,6 +13,10 @@ const char *skin_vert_src =
 "// The skinned normal, world space and not normalized. Same output as\n"
 "// default.vert's; both feed simple.frag's PERPIXEL build.\n"
 "VSOUT vec3 v_normal;\n"
+"#else\n"
+"// How squarely this vertex faces the light, for the shadow test. As in\n"
+"// default.vert, and for the same reason.\n"
+"VSOUT float v_shadowNdl;\n"
 "#endif\n"
 
 "void\n"
@@ -40,6 +44,7 @@ const char *skin_vert_src =
 "	v_color.rgb += DoDynamicLight(Vertex.xyz, Normal)*surfDiffuse;\n"
 "	v_color = clamp(v_color, 0.0, 1.0);\n"
 "	v_color *= u_matColor;\n"
+"	v_shadowNdl = dot(normalize(Normal), -u_shadowLightDir.xyz);\n"
 "#endif\n"
 
 "	v_shadowPos = u_shadowMatrix * Vertex;\n"
