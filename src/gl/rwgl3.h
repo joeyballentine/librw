@@ -185,6 +185,7 @@ extern int32 u_outlineColor2;
 extern int32 u_toonLightDir;
 extern int32 u_outlineFlags;
 extern int32 u_toonRoomTint;
+extern int32 u_toonExtra;
 
 enum OutlineMode
 {
@@ -204,6 +205,13 @@ enum OutlineMode
 // Paint what is drawn next in the colour of the room, rather than in the
 // colour of the lights that happen to reach it. A level lights its world and
 // its objects with different rigs; a cartoon does not.
+// How many shades a character's colours are cut down to, keeping their hue. 0
+// leaves them alone.
+//
+// A character in the show is drawn flat and bounded; the world is not touched,
+// because a painted background does not want its colours rounded.
+void setToonFlatten(float32 colors);
+
 void setToonRoomTint(float32 r, float32 g, float32 b);
 void clearToonRoomTint(void);
 

@@ -68,6 +68,11 @@ float4 main(VS_out input) : COLOR
 	color *= tex2D(tex0, input.TexCoord0.xy);
 #endif
 #ifdef TOON
+	// Flattening, on a character and not on the world: the room tint is only
+	// ever handed over for a character.
+	if(toonRoom.w != 0.0)
+		color.rgb = ToonQuantize(color.rgb);
+
 	color.rgb = ToonSaturate(color.rgb);
 #endif
 

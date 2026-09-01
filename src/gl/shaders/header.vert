@@ -136,6 +136,7 @@ uniform vec4 u_outlineFlags;
 // the top band and his sides always in the bottom one, whichever way he faces.
 uniform vec4 u_toonLightDir;
 uniform vec4 u_toonRoomTint;
+uniform vec4 u_toonExtra;
 
 // The stylised look, off unless the application asks for it.
 //

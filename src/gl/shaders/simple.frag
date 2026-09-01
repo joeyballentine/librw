@@ -79,6 +79,12 @@ main(void)
 
 	color *= texture(tex0, vec2(v_tex0.x, 1.0-v_tex0.y));
 
+	// Flattening, on a character and not on the world: the room tint is only
+	// ever handed over for a character, and a painted background does not want
+	// its colours rounded.
+	if(toonEnabled != 0.0 && u_toonRoomTint.w != 0.0)
+		color.rgb = ToonQuantize(color.rgb);
+
 	// After the material and before the fog. Before the fog because a shadow is
 	// a property of the surface and fog is a property of the air in front of it
 	// -- darkening a fogged colour would tint the fog itself.

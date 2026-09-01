@@ -390,6 +390,8 @@ void *outline_PS;
 static float32 toonParams[4] = { 0.0f, 3.0f, 1.0f, 0.0f };
 static float32 toonLightDir[4] = { 0.0f, -1.0f, 0.0f, 0.0f };
 static float32 toonRoom[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
+// How flat a character's colours are cut. See toonConstants.h.
+static float32 toonExtra[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 static float32 outlineColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 static float32 outlineColor2[4] = { 0.0f, 0.0f, 0.0f, -1.0e30f };
 static float32 outlineFlags[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -419,6 +421,12 @@ getToonShading(void)
 }
 
 void
+setToonFlatten(float32 colors)
+{
+	toonExtra[0] = colors;
+}
+
+void
 setToonRamp(Texture *tex)
 {
 	toonRamp = tex;
@@ -430,12 +438,14 @@ setToonRoomTint(float32 r, float32 g, float32 b)
 	toonRoom[0] = r;
 	toonRoom[1] = g;
 	toonRoom[2] = b;
+	toonRoom[3] = 1.0f;
 	toonRoomSet = 1;
 }
 
 void
 clearToonRoomTint(void)
 {
+	toonRoom[3] = 0.0f;
 	toonRoomSet = 0;
 }
 
@@ -511,6 +521,7 @@ uploadToonConstants(void)
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonParams, toonParams, 1);
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonLightDir, toonLightDir, 1);
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonRoom, toonRoom, 1);
+	d3ddevice->SetPixelShaderConstantF(PSLOC_toonExtra, toonExtra, 1);
 }
 
 void

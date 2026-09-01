@@ -47,9 +47,28 @@ matfxRender_Default(InstanceDataHeader *header, InstanceData *inst, int32 lightB
 {
 	Material *m = inst->material;
 
+	// **The per-pixel and cel paths, which this pipeline never offered.**
+	//
+	// A material effect is a property of a surface, not a reason to light it
+	// differently -- but matfx only ever reached for the plain shaders, so
+	// anything with an environment map silently dropped out of per-pixel
+	// lighting and, once it existed, out of the cel look. The robots are the
+	// case that shows it: NPCs like any other, tagged for an outline like any
+	// other, and smooth-shaded because they are shiny.
+	bool32 perPixel = getPerPixelLighting() &&
+	                  (lightBits & VSLIGHT_MASK) == VSLIGHT_DIRECT;
+	bool32 toon = getToonShading() && (lightBits & VSLIGHT_MASK) != 0;
+
+	if(toon)
+		perPixel = 1;
+
+	uploadToonConstants();
+
 	// Pick a shader
 	if((lightBits & VSLIGHT_MASK) == 0)
 		setVertexShader(default_amb_VS);
+	else if(perPixel)
+		setVertexShader(default_pp_VS);
 	else if((lightBits & VSLIGHT_MASK) == VSLIGHT_DIRECT)
 		setVertexShader(default_amb_dir_VS);
 	else
@@ -59,9 +78,11 @@ matfxRender_Default(InstanceDataHeader *header, InstanceData *inst, int32 lightB
 
 	if(inst->material->texture){
 		d3d::setTexture(0, m->texture);
-		setPixelShader(default_tex_PS);
+		setPixelShader(toon ? default_tex_toon_PS :
+		               perPixel ? default_tex_pp_PS : default_tex_PS);
 	}else
-		setPixelShader(default_PS);
+		setPixelShader(toon ? default_toon_PS :
+		               perPixel ? default_pp_PS : default_PS);
 
 	drawInst(header, inst);
 }

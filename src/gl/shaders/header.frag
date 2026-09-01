@@ -176,6 +176,15 @@ uniform vec4 u_toonLightDir;
 // same palette, so a character standing in a blue room is drawn blue.
 uniform vec4 u_toonRoomTint;
 
+// Two more of the look, both about flattening rather than lighting.
+//
+// x is how many shades a character's colours are cut down to, 0 to leave them
+// alone. The rest is spare.
+uniform vec4 u_toonExtra;
+
+#define toonColors (u_toonExtra.x)
+
+
 // The stylised look, off unless the application asks for it.
 //
 // x is on or off, y how many steps the light is cut into, z how far colour is
@@ -222,6 +231,34 @@ vec3 ToonRamp(float l)
 //
 // Applied after the texture, unlike the banding, because it is the artwork's
 // colour that wants pushing and not the light's.
+// Cut a colour down to a handful of shades, keeping the colour.
+//
+// **Rounding each channel on its own was the obvious way and it is wrong.** It
+// moves the three channels by different amounts, so the HUE shifts as a colour
+// lands: a face rounds towards pink in one band and towards orange in the
+// next, which is banding that draws attention to itself rather than flatness
+// that does not.
+//
+// Scaling instead. The brightest channel is rounded to a level and the whole
+// colour is scaled by that ratio, so all three move together: hue and
+// saturation come through untouched and only brightness is stepped. That is
+// the axis the artwork actually varies along -- these textures were painted
+// from a small palette and then shaded, and it is the shading that wants
+// removing.
+vec3 ToonQuantize(vec3 c)
+{
+	if(toonColors < 2.0)
+		return c;
+
+	float v = max(c.r, max(c.g, c.b));
+
+	// Black has no hue to keep and no brightness to round.
+	if(v < 1.0/255.0)
+		return c;
+
+	return c*(floor(v*toonColors + 0.5)/toonColors)/v;
+}
+
 vec3 ToonSaturate(vec3 c)
 {
 	if(toonEnabled == 0.0)

@@ -57,11 +57,25 @@ skinMatfxRender_Default(InstanceDataHeader *header, InstanceData *inst, int32 vs
 
 	setPipelineVertexAlpha(inst->vertexAlpha || m->color.alpha != 0xFF);
 
+	// **The per-pixel path, which this pipeline never offered.**
+	//
+	// A material effect is a property of a surface, not a reason to light it
+	// differently -- but matfx only ever reached for the plain shaders, so
+	// anything with an environment map silently dropped out of per-pixel
+	// lighting and, once it existed, out of the cel look. The robots are the
+	// case that shows it: they are NPCs like any other, they were being tagged
+	// for an outline like any other, and they came out smooth-shaded because
+	// they are shiny.
 	if((vsBits & VSLIGHT_MASK) == 0){
 		if(getAlphaTest())
 			skinShader->use();
 		else
 			skinShader_noAT->use();
+	}else if(getPerPixelLighting() && (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT){
+		if(getAlphaTest())
+			skinShader_pp->use();
+		else
+			skinShader_pp_noAT->use();
 	}else{
 		if(getAlphaTest())
 			skinShader_fullLight->use();
@@ -118,6 +132,40 @@ skinMatfxRenderCB(Atomic *atomic, InstanceDataHeader *header)
 	setupVertexInput(header);
 
 	uploadSkinMatrices(atomic);
+
+	// The hull, exactly as skinRenderCB draws it. A character does not stop
+	// being a character because one of his materials reflects.
+	int32 outline = getOutlineMode();
+
+	if(outline != OUTLINE_NONE){
+		if(outline == OUTLINE_TWOTONE){
+			// The split is set by the application; a one-ink model gets one
+			// that never fires.
+		}
+
+		SetRenderState(CULLMODE, CULLFRONT);
+		skinOutlineShader->use();
+
+		InstanceData *oinst = header->inst;
+		int32 on = header->numMeshes;
+
+		while(on--){
+			Material *om = oinst->material;
+
+			// Nothing see-through, nothing small enough to be a detail.
+			if(oinst->vertexAlpha || om->color.alpha != 255 ||
+			   oinst->numVertices*20 < (int32)header->totalNumVertex){
+				oinst++;
+				continue;
+			}
+
+			setTexture(0, om->texture);
+			drawInst(header, oinst);
+			oinst++;
+		}
+
+		SetRenderState(CULLMODE, CULLBACK);
+	}
 
 	// Without normals there is nothing to reflect, so the env map cannot be
 	// generated at all and the mesh falls back to plain skinning.

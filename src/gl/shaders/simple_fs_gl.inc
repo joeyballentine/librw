@@ -80,6 +80,12 @@ const char *simple_frag_src =
 
 "	color *= texture(tex0, vec2(v_tex0.x, 1.0-v_tex0.y));\n"
 
+"	// Flattening, on a character and not on the world: the room tint is only\n"
+"	// ever handed over for a character, and a painted background does not want\n"
+"	// its colours rounded.\n"
+"	if(toonEnabled != 0.0 && u_toonRoomTint.w != 0.0)\n"
+"		color.rgb = ToonQuantize(color.rgb);\n"
+
 "	// After the material and before the fog. Before the fog because a shadow is\n"
 "	// a property of the surface and fog is a property of the air in front of it\n"
 "	// -- darkening a fogged colour would tint the fog itself.\n"

@@ -177,6 +177,15 @@ const char *header_frag_src =
 "// same palette, so a character standing in a blue room is drawn blue.\n"
 "uniform vec4 u_toonRoomTint;\n"
 
+"// Two more of the look, both about flattening rather than lighting.\n"
+"//\n"
+"// x is how many shades a character's colours are cut down to, 0 to leave them\n"
+"// alone. The rest is spare.\n"
+"uniform vec4 u_toonExtra;\n"
+
+"#define toonColors (u_toonExtra.x)\n"
+
+
 "// The stylised look, off unless the application asks for it.\n"
 "//\n"
 "// x is on or off, y how many steps the light is cut into, z how far colour is\n"
@@ -223,6 +232,34 @@ const char *header_frag_src =
 "//\n"
 "// Applied after the texture, unlike the banding, because it is the artwork's\n"
 "// colour that wants pushing and not the light's.\n"
+"// Cut a colour down to a handful of shades, keeping the colour.\n"
+"//\n"
+"// **Rounding each channel on its own was the obvious way and it is wrong.** It\n"
+"// moves the three channels by different amounts, so the HUE shifts as a colour\n"
+"// lands: a face rounds towards pink in one band and towards orange in the\n"
+"// next, which is banding that draws attention to itself rather than flatness\n"
+"// that does not.\n"
+"//\n"
+"// Scaling instead. The brightest channel is rounded to a level and the whole\n"
+"// colour is scaled by that ratio, so all three move together: hue and\n"
+"// saturation come through untouched and only brightness is stepped. That is\n"
+"// the axis the artwork actually varies along -- these textures were painted\n"
+"// from a small palette and then shaded, and it is the shading that wants\n"
+"// removing.\n"
+"vec3 ToonQuantize(vec3 c)\n"
+"{\n"
+"	if(toonColors < 2.0)\n"
+"		return c;\n"
+
+"	float v = max(c.r, max(c.g, c.b));\n"
+
+"	// Black has no hue to keep and no brightness to round.\n"
+"	if(v < 1.0/255.0)\n"
+"		return c;\n"
+
+"	return c*(floor(v*toonColors + 0.5)/toonColors)/v;\n"
+"}\n"
+
 "vec3 ToonSaturate(vec3 c)\n"
 "{\n"
 "	if(toonEnabled == 0.0)\n"

@@ -18,10 +18,15 @@ float4 toonParams : register(c27);
 float4 toonLightDir : register(c28);
 // What colour it is in here, with no direction in it.
 float4 toonRoom : register(c29);
+// x is how many shades a character's colours are cut down to. w of toonRoom
+// says whether this draw IS a character, which is the same flag the room tint
+// rides on -- only a character is ever given one.
+float4 toonExtra : register(c30);
 
 #define toonEnabled (toonParams.x)
 #define toonSaturation (toonParams.z)
 #define toonStrength (toonParams.w)
+#define toonColors (toonExtra.x)
 
 // The colour strip the light term looks up. Band count, widths and colours are
 // properties of the texture, so a character can be retuned without a rebuild.
@@ -32,6 +37,25 @@ float3 ToonRamp(float l)
 	// Half a texel in, so the two ends sample their own colour rather than
 	// blending with the clamp.
 	return tex2D(tex3, float2(clamp(l, 0.02, 0.98), 0.5)).rgb;
+}
+
+// Cut a colour down to a handful of shades, keeping the colour.
+//
+// The brightest channel is rounded to a level and the whole colour scaled by
+// that ratio, so all three move together and only brightness is stepped.
+// Rounding each channel on its own shifts the hue as a colour lands, which is
+// banding that draws attention to itself -- see header.frag on the GL3 side.
+float3 ToonQuantize(float3 c)
+{
+	if(toonColors < 2.0)
+		return c;
+
+	float v = max(c.r, max(c.g, c.b));
+
+	if(v < 1.0/255.0)
+		return c;
+
+	return c*(floor(v*toonColors + 0.5)/toonColors)/v;
 }
 
 // Push colour away from grey. Mixing AWAY from luminance -- a factor above one

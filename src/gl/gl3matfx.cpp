@@ -43,11 +43,25 @@ matfxDefaultRender(InstanceDataHeader *header, InstanceData *inst, int32 vsBits,
 
 	setPipelineVertexAlpha(inst->vertexAlpha || m->color.alpha != 0xFF);
 
+	// **The per-pixel path, which this pipeline never offered.**
+	//
+	// A material effect is a property of a surface, not a reason to light it
+	// differently -- but matfx only ever reached for the plain shaders, so
+	// anything with an environment map silently dropped out of per-pixel
+	// lighting and, once it existed, out of the cel look. The robots are the
+	// case that shows it: they are NPCs like any other, they were being tagged
+	// for an outline like any other, and they came out smooth-shaded because
+	// they are shiny.
 	if((vsBits & VSLIGHT_MASK) == 0){
 		if(getAlphaTest())
 			defaultShader->use();
 		else
 			defaultShader_noAT->use();
+	}else if(getPerPixelLighting() && (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT){
+		if(getAlphaTest())
+			defaultShader_pp->use();
+		else
+			defaultShader_pp_noAT->use();
 	}else{
 		if(getAlphaTest())
 			defaultShader_fullLight->use();

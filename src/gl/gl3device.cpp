@@ -149,6 +149,7 @@ int32 u_outlineColor2;
 int32 u_toonLightDir;
 int32 u_outlineFlags;
 int32 u_toonRoomTint;
+int32 u_toonExtra;
 
 bool32 constantVertexColorWhite;
 
@@ -310,6 +311,18 @@ static float32 outlineFlags[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 // u_toonRoomTint.
 static float32 toonRoomTint[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
 
+// How flat a character's colours are cut. See u_toonExtra.
+static float32 toonExtra[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+void
+setToonFlatten(float32 colors)
+{
+	toonExtra[0] = colors;
+
+	if(toonRegistered)
+		setUniform(u_toonExtra, toonExtra);
+}
+
 // The outline's colour, and its thickness in world units in alpha. Zero
 // thickness is how the pass is turned off -- see getOutline.
 static float32 outlineColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -344,6 +357,7 @@ setToonRoomTint(float32 r, float32 g, float32 b)
 
 	if(toonRegistered)
 		setUniform(u_toonRoomTint, toonRoomTint);
+	setUniform(u_toonExtra, toonExtra);
 }
 
 void
@@ -2949,6 +2963,7 @@ initOpenGL(void)
 	u_toonLightDir = registerUniform("u_toonLightDir", UNIFORM_VEC4);
 	u_outlineFlags = registerUniform("u_outlineFlags", UNIFORM_VEC4);
 	u_toonRoomTint = registerUniform("u_toonRoomTint", UNIFORM_VEC4);
+	u_toonExtra = registerUniform("u_toonExtra", UNIFORM_VEC4);
 	toonRegistered = 1;
 	setUniform(u_toonParams, toonParams);
 	setUniform(u_outlineColor, outlineColor);

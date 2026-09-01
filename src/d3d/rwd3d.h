@@ -98,6 +98,10 @@ float32 getLightIntensity(void);
 
 void setToonShading(bool32 enable, float32 bands, float32 saturation, float32 strength);
 void setToonRamp(Texture *tex);
+
+// How many shades a character's colours are cut down to, keeping their hue. 0
+// leaves them alone; the world is never touched.
+void setToonFlatten(float32 colors);
 void setToonRoomTint(float32 r, float32 g, float32 b);
 void clearToonRoomTint(void);
 void setToonLightDir(float32 x, float32 y, float32 z);
@@ -125,6 +129,7 @@ enum
 	PSLOC_toonParams = 27,
 	PSLOC_toonLightDir = 28,
 	PSLOC_toonRoom = 29,
+	PSLOC_toonExtra = 30,
 
 	VSLOC_outlineColor = 233,
 	VSLOC_outlineColor2 = 234,
@@ -135,7 +140,6 @@ extern void *default_toon_PS;
 extern void *default_tex_toon_PS;
 extern void *outline_VS;
 extern void *outline_PS;
-extern void *skin_outline_VS;
 bool32 getPerPixelLighting(void);
 // The single-sampled picture, for anything that needs to read the frame back:
 // the samples are collapsed into it on the way out. nil when there is no
