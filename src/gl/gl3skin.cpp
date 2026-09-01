@@ -341,8 +341,8 @@ skinOpen(void *o, int32, int32)
 #include "shaders/lighting_fs.inc"
 	const char *vs[] = { shaderDecl, header_vert_src, skin_vert_src, nil };
 	const char *vs_fullLight[] = { shaderDecl, "#define DIRECTIONALS\n#define POINTLIGHTS\n#define SPOTLIGHTS\n", header_vert_src, skin_vert_src, nil };
-	const char *fs[] = { shaderDecl, header_frag_src, simple_frag_src, nil };
-	const char *fs_noAT[] = { shaderDecl, "#define NO_ALPHATEST\n", header_frag_src, simple_frag_src, nil };
+	const char *fs[] = { shaderDecl, "#define SHADOWRECEIVER\n", header_frag_src, simple_frag_src, nil };
+	const char *fs_noAT[] = { shaderDecl, "#define SHADOWRECEIVER\n", "#define NO_ALPHATEST\n", header_frag_src, simple_frag_src, nil };
 
 	skinShader = Shader::create(vs, fs);
 	assert(skinShader);
@@ -357,8 +357,8 @@ skinOpen(void *o, int32, int32)
 	// Per-pixel. One vertex shader rather than two: it does no lighting, so
 	// there is nothing for DIRECTIONALS to switch on.
 	const char *vs_pp[] = { shaderDecl, "#define PERPIXEL\n", header_vert_src, skin_vert_src, nil };
-	const char *fs_pp[] = { shaderDecl, "#define PERPIXEL\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
-	const char *fs_pp_noAT[] = { shaderDecl, "#define PERPIXEL\n#define NO_ALPHATEST\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
+	const char *fs_pp[] = { shaderDecl, "#define SHADOWRECEIVER\n", "#define PERPIXEL\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
+	const char *fs_pp_noAT[] = { shaderDecl, "#define SHADOWRECEIVER\n", "#define PERPIXEL\n#define NO_ALPHATEST\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
 
 	skinShader_pp = Shader::create(vs_pp, fs_pp);
 	assert(skinShader_pp);

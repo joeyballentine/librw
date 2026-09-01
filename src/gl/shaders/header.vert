@@ -78,6 +78,11 @@ uniform mat4 u_normal;
 uniform vec4 u_matColor;
 uniform vec4 u_surfProps;	// amb, spec, diff, extra
 
+// World position to shadow map, projection times view of the light camera.
+// Outside the Object block on purpose: it changes once a frame rather than once
+// an object, and the UBO and non-UBO builds then share one declaration.
+uniform mat4 u_shadowMatrix;
+
 #define surfAmbient (u_surfProps.x)
 #define surfSpecular (u_surfProps.y)
 #define surfDiffuse (u_surfProps.z)

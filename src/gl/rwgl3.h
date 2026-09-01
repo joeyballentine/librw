@@ -137,6 +137,23 @@ extern Shader *depthShader;
 void setDepthPassEnabled(bool32 enable);
 bool32 getDepthPass(void);
 
+// Hand the receivers a shadow map to test against, and the transform that puts
+// a world position into it. Set once a frame, after the caster pass; the
+// uniform registry replays it onto every shader that reads it.
+//
+// `matrix` is the light camera's projection times its view, in the same layout
+// the shaders take u_proj and u_view in -- so the receiver's lookup is built
+// from exactly what rasterised the casters.
+//
+// `bias` is subtracted from the receiver's own depth before comparing, and
+// `strength` is what a shadowed pixel is multiplied by: 1 is no shadow, 0 is
+// black. nil clears it, as does clearShadowMap.
+void setShadowMap(Texture *tex, float32 *matrix, float32 bias, float32 strength);
+void clearShadowMap(void);
+
+extern int32 u_shadowMatrix;
+extern int32 u_shadowParams;
+
 // Evaluate lighting per fragment rather than per vertex, in the default,
 // uvxform and skin pipelines. Directional lights only: an atomic reached by a
 // point or spot light keeps the per-vertex path for that draw, and one lit by

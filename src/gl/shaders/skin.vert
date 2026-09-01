@@ -5,6 +5,9 @@ VSIN(ATTRIB_POS)	vec3 in_pos;
 VSOUT vec4 v_color;
 VSOUT vec2 v_tex0;
 VSOUT float v_fog;
+// World position in the shadow map's space. Interpolated, then biased into
+// texture coordinates by the fragment shader.
+VSOUT vec4 v_shadowPos;
 #ifdef PERPIXEL
 // The skinned normal, world space and not normalized. Same output as
 // default.vert's; both feed simple.frag's PERPIXEL build.
@@ -37,6 +40,8 @@ main(void)
 	v_color = clamp(v_color, 0.0, 1.0);
 	v_color *= u_matColor;
 #endif
+
+	v_shadowPos = u_shadowMatrix * Vertex;
 
 	v_fog = DoFog(gl_Position.w);
 }

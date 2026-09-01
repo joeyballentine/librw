@@ -22,6 +22,51 @@ const char *header_frag_src =
 "out vec4 fragColor;\n"
 "#endif\n"
 
+"// The shadow map, and its knobs: x is on or off, y the depth bias, z what a\n"
+"// shadowed pixel is multiplied by.\n"
+"//\n"
+"// tex2 and not a name of its own, because Shader::create binds tex0..tex3 to\n"
+"// texture units 0..3 by name. Unit 0 is the material's texture and unit 1 is\n"
+"// the environment map -- matfx_env.frag declares tex1 itself, so putting the\n"
+"// shadow map there both redeclared the sampler and fought for the unit.\n"
+"uniform sampler2D tex2;\n"
+"uniform vec4 u_shadowParams;\n"
+
+"#define shadowEnabled (u_shadowParams.x)\n"
+"#define shadowBias (u_shadowParams.y)\n"
+"#define shadowStrength (u_shadowParams.z)\n"
+
+"// Undo depth.frag's packing. The dot is the encode read backwards: each channel\n"
+"// carries the fraction the ones before it could not.\n"
+"float\n"
+"UnpackDepth(vec4 c)\n"
+"{\n"
+"	return dot(c.rgb, vec3(1.0, 1.0/255.0, 1.0/65025.0));\n"
+"}\n"
+
+"// 1.0 in light, shadowStrength in shadow.\n"
+"//\n"
+"// The bounds test is not an optimisation. The map covers a slab of the world\n"
+"// and CLAMP addressing means everything outside it samples the edge texel, so\n"
+"// without this every surface beyond the volume takes whatever the border\n"
+"// happens to hold -- the same trap xShadow.cpp's border comment describes, in\n"
+"// the other direction.\n"
+"float\n"
+"ShadowFactor(vec4 shadowPos)\n"
+"{\n"
+"	if(shadowEnabled == 0.0)\n"
+"		return 1.0;\n"
+
+"	vec3 t = shadowPos.xyz*0.5 + 0.5;\n"
+
+"	if(t.x < 0.0 || t.x > 1.0 || t.y < 0.0 || t.y > 1.0 || t.z > 1.0)\n"
+"		return 1.0;\n"
+
+"	float casterDepth = UnpackDepth(texture(tex2, t.xy));\n"
+
+"	return t.z - shadowBias > casterDepth ? shadowStrength : 1.0;\n"
+"}\n"
+
 "void DoAlphaTest(float a)\n"
 "{\n"
 "#ifndef NO_ALPHATEST\n"

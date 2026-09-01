@@ -10,6 +10,9 @@ uniform vec4 u_uvXform[2];
 VSOUT vec4 v_color;
 VSOUT vec2 v_tex0;
 VSOUT float v_fog;
+// World position in the shadow map's space. Interpolated, then biased into
+// texture coordinates by the fragment shader.
+VSOUT vec4 v_shadowPos;
 #ifdef PERPIXEL
 // World space, and NOT normalized: interpolating two unit normals across a
 // triangle does not give a unit normal, which is why simple.frag normalizes it
@@ -43,6 +46,8 @@ main(void)
 	v_color = clamp(v_color, 0.0, 1.0);
 	v_color *= u_matColor;
 #endif
+
+	v_shadowPos = u_shadowMatrix * Vertex;
 
 	v_fog = DoFog(gl_Position.w);
 }

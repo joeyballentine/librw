@@ -6,6 +6,9 @@ const char *skin_vert_src =
 "VSOUT vec4 v_color;\n"
 "VSOUT vec2 v_tex0;\n"
 "VSOUT float v_fog;\n"
+"// World position in the shadow map's space. Interpolated, then biased into\n"
+"// texture coordinates by the fragment shader.\n"
+"VSOUT vec4 v_shadowPos;\n"
 "#ifdef PERPIXEL\n"
 "// The skinned normal, world space and not normalized. Same output as\n"
 "// default.vert's; both feed simple.frag's PERPIXEL build.\n"
@@ -38,6 +41,8 @@ const char *skin_vert_src =
 "	v_color = clamp(v_color, 0.0, 1.0);\n"
 "	v_color *= u_matColor;\n"
 "#endif\n"
+
+"	v_shadowPos = u_shadowMatrix * Vertex;\n"
 
 "	v_fog = DoFog(gl_Position.w);\n"
 "}\n"

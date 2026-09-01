@@ -139,6 +139,8 @@ int32 u_lightColor;
 
 int32 u_matColor;
 int32 u_surfProps;
+int32 u_shadowMatrix;
+int32 u_shadowParams;
 
 bool32 constantVertexColorWhite;
 
@@ -201,6 +203,43 @@ void
 setDepthPassEnabled(bool32 enable)
 {
 	depthPass = !!enable;
+}
+
+// The shadow map every receiver tests itself against, and the transform that
+// takes a world position into it.
+//
+// Set once a frame, not per draw. setUniform stores into a registry that
+// flushUniforms replays onto whichever shader is next used, so one call reaches
+// every program that reads it.
+//
+// The map goes to texture unit 1 because Shader::create binds tex0..tex3 to
+// units 0..3 by name, and unit 0 is the material's own texture.
+//
+// **Filtering must be nearest.** The map holds depth packed across three bytes,
+// and a linear filter would average the bytes of two unrelated depths and
+// produce a value that is neither. That is the price of packing rather than
+// using a depth texture, and it is why there is no free hardware PCF.
+void
+setShadowMap(Texture *tex, float32 *matrix, float32 bias, float32 strength)
+{
+	setTexture(2, tex);
+
+	setUniform(u_shadowMatrix, matrix);
+
+	float32 params[4];
+	params[0] = tex ? 1.0f : 0.0f;
+	params[1] = bias;
+	params[2] = strength;
+	params[3] = 0.0f;
+	setUniform(u_shadowParams, params);
+}
+
+void
+clearShadowMap(void)
+{
+	float32 params[4] = { 0.0f, 0.0f, 1.0f, 0.0f };
+	setTexture(2, nil);
+	setUniform(u_shadowParams, params);
 }
 
 bool32
@@ -2634,6 +2673,13 @@ initOpenGL(void)
 	u_matColor = registerUniform("u_matColor", UNIFORM_VEC4);
 	u_surfProps = registerUniform("u_surfProps", UNIFORM_VEC4);
 
+	// The shadow map's transform and its knobs. Registered whether or not
+	// anything uses them: a shader that does not mention a uniform gets -1 for
+	// its location and flushUniforms skips it, so this costs nothing until a
+	// shader reads it.
+	u_shadowMatrix = registerUniform("u_shadowMatrix", UNIFORM_MAT4);
+	u_shadowParams = registerUniform("u_shadowParams", UNIFORM_VEC4);
+
 	// for im2d
 	registerUniform("u_xform", UNIFORM_VEC4);
 
@@ -2698,8 +2744,8 @@ initOpenGL(void)
 #include "shaders/lighting_fs.inc"
 	const char *vs[] = { shaderDecl, header_vert_src, default_vert_src, nil };
 	const char *vs_fullLight[] = { shaderDecl, "#define DIRECTIONALS\n#define POINTLIGHTS\n#define SPOTLIGHTS\n", header_vert_src, default_vert_src, nil };
-	const char *fs[] = { shaderDecl, header_frag_src, simple_frag_src, nil };
-	const char *fs_noAT[] = { shaderDecl, "#define NO_ALPHATEST\n", header_frag_src, simple_frag_src, nil };
+	const char *fs[] = { shaderDecl, "#define SHADOWRECEIVER\n", header_frag_src, simple_frag_src, nil };
+	const char *fs_noAT[] = { shaderDecl, "#define SHADOWRECEIVER\n", "#define NO_ALPHATEST\n", header_frag_src, simple_frag_src, nil };
 
 	defaultShader = Shader::create(vs, fs);
 	assert(defaultShader);
@@ -2733,8 +2779,8 @@ initOpenGL(void)
 	// byte for byte the source it was.
 	const char *vs_pp[] = { shaderDecl, "#define PERPIXEL\n", header_vert_src, default_vert_src, nil };
 	const char *vs_uv_pp[] = { shaderDecl, "#define PERPIXEL\n#define UVXFORM\n", header_vert_src, default_vert_src, nil };
-	const char *fs_pp[] = { shaderDecl, "#define PERPIXEL\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
-	const char *fs_pp_noAT[] = { shaderDecl, "#define PERPIXEL\n#define NO_ALPHATEST\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
+	const char *fs_pp[] = { shaderDecl, "#define SHADOWRECEIVER\n", "#define PERPIXEL\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
+	const char *fs_pp_noAT[] = { shaderDecl, "#define SHADOWRECEIVER\n", "#define PERPIXEL\n#define NO_ALPHATEST\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
 
 	defaultShader_pp = Shader::create(vs_pp, fs_pp);
 	assert(defaultShader_pp);

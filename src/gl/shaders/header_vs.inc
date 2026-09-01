@@ -79,6 +79,11 @@ const char *header_vert_src =
 "uniform vec4 u_matColor;\n"
 "uniform vec4 u_surfProps;	// amb, spec, diff, extra\n"
 
+"// World position to shadow map, projection times view of the light camera.\n"
+"// Outside the Object block on purpose: it changes once a frame rather than once\n"
+"// an object, and the UBO and non-UBO builds then share one declaration.\n"
+"uniform mat4 u_shadowMatrix;\n"
+
 "#define surfAmbient (u_surfProps.x)\n"
 "#define surfSpecular (u_surfProps.y)\n"
 "#define surfDiffuse (u_surfProps.z)\n"
