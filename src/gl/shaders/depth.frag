@@ -36,8 +36,28 @@ PackDepth(float d)
 	return vec4(bits, 1.0);
 }
 
+#ifdef TEX
+// The caster's own texture, for casters that cut their shape out of its alpha
+// channel -- fences, grates, foliage, the cave walls.
+//
+// Without this a caster pass that ignores the texture casts the rectangle the
+// shape was cut from, which is the one artifact the world casting made obvious.
+// The V flip matches simple.frag; the two have to agree or a cutout casts a
+// shadow of the wrong half of itself.
+//
+// Only the alpha is read. The colour is irrelevant to a depth value, and
+// DoAlphaTest is the same discard the main pass applies, reading the same
+// u_alphaRef -- so a caster is cut exactly where it is cut on screen.
+uniform sampler2D tex0;
+FSIN vec2 v_tex0;
+#endif
+
 void
 main(void)
 {
+#ifdef TEX
+	DoAlphaTest(texture(tex0, vec2(v_tex0.x, 1.0-v_tex0.y)).a);
+#endif
+
 	FRAGCOLOR(PackDepth(gl_FragCoord.z));
 }

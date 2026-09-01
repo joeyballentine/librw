@@ -127,7 +127,7 @@ extern Shader *defaultShader_pp, *defaultShader_pp_noAT;
 extern Shader *uvXformShader_pp, *uvXformShader_pp_noAT;
 // The caster pass: depth packed into an ordinary colour target. Paired with the
 // plain vertex shader, and with skin.vert's in gl3skin.cpp.
-extern Shader *depthShader;
+extern Shader *depthShader, *depthShader_tex;
 
 // Draw atomics as depth rather than as a picture, for the shadow map's caster
 // pass. While this is on, the default and skin pipelines ignore lighting,

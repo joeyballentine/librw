@@ -34,6 +34,7 @@ Shader *skinShader_pp, *skinShader_pp_noAT;
 // A skinned caster. Shares depth.frag with the unskinned one -- only the
 // vertex stage differs, and only because the bones do.
 Shader *skinDepthShader;
+Shader *skinDepthShader_tex;
 static int32 u_boneMatrices;
 
 void
@@ -268,11 +269,20 @@ skinRenderDepthCB(Atomic *atomic, InstanceDataHeader *header)
 	setupVertexInput(header);
 	uploadSkinMatrices(atomic);
 
-	skinDepthShader->use();
-
 	InstanceData *inst = header->inst;
 	int32 n = header->numMeshes;
 	while(n--){
+		Material *m = inst->material;
+
+		// As in defaultRenderDepthCB: cast the shape the texture cuts, not
+		// the rectangle it was cut from, and let setTexture decide whether
+		// there is anything to cut.
+		if(m->texture){
+			setTexture(0, m->texture);
+			skinDepthShader_tex->use();
+		}else
+			skinDepthShader->use();
+
 		drawInst(header, inst);
 		inst++;
 	}
@@ -371,6 +381,12 @@ skinOpen(void *o, int32, int32)
 		const char *fs_depth[] = { shaderDecl, header_frag_src, depth_frag_src, nil };
 		skinDepthShader = Shader::create(vs, fs_depth);
 		assert(skinDepthShader);
+
+		// And the one that reads the caster's texture, so a skinned caster
+		// cuts its shape out of the alpha channel like anything else.
+		const char *fs_depth_tex[] = { shaderDecl, "#define TEX\n", header_frag_src, depth_frag_src, nil };
+		skinDepthShader_tex = Shader::create(vs, fs_depth_tex);
+		assert(skinDepthShader_tex);
 	}
 
 	createSkinMatFXShaders();
@@ -403,6 +419,8 @@ skinClose(void *o, int32, int32)
 	skinShader_pp_noAT = nil;
 	skinDepthShader->destroy();
 	skinDepthShader = nil;
+	skinDepthShader_tex->destroy();
+	skinDepthShader_tex = nil;
 
 	return o;
 }

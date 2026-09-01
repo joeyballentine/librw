@@ -219,11 +219,27 @@ defaultRenderDepthCB(Atomic *atomic, InstanceDataHeader *header)
 	setWorldMatrix(atomic->getFrame()->getLTM());
 	setupVertexInput(header);
 
-	depthShader->use();
-
 	InstanceData *inst = header->inst;
 	int32 n = header->numMeshes;
 	while(n--){
+		Material *m = inst->material;
+
+		// A caster that cuts its shape out of a texture has to cast that
+		// shape and not the rectangle it was cut from.
+		//
+		// Whether to actually cut is left to setTexture and the shader rather
+		// than decided here. setTexture reads the raster's own alpha kind and
+		// turns the test on or off from it; where it turns it off, u_alphaRef
+		// opens to a range nothing can fall outside and DoAlphaTest discards
+		// nothing. So an opaque texture costs one fetch and changes no pixel,
+		// and asking getAlphaTest() first would only ever read the state of
+		// the PREVIOUS mesh.
+		if(m->texture){
+			setTexture(0, m->texture);
+			depthShader_tex->use();
+		}else
+			depthShader->use();
+
 		drawInst(header, inst);
 		inst++;
 	}

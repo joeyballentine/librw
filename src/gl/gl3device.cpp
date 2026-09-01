@@ -197,6 +197,7 @@ Shader *uvXformShader_fullLight, *uvXformShader_fullLight_noAT;
 Shader *defaultShader_pp, *defaultShader_pp_noAT;
 Shader *uvXformShader_pp, *uvXformShader_pp_noAT;
 Shader *depthShader;
+Shader *depthShader_tex;
 
 static bool32 perPixelLighting;
 static bool32 depthPass;
@@ -2822,6 +2823,14 @@ initOpenGL(void)
 		const char *fs_depth[] = { shaderDecl, header_frag_src, depth_frag_src, nil };
 		depthShader = Shader::create(vs, fs_depth);
 		assert(depthShader);
+
+		// The same again, reading the caster's texture so it can cut its own
+		// shape out of the alpha channel. A second program rather than a
+		// branch: most casters are solid and should not pay for a texture
+		// fetch they do not need.
+		const char *fs_depth_tex[] = { shaderDecl, "#define TEX\n", header_frag_src, depth_frag_src, nil };
+		depthShader_tex = Shader::create(vs, fs_depth_tex);
+		assert(depthShader_tex);
 	}
 
 	openIm2D();
@@ -2864,6 +2873,8 @@ termOpenGL(void)
 	uvXformShader_pp_noAT = nil;
 	depthShader->destroy();
 	depthShader = nil;
+	depthShader_tex->destroy();
+	depthShader_tex = nil;
 
 	glDeleteTextures(1, &whitetex);
 	whitetex = 0;
