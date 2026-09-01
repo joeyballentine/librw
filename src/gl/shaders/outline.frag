@@ -18,6 +18,9 @@ FSIN vec2 v_tex0;
 FSIN float v_fog;
 FSIN vec4 v_shadowPos;
 FSIN vec4 v_outline;
+// How squarely the hull faces the light, for the shadow test. Worked out in the
+// vertex shader from the same normal the inflation used.
+FSIN float v_shadowNdl;
 
 void
 main(void)
@@ -48,9 +51,20 @@ main(void)
 	// the same colour while the surface it surrounds went blue would read as
 	// something laid over the scene rather than part of it. Flat across the
 	// model, like the shading it borders.
-	vec3 room = u_toonRoomTint.w != 0.0 ? u_toonRoomTint.rgb : ToonRoomLight();
+	//
+	// Resolved by setLights before the draw, as the shading's is.
+	vec3 room = u_toonRoomTint.rgb;
 
-	vec4 color = vec4(ink*room, 1.0);
+	// And shadowed like everything else, for the same reason: a line that
+	// stayed lit while the character it surrounds walked into shade would
+	// separate from him.
+	//
+	// The facing test inside ShadowFactorV is doing real work here. The hull is
+	// drawn with its front faces culled, so what is visible is its far side and
+	// the far side is what the caster pass recorded -- every fragment facing
+	// away from the light would compare against its own record and break into
+	// stripes. Those fragments are returned lit instead.
+	vec4 color = vec4(ink*room*ShadowFactorV(v_shadowPos, v_shadowNdl), 1.0);
 
 	// Into the fog like everything else. An outline that stayed black as the
 	// model behind it faded would draw a hard shape around a ghost.

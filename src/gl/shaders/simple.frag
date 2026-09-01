@@ -16,6 +16,9 @@ FSIN float v_shadowNdl;
 #endif
 #ifdef PERPIXEL
 FSIN vec3 v_normal;
+// From the surface towards the eye, world space. The rim light needs it, and
+// ToonHardNormal takes its derivatives as a stand-in for the surface's own.
+FSIN vec3 v_viewDir;
 #endif
 
 void
@@ -36,14 +39,31 @@ main(void)
 		// remove, so every band has a gradient inside it and the whole thing
 		// looks like banding laid over lighting rather than like a drawing.
 		//
-		// So the room contributes its COLOUR and nothing else. ToonRoomLight
+		// So the room contributes its COLOUR and nothing else. u_toonRoomTint
 		// is flat across the model -- how bright and what colour it is in here,
-		// with no direction in it -- and it tints the shadow band alone. The
-		// lit band stays the artwork's own colour whatever the room is doing,
-		// which is what a cel is: one flat tone for the light side, one for the
-		// dark, and the dark one painted to match the background.
-		vec3 L = u_toonLightDir.w != 0.0 ? u_toonLightDir.xyz : ToonKeyDir();
-		vec3 cel = ToonRamp(max(0.0, dot(N, -L)));
+		// with no direction in it -- which is what a cel is: one flat tone for
+		// the light side, one for the dark, and the dark one painted to match
+		// the background.
+		// Where the light travels and what colour it is in here, both
+		// resolved by setLights before the draw -- see lighting.frag.
+		vec3 L = u_toonLightDir.xyz;
+		vec3 room = u_toonRoomTint.rgb;
+
+		// The shading normal, hardened back towards the face's own where the
+		// setting asks. Separate from the one handed to the shadow test, which
+		// wants the interpolated normal and wants it unnormalized.
+		vec3 Ns = ToonHardNormal(N, v_viewDir);
+
+		// **The shadow is an input to the ramp, not a multiply after it.**
+		// See ToonLight in header.frag for why that is the whole difference
+		// between a cast shadow that reads as ink and one that reads as a
+		// gradient laid over a drawing.
+		float sh = 1.0;
+#ifdef SHADOWRECEIVER
+		sh = ShadowFactorN(v_shadowPos, v_normal);
+#endif
+
+		vec3 cel = ToonRamp(ToonLight(Ns, L, ToonOcclusion(v_color.rgb), sh));
 
 		// **The room's colour multiplies BOTH bands, not just the dark one.**
 		//
@@ -55,17 +75,18 @@ main(void)
 		// about white and multiplying by it changes nothing, which is why the
 		// mistake was invisible in the levels it was tuned in.
 		//
-		// Flat across the model either way -- ToonRoomLight has no normal in
-		// it -- so this dims and tints without putting back the smooth falloff
-		// the bands exist to remove.
-		// The level's own room colour where one was handed over -- see
-		// u_toonRoomTint -- and this surface's own lights otherwise.
-		vec3 room = u_toonRoomTint.w != 0.0 ? u_toonRoomTint.rgb : ToonRoomLight();
+		// Flat across the model either way -- there is no normal in it -- so
+		// this dims and tints without putting back the smooth falloff the
+		// bands exist to remove.
+		// 0 is the room's light with the cast shadow and no shading at all,
+		// 1 the ramp at full depth. Not white at 0: an unshaded surface should
+		// still be as bright and as coloured as the room it is in, and it
+		// should still be in shadow when something is over it.
+		color.rgb = room*mix(vec3(sh), cel, toonStrength);
 
-		// 0 is the room's light with no shading at all, 1 the ramp at full
-		// depth. Not white at 0: an unshaded surface should still be as bright
-		// and as coloured as the room it is in.
-		color.rgb = room*mix(vec3(1.0), cel, toonStrength);
+		// The silhouette light, added rather than blended: it is a light, not
+		// a shade, and the room says what colour it is.
+		color.rgb += ToonRimLight(Ns, v_viewDir, room);
 	}else{
 		color.rgb = v_color.rgb;
 		color.rgb += u_ambLight.rgb*surfAmbient;
@@ -78,12 +99,6 @@ main(void)
 #endif
 
 	color *= texture(tex0, vec2(v_tex0.x, 1.0-v_tex0.y));
-
-	// Flattening, on a character and not on the world: the room tint is only
-	// ever handed over for a character, and a painted background does not want
-	// its colours rounded.
-	if(toonEnabled != 0.0 && u_toonRoomTint.w != 0.0)
-		color.rgb = ToonQuantize(color.rgb);
 
 	// After the material and before the fog. Before the fog because a shadow is
 	// a property of the surface and fog is a property of the air in front of it
@@ -103,13 +118,31 @@ main(void)
 	// v_normal and not N: ShadowFactorN wants it unnormalized so it can tell a
 	// missing normal from a real one, and N is already a NaN where there is no
 	// normal to normalize.
-	color.rgb *= ShadowFactorN(v_shadowPos, v_normal);
+	//
+	// Only where the cel path did not already take it. It feeds the same number
+	// into the ramp instead, and applying it twice would square it.
+	if(toonEnabled == 0.0)
+		color.rgb *= ShadowFactorN(v_shadowPos, v_normal);
 #else
 	color.rgb *= ShadowFactorV(v_shadowPos, v_shadowNdl);
 #endif
 #endif
 
 	color.rgb = ToonSaturate(color.rgb);
+
+	// **Flattening is the last thing that happens to the colour.**
+	//
+	// It was done straight after the texture, which put two operations after it
+	// that both move a colour off the levels it was just rounded to: the shadow
+	// multiplied it down by whatever the filter averaged, and the saturation
+	// scaled it. The setting asked for twelve shades and the frame buffer got
+	// however many those two produced. Fog is the only thing allowed after,
+	// because fog is the air and not the surface.
+	//
+	// A character and not the world -- a painted background does not want its
+	// colours rounded.
+	if(toonEnabled != 0.0 && toonIsCharacter != 0.0)
+		color.rgb = ToonQuantize(color.rgb);
 
 	color.rgb = mix(u_fogColor.rgb, color.rgb, v_fog);
 	DoAlphaTest(color.a);

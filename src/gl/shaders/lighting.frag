@@ -49,68 +49,14 @@ uniform vec4 u_surfProps;
 // The same equation as DoDynamicLight's directional arm in header.vert. The two
 // have to stay identical or the setting changes more than where the maths
 // happens.
-// The brightest directional the room has, which is what the bands are measured
-// from when a character is not being lit from his own front.
+// **The key direction and the room colour are not worked out here any more.**
 //
-// The kits are four-light rigs, and banding against each in turn gives four
-// overlapping terminators -- a mess rather than a drawing. One direction gives
-// one edge.
-vec3 ToonKeyDir()
-{
-	vec3 best = vec3(0.0, -1.0, 0.0);
-	float bestLum = -1.0;
-
-	for(int i = 0; i < MAX_LIGHTS; i++){
-		if(u_lightParams[i].x == 0.0)
-			break;
-		if(u_lightParams[i].x == 1.0){
-			float lum = dot(u_lightColor[i].rgb, vec3(1.0));
-			if(lum > bestLum){
-				bestLum = lum;
-				best = u_lightDirection[i].xyz;
-			}
-		}
-	}
-
-	return best;
-}
-
-// What colour and how bright this room is, with no direction in it.
-//
-// Every light added up as if the surface faced all of them at once, which is a
-// meaningless quantity for lighting a surface and exactly the right one for
-// asking what colour it is in here. Nothing here depends on the normal, so it
-// is flat across a model -- which is the point: it is used to tint the shadow
-// band, and a tint that varied per pixel would put the smooth falloff back.
-vec3 ToonRoomLight()
-{
-	vec3 color = u_ambLight.rgb*surfAmbient;
-
-	for(int i = 0; i < MAX_LIGHTS; i++){
-		if(u_lightParams[i].x == 0.0)
-			break;
-		if(u_lightParams[i].x == 1.0)
-			color += u_lightColor[i].rgb*surfDiffuse;
-	}
-
-	// **Scaled down to fit, not clipped per channel.**
-	//
-	// Rock Bottom is lit by an ambient of 0.29 0.51 0.64 -- blue, and carrying
-	// nearly all of the light, since its directional is almost nothing. Raise
-	// that by the intensity setting and green and blue both pass 1 while red
-	// does not, so a per-channel clamp flattens the two of them together and
-	// the room comes out washed cyan. The hue is destroyed exactly when the
-	// light is bright and coloured, which is when it matters.
-	//
-	// Dividing by the largest channel keeps the ratios and only caps the
-	// brightness, so a blue room stays as blue as it was authored.
-	float m = max(color.r, max(color.g, color.b));
-
-	if(m > 1.0)
-		color /= m;
-
-	return max(color, 0.0);
-}
+// Both are per-draw quantities and neither depends on the normal, so looping
+// over eight lights in every pixel to find them was eight comparisons per
+// fragment for two numbers that do not change across the model. gl3device.cpp
+// resolves them in setLights, where the lights are already in hand, and the
+// shader reads u_toonLightDir and u_toonRoomTint. The D3D9 backend has always
+// done it that way because ps_2_0 has no loops; this is GL3 catching up.
 
 vec3 DoDynamicLightPP(vec3 N)
 {

@@ -150,6 +150,7 @@ int32 u_toonLightDir;
 int32 u_outlineFlags;
 int32 u_toonRoomTint;
 int32 u_toonExtra;
+int32 u_toonExtra2;
 
 bool32 constantVertexColorWhite;
 
@@ -307,20 +308,63 @@ static bool32 toonRegistered;
 // u_outlineFlags.
 static float32 outlineFlags[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
-// The room a character is standing in, in xyz, with w as the switch. See
-// u_toonRoomTint.
-static float32 toonRoomTint[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
+// What colour it is in here. Either the room the scene handed over for a
+// character or, failing that, what setLights worked out from the lights
+// themselves -- so it always holds an answer and the shader never has to ask.
+//
+// **w is not the switch any more.** It was, back when an unset tint meant the
+// shader should go and sum the lights itself; now that nothing is unset, which
+// draws are characters is a separate fact and lives in u_toonExtra.z.
+static float32 toonRoomTint[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
-// How flat a character's colours are cut. See u_toonExtra.
+// Whether the scene named the room for this draw. setLights leaves a named one
+// alone and fills in the rest.
+static bool32 toonRoomSet;
+
+// x how flat a character's colours are cut, y which ramp row he is drawn with,
+// z whether this draw is a character at all, w how far the light term is
+// wrapped round the far side. See u_toonExtra.
 static float32 toonExtra[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+// x rim strength, y where the rim starts, z how far the baked colour darkens
+// the lookup, w how hard the shading edges are. See u_toonExtra2.
+static float32 toonExtra2[4] = { 0.0f, 0.65f, 0.0f, 0.0f };
+
+static void
+pushToonExtra(void)
+{
+	if(toonRegistered){
+		setUniform(u_toonExtra, toonExtra);
+		setUniform(u_toonExtra2, toonExtra2);
+	}
+}
 
 void
 setToonFlatten(float32 colors)
 {
 	toonExtra[0] = colors;
+	pushToonExtra();
+}
 
-	if(toonRegistered)
-		setUniform(u_toonExtra, toonExtra);
+void
+setToonLook(float32 wrap, float32 rim, float32 rimEdge, float32 occlusion,
+            float32 hardness)
+{
+	toonExtra[3] = wrap;
+	toonExtra2[0] = rim;
+	toonExtra2[1] = rimEdge;
+	toonExtra2[2] = occlusion;
+	toonExtra2[3] = hardness;
+	pushToonExtra();
+}
+
+// Which of the stacked ramps this draw reads. Set per atomic by the game, and
+// meaningless to anything that is not drawing a character.
+void
+setToonRampRow(int32 row)
+{
+	toonExtra[1] = (float32)row;
+	pushToonExtra();
 }
 
 // The outline's colour, and its thickness in world units in alpha. Zero
@@ -343,9 +387,14 @@ static float32 outlineColor2[4] = { 0.0f, 0.0f, 0.0f, -1e30f };
 // is, so only the game can say.
 static int32 outlineMode;
 
-// Where a character's own light comes from, in world space, with w as the
-// switch. See u_toonLightDir in header.vert for what it is for.
-static float32 toonLightDir[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+// Where the light travels, in world space. Either the direction the game named
+// for a character -- his own front, or the camera -- or, failing that, the
+// brightest directional in the room, resolved by setLights. As with the room
+// colour, it always holds an answer.
+static float32 toonLightDir[4] = { 0.0f, -1.0f, 0.0f, 1.0f };
+
+// Whether the game named it for this draw.
+static bool32 toonLightDirSet;
 
 void
 setToonRoomTint(float32 r, float32 g, float32 b)
@@ -353,20 +402,24 @@ setToonRoomTint(float32 r, float32 g, float32 b)
 	toonRoomTint[0] = r;
 	toonRoomTint[1] = g;
 	toonRoomTint[2] = b;
-	toonRoomTint[3] = 1.0f;
+	toonRoomSet = 1;
+
+	// The scene only ever names a room for a character, so the same call says
+	// so. Everything that is wrong on a background -- the flattening, the rim,
+	// the baked occlusion, the hardened normals -- hangs off this.
+	toonExtra[2] = 1.0f;
 
 	if(toonRegistered)
 		setUniform(u_toonRoomTint, toonRoomTint);
-	setUniform(u_toonExtra, toonExtra);
+	pushToonExtra();
 }
 
 void
 clearToonRoomTint(void)
 {
-	toonRoomTint[3] = 0.0f;
-
-	if(toonRegistered)
-		setUniform(u_toonRoomTint, toonRoomTint);
+	toonRoomSet = 0;
+	toonExtra[2] = 0.0f;
+	pushToonExtra();
 }
 
 void
@@ -375,21 +428,16 @@ setToonLightDir(float32 x, float32 y, float32 z)
 	toonLightDir[0] = x;
 	toonLightDir[1] = y;
 	toonLightDir[2] = z;
-	toonLightDir[3] = 1.0f;
+	toonLightDirSet = 1;
 
 	if(toonRegistered)
 		setUniform(u_toonLightDir, toonLightDir);
-	setUniform(u_outlineFlags, outlineFlags);
-	setUniform(u_toonRoomTint, toonRoomTint);
 }
 
 void
 clearToonLightDir(void)
 {
-	toonLightDir[3] = 0.0f;
-
-	if(toonRegistered)
-		setUniform(u_toonLightDir, toonLightDir);
+	toonLightDirSet = 0;
 }
 
 void
@@ -414,6 +462,20 @@ setOutlineFlat(bool32 upper, bool32 lower)
 		setUniform(u_outlineFlags, outlineFlags);
 }
 
+// The floor under the hull's width, as world units per unit of view depth.
+//
+// The application works it out because the sum needs the camera's view window
+// and the size of the picture, and the renderer knows neither. See default.vert
+// for what the shader does with it.
+void
+setOutlineMinWidth(float32 perDepth)
+{
+	outlineFlags[2] = perDepth < 0.0f ? 0.0f : perDepth;
+
+	if(toonRegistered)
+		setUniform(u_outlineFlags, outlineFlags);
+}
+
 void
 setOutlineLower(float32 r, float32 g, float32 b)
 {
@@ -423,7 +485,6 @@ setOutlineLower(float32 r, float32 g, float32 b)
 
 	if(toonRegistered)
 		setUniform(u_outlineColor2, outlineColor2);
-	setUniform(u_toonLightDir, toonLightDir);
 }
 
 // Where the two inks meet on this model, in object space.
@@ -453,7 +514,6 @@ setOutline(float32 r, float32 g, float32 b, float32 thickness)
 
 	if(toonRegistered)
 		setUniform(u_outlineColor, outlineColor);
-	setUniform(u_outlineColor2, outlineColor2);
 }
 
 // The colour strip the light term looks up. Bound to stage 3 and left there:
@@ -1860,6 +1920,67 @@ setLights(WorldLights *lightData)
 	// put it in. A full array needs none: the loop runs out on its own.
 	uniformObject.lightParams[n].type = 0.0f;
 out:
+	// The two things the toon pixel shader would otherwise loop for.
+	//
+	// Neither depends on the normal, so neither varies across a model, and
+	// finding them per pixel was eight comparisons a fragment for two numbers
+	// that were already settled here. The key is the brightest directional. The
+	// room is every light summed as if the surface faced all of them at once --
+	// a meaningless quantity for lighting a surface and the right one for
+	// asking what colour it is in here -- scaled down to fit rather than
+	// clamped per channel, so Rock Bottom stays blue instead of clipping cyan.
+	//
+	// The D3D9 backend has always done it this way because ps_2_0 has neither
+	// loops nor branches. This is the same arithmetic, in the same place.
+	if(toonParams[0] != 0.0f){
+		float32 room[3];
+		float32 bestLum = -1.0f;
+
+		room[0] = uniformObject.ambLight.red;
+		room[1] = uniformObject.ambLight.green;
+		room[2] = uniformObject.ambLight.blue;
+
+		for(i = 0; i < lightData->numDirectionals && i < 8; i++){
+			l = lightData->directionals[i];
+
+			float32 r = l->color.red*lightIntensity;
+			float32 g = l->color.green*lightIntensity;
+			float32 b = l->color.blue*lightIntensity;
+
+			room[0] += r;
+			room[1] += g;
+			room[2] += b;
+
+			if(!toonLightDirSet && r + g + b > bestLum){
+				bestLum = r + g + b;
+				V3d *at = &l->getFrame()->getLTM()->at;
+				toonLightDir[0] = at->x;
+				toonLightDir[1] = at->y;
+				toonLightDir[2] = at->z;
+			}
+		}
+
+		if(!toonRoomSet){
+			float32 m = room[0];
+
+			if(room[1] > m) m = room[1];
+			if(room[2] > m) m = room[2];
+
+			if(m > 1.0f){
+				room[0] /= m;
+				room[1] /= m;
+				room[2] /= m;
+			}
+
+			toonRoomTint[0] = room[0] < 0.0f ? 0.0f : room[0];
+			toonRoomTint[1] = room[1] < 0.0f ? 0.0f : room[1];
+			toonRoomTint[2] = room[2] < 0.0f ? 0.0f : room[2];
+		}
+
+		setUniform(u_toonLightDir, toonLightDir);
+		setUniform(u_toonRoomTint, toonRoomTint);
+	}
+
 	// Reached by the gotos above as well, which is the point. They used to jump
 	// PAST these, so an atomic lit by exactly MAX_LIGHTS lights filled
 	// uniformObject and then uploaded none of it -- it drew with whatever the
@@ -2964,9 +3085,24 @@ initOpenGL(void)
 	u_outlineFlags = registerUniform("u_outlineFlags", UNIFORM_VEC4);
 	u_toonRoomTint = registerUniform("u_toonRoomTint", UNIFORM_VEC4);
 	u_toonExtra = registerUniform("u_toonExtra", UNIFORM_VEC4);
+	u_toonExtra2 = registerUniform("u_toonExtra2", UNIFORM_VEC4);
 	toonRegistered = 1;
+
+	// **Every one of them, and only once there is somewhere to put them.**
+	//
+	// The setters above run before Engine::open -- they are settings, read at
+	// startup -- so each holds its value back and this is where the held values
+	// go in. Two of these used to be pushed here and the rest reached the
+	// shader by accident, through stray uploads in unrelated setters that fell
+	// outside their own guard; the accident is gone and so is what it covered.
 	setUniform(u_toonParams, toonParams);
 	setUniform(u_outlineColor, outlineColor);
+	setUniform(u_outlineColor2, outlineColor2);
+	setUniform(u_outlineFlags, outlineFlags);
+	setUniform(u_toonLightDir, toonLightDir);
+	setUniform(u_toonRoomTint, toonRoomTint);
+	setUniform(u_toonExtra, toonExtra);
+	setUniform(u_toonExtra2, toonExtra2);
 
 	// for im2d
 	registerUniform("u_xform", UNIFORM_VEC4);

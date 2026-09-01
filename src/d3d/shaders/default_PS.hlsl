@@ -18,6 +18,13 @@ struct VS_out {
 #if defined(PERPIXEL) || defined(TOON)
 	float3 Normal		: TEXCOORD1;
 #endif
+#ifdef TOON
+	// From the surface towards the eye, world space. The rim light needs it,
+	// and ToonHardNormal takes its derivatives as a stand-in for the surface's
+	// own. Written by the per-pixel vertex shader, which is the one the toon
+	// path runs with.
+	float3 ViewDir		: TEXCOORD2;
+#endif
 };
 
 sampler2D tex0 : register(s0);
@@ -34,9 +41,19 @@ float4 main(VS_out input) : COLOR
 	// putting back the smooth falloff the bands exist to remove. See
 	// simple.frag on the GL3 side; this is the same arithmetic.
 	float3 N = normalize(input.Normal);
-	float3 cel = ToonRamp(saturate(dot(N, -toonLightDir.xyz)));
+
+	// The shading normal, hardened back towards the face's own where the
+	// setting asks -- welding softened corners that should break.
+	float3 Ns = ToonHardNormal(N, input.ViewDir);
+
+	float3 cel = ToonRamp(ToonLight(Ns, toonLightDir.xyz,
+	                                ToonOcclusion(input.Color.rgb)));
 
 	color.rgb = toonRoom.rgb * lerp(float3(1.0, 1.0, 1.0), cel, toonStrength);
+
+	// The silhouette light, added rather than blended: it is a light, not a
+	// shade, and the room says what colour it is.
+	color.rgb += ToonRimLight(Ns, input.ViewDir, toonRoom.rgb);
 	color.a *= ppMatCol.a;
 #elif defined(PERPIXEL)
 	// The vertex shader handed over the prelight and a normal and did nothing
@@ -68,12 +85,20 @@ float4 main(VS_out input) : COLOR
 	color *= tex2D(tex0, input.TexCoord0.xy);
 #endif
 #ifdef TOON
-	// Flattening, on a character and not on the world: the room tint is only
-	// ever handed over for a character.
-	if(toonRoom.w != 0.0)
-		color.rgb = ToonQuantize(color.rgb);
-
 	color.rgb = ToonSaturate(color.rgb);
+
+	// **Flattening is the last thing that happens to the colour.**
+	//
+	// It used to run straight after the texture, which left the saturation to
+	// scale it off the levels it had just been rounded to: the setting asked
+	// for twelve shades and the frame buffer got however many came out the
+	// other end. Fog is the only thing allowed after, because fog is the air
+	// and not the surface.
+	//
+	// A character and not the world -- a painted background does not want its
+	// colours rounded.
+	if(toonIsCharacter != 0.0)
+		color.rgb = ToonQuantize(color.rgb);
 #endif
 
 	color.rgb = lerp(fogColor.rgb, color.rgb, input.TexCoord0.z);

@@ -25,8 +25,15 @@ rem the rest, so there is nothing for DIRECTIONALS to switch on.
 rem The cel look. TOON replaces the lighting rather than adding to it, so it
 rem needs no light loop and is cheaper than the path it stands in for -- but
 rem ps_2_0 has no branches, so it has to be its own program rather than an if.
-"%FXC%" /nologo /T ps_2_0 /DTOON /Fh default_toon_PS.h default_PS.hlsl
-"%FXC%" /nologo /T ps_2_0 /DTOON /DTEX /Fh default_tex_toon_PS.h default_PS.hlsl
+rem
+rem **ps_3_0 and not ps_2_0, alone among these.** Antialiasing a band edge
+rem needs to know how fast the light term is changing across the screen, which
+rem is ddx and ddy, and ps_2_0 has no derivative instructions at all. That makes
+rem the toon path want Shader Model 3 hardware -- a 2004 card -- where the rest
+rem of the renderer does not. It is a setting, and one that is off by default,
+rem so the cost falls only on whoever turns it on.
+"%FXC%" /nologo /T ps_3_0 /DTOON /Fh default_toon_PS.h default_PS.hlsl
+"%FXC%" /nologo /T ps_3_0 /DTOON /DTEX /Fh default_tex_toon_PS.h default_PS.hlsl
 
 rem The inverted hull, and the flat ink that goes round it.
 "%FXC%" /nologo /T vs_2_0 /DOUTLINE /Fh outline_VS.h default_VS.hlsl

@@ -14,14 +14,19 @@ VSOUT vec4 v_shadowPos;
 // middle of triangles, so an interpolated colour blends the two over a band of
 // a few pixels instead of stepping mid-face.
 VSOUT vec4 v_outline;
+// How squarely the hull faces the light. outline.frag shadows the ink with it.
+VSOUT float v_shadowNdl;
 #endif
 #ifdef PERPIXEL
 // The skinned normal, world space and not normalized. Same output as
 // default.vert's; both feed simple.frag's PERPIXEL build.
 VSOUT vec3 v_normal;
-#else
+// And the eye vector, as default.vert declares it.
+VSOUT vec3 v_viewDir;
+#elif !defined(OUTLINE)
 // How squarely this vertex faces the light, for the shadow test. As in
-// default.vert, and for the same reason.
+// default.vert, and for the same reason -- and as there, the OUTLINE build
+// declares it above instead.
 VSOUT float v_shadowNdl;
 #endif
 
@@ -46,7 +51,23 @@ main(void)
 	// In world units, so the band is thicker up close and thinner far away --
 	// which is what a drawn line does NOT do, but scaling by depth instead
 	// makes distant characters look inked in marker.
-	Vertex.xyz += normalize(Normal)*u_outlineColor.a;
+	//
+	// **With a floor in screen units, because the alternative is no line.** A
+	// fixed world width goes below a pixel somewhere down the level and the
+	// character simply stops being inked, which is the one thing an animated
+	// drawing never does. u_outlineFlags.z is that floor already divided
+	// through by the camera and the render height -- the game works it out,
+	// because only the game knows both -- so multiplying by clip w, which is
+	// view depth, gives the world width that covers those pixels here.
+	vec4 clipBase = u_proj * u_view * Vertex;
+	float thickness = max(u_outlineColor.a,
+	                      u_outlineFlags.z*max(clipBase.w, 1e-4));
+
+	Vertex.xyz += normalize(Normal)*thickness;
+
+	// The hull's own facing, for the shadow the ink takes. The normal is in
+	// hand here and the fragment stage has no other way to get it.
+	v_shadowNdl = DoShadowNdl(Normal);
 
 	// Which of the two inks this vertex belongs to, decided here rather than
 	// in a second pass over the whole model: a vertex shader can branch, and
@@ -71,6 +92,16 @@ main(void)
 #ifdef PERPIXEL
 	// As in default.vert: the lighting moves to the fragment shader whole.
 	v_normal = Normal;
+
+	// And the eye vector with it, worked out the same way.
+	{
+		vec3 t = u_view[3].xyz;
+		vec3 camPos = -vec3(dot(u_view[0].xyz, t),
+		                    dot(u_view[1].xyz, t),
+		                    dot(u_view[2].xyz, t));
+
+		v_viewDir = camPos - Vertex.xyz;
+	}
 #else
 	v_color.rgb += u_ambLight.rgb*surfAmbient;
 	v_color.rgb += DoDynamicLight(Vertex.xyz, Normal)*surfDiffuse;

@@ -176,13 +176,26 @@ uniform vec4 u_toonLightDir;
 // same palette, so a character standing in a blue room is drawn blue.
 uniform vec4 u_toonRoomTint;
 
-// Two more of the look, both about flattening rather than lighting.
+// The rest of the look, in two vectors because a uniform is four floats and
+// there are seven things.
 //
-// x is how many shades a character's colours are cut down to, 0 to leave them
-// alone. The rest is spare.
+// **toonIsCharacter is the gate on everything that is not lighting.** The world
+// and the characters take the same shading path, and most of what follows is
+// wrong on a background: a painted backdrop does not want its colours rounded,
+// does not want a rim, and has no baked occlusion worth reading. The scene sets
+// it per draw, on the same call that hands over the room colour.
 uniform vec4 u_toonExtra;
+uniform vec4 u_toonExtra2;
 
 #define toonColors (u_toonExtra.x)
+#define toonRampRow (u_toonExtra.y)
+#define toonIsCharacter (u_toonExtra.z)
+#define toonWrap (u_toonExtra.w)
+
+#define toonRim (u_toonExtra2.x)
+#define toonRimEdge (u_toonExtra2.y)
+#define toonOcclusion (u_toonExtra2.z)
+#define toonHardness (u_toonExtra2.w)
 
 
 // The stylised look, off unless the application asks for it.
@@ -214,11 +227,142 @@ uniform vec4 u_toonParams;
 // tex3, above the material texture, the environment map and the shadow map.
 uniform sampler2D tex3;
 
+// How many ramps are stacked in the strip. iToon.cpp builds them and the game
+// picks a row per draw -- skin does not band like sheet metal.
+#define TOON_RAMP_ROWS 4.0
+
+vec3 ToonRampAt(float l)
+{
+	// Half a texel in on both axes, so the two ends of a row sample their own
+	// colour rather than blending with the clamp, and a row samples itself
+	// rather than the one above it.
+	return texture(tex3, vec2(clamp(l, 0.02, 0.98),
+	                          (toonRampRow + 0.5)/TOON_RAMP_ROWS)).rgb;
+}
+
+// The ramp, sampled across one pixel of the light term rather than at a point.
+//
+// **A band edge is a step function and a step function aliases.** The strip is
+// point sampled on purpose -- filtering it would turn every band back into the
+// gradient the bands exist to replace -- so the hard edge is real, and at one
+// sample per pixel it crawls along a character as he walks. What is wanted is
+// the edge kept hard in the SURFACE and resolved smoothly on the SCREEN, which
+// is what a coverage estimate gives.
+//
+// fwidth is how much the light term changes between this pixel and the next, so
+// four taps spread across it are four samples of what this pixel actually
+// covers. Where the term is flat the taps land in the same band and nothing
+// changes; where it crosses an edge they straddle it and the average is the
+// fraction of the pixel on each side.
+//
+// Capped, because the generated world normals jump at seams and an uncapped
+// spread there would smear a band across half a wall.
 vec3 ToonRamp(float l)
 {
-	// Half a texel in, so the two ends of the strip sample their own colour
-	// rather than blending with the clamp.
-	return texture(tex3, vec2(clamp(l, 0.02, 0.98), 0.5)).rgb;
+	float w = min(fwidth(l), 0.08);
+
+	return 0.25*(ToonRampAt(l - 0.375*w) + ToonRampAt(l - 0.125*w) +
+	             ToonRampAt(l + 0.125*w) + ToonRampAt(l + 0.375*w));
+}
+
+// What the ramp is indexed by: the facing, wrapped, occluded and shadowed.
+//
+// **Everything that darkens a surface belongs on this side of the lookup.**
+// Multiplying a shadow into the colour AFTER the ramp lays a smooth
+// nine-tap gradient over a picture whose whole point is that it has none. Put
+// in here instead, a cast shadow lands in the same flat band as the shading
+// shadow and the two are indistinguishable -- which is what a drawing does with
+// them.
+float ToonLight(vec3 N, vec3 L, float occlusion, float shadow)
+{
+	float ndl = dot(N, -L);
+
+	// Wrapped, if asked. max() collapses the whole far hemisphere to zero, so
+	// the ramp has one value to say about all of it; the half-lambert remap
+	// spreads that hemisphere over the bottom half of the strip instead and
+	// gives it somewhere to put a second dark tone.
+	float l = mix(max(0.0, ndl), 0.5 + 0.5*ndl, toonWrap);
+
+	return clamp(l*occlusion*shadow, 0.0, 1.0);
+}
+
+// How much light the artists said reaches this vertex, as a scale on the term.
+//
+// The models carry a baked colour per vertex, and under a chin or inside a fold
+// it is dark -- occlusion somebody drew, which no light rig recovers and which
+// the toon path otherwise throws away whole. Reading it as a bias on the
+// lookup is the same idea as the vertex-colour threshold offset every cel
+// renderer of this kind has.
+//
+// Geometry with no baked colour reads as black, and black here would black the
+// model out, so nothing is what an absent value means.
+float ToonOcclusion(vec3 prelit)
+{
+	if(toonOcclusion <= 0.0 || toonIsCharacter == 0.0)
+		return 1.0;
+
+	float v = max(prelit.r, max(prelit.g, prelit.b));
+
+	if(v < 1.0/255.0)
+		return 1.0;
+
+	return mix(1.0, v, toonOcclusion);
+}
+
+// A hard edge of light along the silhouette, in the colour of the room.
+//
+// Cheap, and the thing that keeps a dark character readable against a dark
+// background -- which the show does by simply not drawing the two in the same
+// value. Stepped rather than faded, like everything else here, and antialiased
+// against its own derivative for the same reason ToonRamp is.
+//
+// Characters only. A rim on the world would draw a bright line along every wall
+// the camera happens to see edge-on.
+vec3 ToonRimLight(vec3 N, vec3 V, vec3 room)
+{
+	if(toonRim <= 0.0 || toonIsCharacter == 0.0)
+		return vec3(0.0);
+
+	float f = 1.0 - clamp(dot(N, normalize(V)), 0.0, 1.0);
+	float w = max(fwidth(f), 1.0/255.0);
+
+	return room*(toonRim*smoothstep(toonRimEdge - w, toonRimEdge + w, f));
+}
+
+// The face's own normal, from how the surface moves across the triangle.
+//
+// **Welding took the hard edges out of the shading and this is what puts them
+// back.** The hull needs one normal per position or the inflated copy cracks
+// open at every corner, so iToon.cpp averages them -- and that same average is
+// what lights the surface, which rounds off exactly the corners a drawing wants
+// square. SpongeBob is a box; his corners should break, not blend.
+//
+// V is the vector to the eye, so its derivatives are the surface's negated, and
+// the cross product of two negated vectors is unchanged. The sign is settled
+// against the vertex normal below either way, because a derivative follows the
+// winding and a normal does not.
+//
+// Not free of a trade, and worth stating: this hardens EVERY triangle boundary
+// and not only the ones that were split, so a curved limb facets. The bands
+// hide most of it. How far it goes is a setting because no shader can see which
+// edges the artist meant.
+vec3 ToonHardNormal(vec3 N, vec3 V)
+{
+	if(toonHardness <= 0.0 || toonIsCharacter == 0.0)
+		return N;
+
+	vec3 Ng = cross(dFdx(V), dFdy(V));
+	float len2 = dot(Ng, Ng);
+
+	if(len2 < 1e-20)
+		return N;
+
+	Ng *= inversesqrt(len2);
+
+	if(dot(Ng, N) < 0.0)
+		Ng = -Ng;
+
+	return normalize(mix(N, Ng, toonHardness));
 }
 
 
@@ -265,8 +409,19 @@ vec3 ToonSaturate(vec3 c)
 		return c;
 
 	float l = dot(c, vec3(0.299, 0.587, 0.114));
+	vec3 s = max(mix(vec3(l), c, toonSaturation), 0.0);
 
-	return clamp(mix(vec3(l), c, toonSaturation), 0.0, 1.0);
+	// **Scaled down to fit, not clipped per channel** -- the same rule as
+	// ToonQuantize and as the room colour, and for the same reason. Pushing
+	// away from grey is what drives a channel past one, so clamping each on its
+	// own shifts the hue of exactly the colours the setting was turned up for:
+	// a saturated yellow clips red and green together and drifts orange.
+	float m = max(s.r, max(s.g, s.b));
+
+	if(m > 1.0)
+		s /= m;
+
+	return s;
 }
 
 void DoAlphaTest(float a)

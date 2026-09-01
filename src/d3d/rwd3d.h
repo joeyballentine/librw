@@ -102,6 +102,18 @@ void setToonRamp(Texture *tex);
 // How many shades a character's colours are cut down to, keeping their hue. 0
 // leaves them alone; the world is never touched.
 void setToonFlatten(float32 colors);
+
+// The rest of the look, none of which is lighting. See rwgl3.h, which declares
+// the same call and says what each argument does.
+void setToonLook(float32 wrap, float32 rim, float32 rimEdge, float32 occlusion,
+                 float32 hardness);
+
+// Which of the stacked ramps the next draw is shaded with.
+void setToonRampRow(int32 row);
+
+// A floor under the hull's width, in world units per unit of view depth, so a
+// distant character keeps a line instead of losing it below a pixel.
+void setOutlineMinWidth(float32 perDepth);
 void setToonRoomTint(float32 r, float32 g, float32 b);
 void clearToonRoomTint(void);
 void setToonLightDir(float32 x, float32 y, float32 z);
@@ -130,10 +142,16 @@ enum
 	PSLOC_toonLightDir = 28,
 	PSLOC_toonRoom = 29,
 	PSLOC_toonExtra = 30,
+	PSLOC_toonExtra2 = 31,
 
 	VSLOC_outlineColor = 233,
 	VSLOC_outlineColor2 = 234,
-	VSLOC_outlineFlags = 235
+	VSLOC_outlineFlags = 235,
+
+	// Where the camera is. The toon pixel shader wants the vector from the
+	// surface to the eye, and a vertex shader here has no view matrix to
+	// recover it from -- combinedMat has already swallowed the projection.
+	VSLOC_toonCamPos = 236
 };
 
 extern void *default_toon_PS;

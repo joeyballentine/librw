@@ -202,9 +202,6 @@ enum OutlineMode
 // choosing rather than from the scene's lights, keeping their colour. For
 // characters, whose shading in a cartoon describes their shape and not the room
 // -- see u_toonLightDir in header.vert.
-// Paint what is drawn next in the colour of the room, rather than in the
-// colour of the lights that happen to reach it. A level lights its world and
-// its objects with different rigs; a cartoon does not.
 // How many shades a character's colours are cut down to, keeping their hue. 0
 // leaves them alone.
 //
@@ -212,6 +209,30 @@ enum OutlineMode
 // because a painted background does not want its colours rounded.
 void setToonFlatten(float32 colors);
 
+// The rest of the look, none of which is lighting.
+//
+//   wrap       how far the light term is carried round the far side, 0 for the
+//              plain lambert that collapses all of it into one value.
+//   rim        how bright an edge of light runs along the silhouette.
+//   rimEdge    how far round the silhouette that edge starts.
+//   occlusion  how far the colour baked into a model darkens its own shading.
+//   hardness   how far the shading normal is pulled back towards the face's
+//              own, undoing what welding the outline normals softened.
+//
+// Characters only, all of it, apart from the wrap.
+void setToonLook(float32 wrap, float32 rim, float32 rimEdge, float32 occlusion,
+                 float32 hardness);
+
+// Which of the stacked ramps the next draw is shaded with. Skin does not band
+// like sheet metal, and the strip holds a row for each.
+void setToonRampRow(int32 row);
+
+// Paint what is drawn next in the colour of the room, rather than in the
+// colour of the lights that happen to reach it. A level lights its world and
+// its objects with different rigs; a cartoon does not.
+//
+// This also says the next draw IS a character -- nothing else is ever given a
+// room -- which is what gates the flattening, the rim and the rest.
 void setToonRoomTint(float32 r, float32 g, float32 b);
 void clearToonRoomTint(void);
 
@@ -239,6 +260,11 @@ void setOutlineLower(float32 r, float32 g, float32 b);
 // of himself, which is most of them; flat suits one whose is not.
 void setOutlineFlat(bool32 upper, bool32 lower);
 void setOutlineSplit(float32 y);
+
+// A floor under the hull's width, in world units per unit of view depth, so a
+// distant character keeps a line instead of losing it below a pixel. The
+// application works the number out; it needs the camera and the render size.
+void setOutlineMinWidth(float32 perDepth);
 
 // The strip of colour the light term looks up in place of being multiplied in
 // directly -- band count, widths and colours all live in the texture. nil

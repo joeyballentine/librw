@@ -22,6 +22,11 @@ IDirect3DDevice9 *d3ddevice = nil;
 
 #define VS_NAME g_vs20_main
 #define PS_NAME g_ps20_main
+
+// fxc names the blob after the profile it compiled for, and the toon pixel
+// shaders are the only ones built as ps_3_0 -- they need the derivative
+// instructions ps_2_0 does not have. See make_default.cmd.
+#define PS3_NAME g_ps30_main
 void *default_amb_VS;
 void *default_amb_dir_VS;
 void *default_all_VS;
@@ -105,15 +110,26 @@ createDefaultShaders(void)
 	{
 		static
 #include "shaders/default_toon_PS.h"
-		default_toon_PS = createPixelShader((void*)PS_NAME);
+		default_toon_PS = createPixelShader((void*)PS3_NAME);
 		assert(default_toon_PS);
 	}
 	{
 		static
 #include "shaders/default_tex_toon_PS.h"
-		default_tex_toon_PS = createPixelShader((void*)PS_NAME);
+		default_tex_toon_PS = createPixelShader((void*)PS3_NAME);
 		assert(default_tex_toon_PS);
 	}
+
+	// **Said out loud, because these two are the only ps_3_0 shaders here.**
+	//
+	// createPixelShader hands back nil on a device that will not have it, and
+	// the asserts above are compiled out of a release build -- so a card
+	// without Shader Model 3 would take the cel path and draw it with no pixel
+	// shader at all, which is a black screen with no explanation anywhere.
+	// Everything else in the renderer is ps_2_0 and unaffected.
+	if(default_toon_PS == nil || default_tex_toon_PS == nil)
+		printf("bfbb: this card has no Shader Model 3; the cel look needs it "
+		       "for its antialiased bands. Turn video.toon off.\n");
 	{
 		static
 #include "shaders/outline_VS.h"
@@ -390,8 +406,14 @@ void *outline_PS;
 static float32 toonParams[4] = { 0.0f, 3.0f, 1.0f, 0.0f };
 static float32 toonLightDir[4] = { 0.0f, -1.0f, 0.0f, 0.0f };
 static float32 toonRoom[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
-// How flat a character's colours are cut. See toonConstants.h.
+// x how flat a character's colours are cut, y which ramp row he is drawn with,
+// z whether this draw is a character at all, w how far the light term is
+// wrapped round the far side. See toonConstants.h.
 static float32 toonExtra[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+// x rim strength, y where the rim starts, z how far the baked colour darkens
+// the lookup, w how hard the shading edges are.
+static float32 toonExtra2[4] = { 0.0f, 0.65f, 0.0f, 0.0f };
 static float32 outlineColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 static float32 outlineColor2[4] = { 0.0f, 0.0f, 0.0f, -1.0e30f };
 static float32 outlineFlags[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -427,6 +449,32 @@ setToonFlatten(float32 colors)
 }
 
 void
+setToonLook(float32 wrap, float32 rim, float32 rimEdge, float32 occlusion,
+            float32 hardness)
+{
+	toonExtra[3] = wrap;
+	toonExtra2[0] = rim;
+	toonExtra2[1] = rimEdge;
+	toonExtra2[2] = occlusion;
+	toonExtra2[3] = hardness;
+}
+
+void
+setToonRampRow(int32 row)
+{
+	toonExtra[1] = (float32)row;
+}
+
+// The floor under the hull's width, as world units per unit of view depth. The
+// application works it out; the sum needs the camera's view window and the size
+// of the picture, and neither is known here.
+void
+setOutlineMinWidth(float32 perDepth)
+{
+	outlineFlags[2] = perDepth < 0.0f ? 0.0f : perDepth;
+}
+
+void
 setToonRamp(Texture *tex)
 {
 	toonRamp = tex;
@@ -438,15 +486,23 @@ setToonRoomTint(float32 r, float32 g, float32 b)
 	toonRoom[0] = r;
 	toonRoom[1] = g;
 	toonRoom[2] = b;
-	toonRoom[3] = 1.0f;
 	toonRoomSet = 1;
+
+	// The scene only ever names a room for a character, so the same call says
+	// so. Everything that is wrong on a background -- the flattening, the rim,
+	// the baked occlusion, the hardened normals -- hangs off this.
+	//
+	// It used to ride in toonRoom.w, which worked while an unset room meant
+	// something. It does not any more: uploadLights fills one in for every
+	// draw, so the two facts had to come apart.
+	toonExtra[2] = 1.0f;
 }
 
 void
 clearToonRoomTint(void)
 {
-	toonRoom[3] = 0.0f;
 	toonRoomSet = 0;
+	toonExtra[2] = 0.0f;
 }
 
 void
@@ -522,6 +578,7 @@ uploadToonConstants(void)
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonLightDir, toonLightDir, 1);
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonRoom, toonRoom, 1);
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonExtra, toonExtra, 1);
+	d3ddevice->SetPixelShaderConstantF(PSLOC_toonExtra2, toonExtra2, 1);
 }
 
 void
