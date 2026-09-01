@@ -130,10 +130,22 @@ const char *header_frag_src =
 "// The same, worked out here from a normal the fragment stage already has.\n"
 "// Sharper than the interpolated number on a low-polygon model, which is where\n"
 "// every character in this game sits.\n"
+"//\n"
+"// Takes the normal UNNORMALIZED, and that is the point. Geometry with no\n"
+"// normals hands over a zero, normalize of which is a NaN, and a NaN reaching\n"
+"// the comparisons below makes the result a driver's opinion rather than an\n"
+"// answer -- header.vert's DoShadowNdl says more. A surface with no normal still\n"
+"// needs its shadow, so it gets the test with the fixed slope allowance and no\n"
+"// facing check.\n"
 "float\n"
 "ShadowFactorN(vec4 shadowPos, vec3 N)\n"
 "{\n"
-"	return ShadowFactorV(shadowPos, dot(N, -u_shadowLightDir.xyz));\n"
+"	float len2 = dot(N, N);\n"
+
+"	if(len2 < 1e-12)\n"
+"		return ShadowLookup(shadowPos, shadowBias + shadowSlopeBias);\n"
+
+"	return ShadowFactorV(shadowPos, dot(N, -u_shadowLightDir.xyz)*inversesqrt(len2));\n"
 "}\n"
 
 "void DoAlphaTest(float a)\n"

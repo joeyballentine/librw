@@ -51,7 +51,11 @@ main(void)
 	// The normal is already here for the lighting, so the shadow test can use
 	// it to skip surfaces that face away from the light. Those are the ones the
 	// caster pass recorded, so they would otherwise compare against themselves.
-	color.rgb *= ShadowFactorN(v_shadowPos, N);
+	//
+	// v_normal and not N: ShadowFactorN wants it unnormalized so it can tell a
+	// missing normal from a real one, and N is already a NaN where there is no
+	// normal to normalize.
+	color.rgb *= ShadowFactorN(v_shadowPos, v_normal);
 #else
 	color.rgb *= ShadowFactorV(v_shadowPos, v_shadowNdl);
 #endif

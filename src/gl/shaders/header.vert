@@ -88,6 +88,30 @@ uniform mat4 u_shadowMatrix;
 // facing check that keeps a caster from striping itself.
 uniform vec4 u_shadowLightDir;
 
+// How squarely a surface faces the light, for the shadow test.
+//
+// **Guarded against geometry that has no normals at all.** Two thirds of this
+// game's levels ship a world without them -- it is prelit, so nothing ever
+// needed one -- and where the attribute is missing it reads as zero. Normalize
+// of a zero vector is a division by zero, and what comes out is a NaN.
+//
+// A NaN is not a small error here. Every comparison it reaches afterwards is
+// undefined: the facing test, the slope, the depth compare. Which way each one
+// falls is up to the driver, and the two answers are a whole level with no
+// shadows or a whole level shadowed everywhere.
+//
+// The fallback is the cosine of forty-five degrees, which asks the test for
+// exactly the fixed slope allowance it used before there was a normal here.
+float DoShadowNdl(vec3 N)
+{
+	float len2 = dot(N, N);
+
+	if(len2 < 1e-12)
+		return 0.70710678;
+
+	return dot(N, -u_shadowLightDir.xyz)*inversesqrt(len2);
+}
+
 #define surfAmbient (u_surfProps.x)
 #define surfSpecular (u_surfProps.y)
 #define surfDiffuse (u_surfProps.z)

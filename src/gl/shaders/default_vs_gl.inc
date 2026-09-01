@@ -51,7 +51,7 @@ const char *default_vert_src =
 "	v_color.rgb += DoDynamicLight(Vertex.xyz, Normal)*surfDiffuse;\n"
 "	v_color = clamp(v_color, 0.0, 1.0);\n"
 "	v_color *= u_matColor;\n"
-"	v_shadowNdl = dot(normalize(Normal), -u_shadowLightDir.xyz);\n"
+"	v_shadowNdl = DoShadowNdl(Normal);\n"
 "#endif\n"
 
 "	v_shadowPos = u_shadowMatrix * Vertex;\n"

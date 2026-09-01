@@ -50,7 +50,7 @@ main(void)
 	v_color.rgb += DoDynamicLight(Vertex.xyz, Normal)*surfDiffuse;
 	v_color = clamp(v_color, 0.0, 1.0);
 	v_color *= u_matColor;
-	v_shadowNdl = dot(normalize(Normal), -u_shadowLightDir.xyz);
+	v_shadowNdl = DoShadowNdl(Normal);
 #endif
 
 	v_shadowPos = u_shadowMatrix * Vertex;

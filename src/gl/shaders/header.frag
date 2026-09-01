@@ -129,10 +129,22 @@ ShadowFactorV(vec4 shadowPos, float ndl)
 // The same, worked out here from a normal the fragment stage already has.
 // Sharper than the interpolated number on a low-polygon model, which is where
 // every character in this game sits.
+//
+// Takes the normal UNNORMALIZED, and that is the point. Geometry with no
+// normals hands over a zero, normalize of which is a NaN, and a NaN reaching
+// the comparisons below makes the result a driver's opinion rather than an
+// answer -- header.vert's DoShadowNdl says more. A surface with no normal still
+// needs its shadow, so it gets the test with the fixed slope allowance and no
+// facing check.
 float
 ShadowFactorN(vec4 shadowPos, vec3 N)
 {
-	return ShadowFactorV(shadowPos, dot(N, -u_shadowLightDir.xyz));
+	float len2 = dot(N, N);
+
+	if(len2 < 1e-12)
+		return ShadowLookup(shadowPos, shadowBias + shadowSlopeBias);
+
+	return ShadowFactorV(shadowPos, dot(N, -u_shadowLightDir.xyz)*inversesqrt(len2));
 }
 
 void DoAlphaTest(float a)
