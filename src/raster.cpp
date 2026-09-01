@@ -486,7 +486,7 @@ classifyDXTAlpha(int32 dxt, const uint8 *blocks, int32 width, int32 height)
 	// inside the colour block.
 	int32 bw = (width + 3)/4;
 	int32 bh = (height + 3)/4;
-	bool32 anyTransparent = 0;
+	int32 total = 0, between = 0, transparent = 0;
 
 	for(int32 by = 0; by < bh; by++){
 		for(int32 bx = 0; bx < bw; bx++){
@@ -498,14 +498,18 @@ classifyDXTAlpha(int32 dxt, const uint8 *blocks, int32 width, int32 height)
 				if(bx*4 + (t & 3) >= width || by*4 + (t >> 2) >= height)
 					continue;
 				uint8 a = dxtBlockAlpha(dxt, block, t);
-				if(a == 0)
-					anyTransparent = 1;
-				else if(a != 0xFF)
-					return ALPHAGRADED;
+				total++;
+				if(a <= ALPHAEDGELOW)
+					transparent++;
+				else if(a < ALPHAEDGEHIGH)
+					between++;
 			}
 		}
 	}
-	return anyTransparent ? ALPHAKEYED : ALPHAOPAQUE;
+	if(transparent == 0 && between == 0)
+		return ALPHAOPAQUE;
+	// Counted, not all-or-nothing -- the reasoning is in Image::alphaIsBinary.
+	return between*100 < total*ALPHAKEYEDPERCENT ? ALPHAKEYED : ALPHAGRADED;
 }
 
 static rw::Raster*

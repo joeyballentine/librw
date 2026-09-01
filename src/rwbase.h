@@ -336,6 +336,16 @@ inline DQuat scale(const DQuat &q, float32 r) { return makeDQuat(scale(q.r,r), s
 // At rw scope rather than in a backend, because none of it is a device's
 // decision: it is a property of the artwork, and every backend that blends from
 // it needs the same answer.
+// What counts as an edge texel, and how much edge a shape may have before it is
+// a gradient. See Image::alphaIsBinary for the measurement these came from.
+enum {
+	ALPHAEDGELOW = 8,
+	ALPHAEDGEHIGH = 247,
+	ALPHAKEYEDPERCENT = 15,
+	// Half of 255: the middle of the filtered ramp round a cut edge.
+	ALPHACUTOUTREF = 128
+};
+
 enum AlphaKind
 {
 	// Every texel is opaque. Nothing to test and nothing to blend.

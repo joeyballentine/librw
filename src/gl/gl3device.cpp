@@ -231,6 +231,11 @@ struct RwStateCache {
 	bool32 appVertexAlpha;
 	uint32 alphaTestEnable;
 	uint32 alphaFunc;
+	// The alpha test reference the application asked for, in 0..255. The
+	// shader takes it as a float in `alphaRef`; this is the same number kept
+	// where updateAlphaStates can read it, because the reference is also how
+	// the game says a bucket's alpha is a cutout.
+	uint32 alpharef;
 	bool32 textureAlpha;
 	// The bound texture's alpha is keyed rather than graded -- see AlphaKind
 	// in rwbase.h. Held apart from textureAlpha because the two answer
@@ -665,11 +670,61 @@ updateAlphaStates(void)
 	// their depth, so what belongs behind draws into them. A draw that writes
 	// no depth -- the font, the interface, particles, shadows, the sorted alpha
 	// models -- is not in that argument and keeps the blend it asked for.
-	bool32 coverage = alphaToCoverageUsable() && rwStateCache.textureAlpha &&
-	                  !rwStateCache.vertexAlpha && rwStateCache.zwrite;
+	//
+	// ...and only where the ARTIST said the alpha is a cutout, which is what
+	// the reference says. xModelBucket.cpp puts the top byte of a bucket's
+	// pipeFlags in it: 128 for a shape punched out of a texture, 0 -- which
+	// arrives here as the console's own resting value of 1 -- for everything
+	// else. 43 buckets in the whole game ask for 128, and they are grass
+	// clumps, seaweed, netting, pilings and hanging lights.
+	//
+	// Without that condition coverage also lands on soft art with a graded
+	// alpha, and there it is simply wrong: a shadow decal's falloff becomes
+	// the four or eight steps the sample count can express, which reads as
+	// flat bands of grey where the texture had a gradient. Coverage quantises
+	// what a blend interpolates, so it may only have the shapes whose alpha
+	// was meant to be cut in the first place.
+	// Cutting the band leaves a hard, slightly eroded silhouette, so it is
+	// only worth doing when there is coverage to antialias it. Without that
+	// the surface keeps the blend it has always had -- and the x-ray with it.
+	// The two are one feature, not two.
+	bool32 cutout = alphaToCoverageUsable() && rwStateCache.textureAlpha &&
+	                rwStateCache.textureKeyed && !rwStateCache.vertexAlpha &&
+	                rwStateCache.zwrite;
+	bool32 coverage = cutout;
 	bool32 test = rwStateCache.vertexAlpha || rwStateCache.textureAlpha;
+	// The inference is dropped entirely for a surface in the depth buffer.
+	//
+	// Magnifying a shape punched out of a texture leaves a band of filtered
+	// alpha around its edge, and at 640x480 that band was a texel wide. At
+	// four times the width it is several pixels. Its alpha is 1..254, so it
+	// passes the console's resting test of 1, and blending it composites the
+	// surface over whatever was in the frame buffer already -- while still
+	// writing depth across the whole band, so the geometry that belonged
+	// behind never draws. What the band lands on is the skydome, drawn first
+	// at zScene.cpp:3068. That is the sky showing through a cave wall, and it
+	// gets worse the higher the render resolution goes.
+	//
+	// GX does not blend there. rwRENDERSTATEVERTEXALPHAENABLE is off for this
+	// art -- zRenderState.cpp:52 -- and the console draws it opaque, cutting
+	// only what is fully transparent. Blending it was librw's own idea, taken
+	// from the raster having an alpha channel at all.
+	//
+	// A draw that writes no depth keeps the inference: particles, shadows,
+	// the sorted alpha models, the font and the interface are all ordered by
+	// the game itself and are not part of this argument.
 	bool32 blend = rwStateCache.vertexAlpha ||
-	               (rwStateCache.textureAlpha && !coverage);
+	               (rwStateCache.textureAlpha && !cutout);
+
+	// Where the band is cut. The reasoning is in the D3D9 device; the only
+	// difference here is that the reference reaches the shader as a float.
+	uint32 wantref = cutout && rwStateCache.alpharef <= 1 ?
+	                 (uint32)ALPHACUTOUTREF : rwStateCache.alpharef;
+	if(alphaRef != wantref/255.0f){
+		alphaRef = wantref/255.0f;
+		uniformStateDirty[RWGL_ALPHAREF] = true;
+		stateDirty = 1;
+	}
 
 	setAlphaBlend(blend);
 	setAlphaTest(test);
@@ -1285,6 +1340,10 @@ setRenderState(int32 state, void *pvalue)
 		setAlphaTestFunction(value);
 		break;
 	case ALPHATESTREF:
+		if(rwStateCache.alpharef != value){
+			rwStateCache.alpharef = value;
+			updateAlphaStates();
+		}
 		if(alphaRef != value/255.0f){
 			alphaRef = value/255.0f;
 			uniformStateDirty[RWGL_ALPHAREF] = true;
@@ -1408,6 +1467,7 @@ resetRenderState(void)
 	rwStateCache.alphaFunc = ALPHAGREATEREQUAL;
 	alphaFunc = 0;
 	alphaRef = 10.0f/255.0f;
+	rwStateCache.alpharef = 10;
 	rwStateCache.textureKeyed = 0;
 	uniformStateDirty[RWGL_ALPHAREF] = true;
 	uniformState.fogDisable = 1.0f;

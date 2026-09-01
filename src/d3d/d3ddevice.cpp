@@ -614,18 +614,73 @@ updateAlphaStates(void)
 	// their depth, so what belongs behind draws into them. A draw that writes
 	// no depth -- the font, the interface, particles, shadows, the sorted alpha
 	// models -- is not in that argument and keeps the blend it asked for.
-	bool32 coverage = alphaToCoverageUsable() && rwStateCache.textureAlpha &&
-	                  !rwStateCache.vertexAlpha && rwStateCache.zwrite;
+	//
+	// ...and only where the ARTIST said the alpha is a cutout, which is what
+	// the reference says. xModelBucket.cpp puts the top byte of a bucket's
+	// pipeFlags in it: 128 for a shape punched out of a texture, 0 -- which
+	// arrives here as the console's own resting value of 1 -- for everything
+	// else. 43 buckets in the whole game ask for 128, and they are grass
+	// clumps, seaweed, netting, pilings and hanging lights.
+	//
+	// Without that condition coverage also lands on soft art with a graded
+	// alpha, and there it is simply wrong: a shadow decal's falloff becomes
+	// the four or eight steps the sample count can express, which reads as
+	// flat bands of grey where the texture had a gradient. Coverage quantises
+	// what a blend interpolates, so it may only have the shapes whose alpha
+	// was meant to be cut in the first place.
+	// Cutting the band leaves a hard, slightly eroded silhouette, so it is
+	// only worth doing when there is coverage to antialias it. Without that
+	// the surface keeps the blend it has always had -- and the x-ray with it.
+	// The two are one feature, not two.
+	bool32 cutout = alphaToCoverageUsable() && rwStateCache.textureAlpha &&
+	                rwStateCache.textureKeyed && !rwStateCache.vertexAlpha &&
+	                rwStateCache.zwrite;
+	bool32 coverage = cutout;
 	bool32 test = rwStateCache.vertexAlpha || rwStateCache.textureAlpha;
+	// The inference is dropped entirely for a surface in the depth buffer.
+	//
+	// Magnifying a shape punched out of a texture leaves a band of filtered
+	// alpha around its edge, and at 640x480 that band was a texel wide. At
+	// four times the width it is several pixels. Its alpha is 1..254, so it
+	// passes the console's resting test of 1, and blending it composites the
+	// surface over whatever was in the frame buffer already -- while still
+	// writing depth across the whole band, so the geometry that belonged
+	// behind never draws. What the band lands on is the skydome, drawn first
+	// at zScene.cpp:3068. That is the sky showing through a cave wall, and it
+	// gets worse the higher the render resolution goes.
+	//
+	// GX does not blend there. rwRENDERSTATEVERTEXALPHAENABLE is off for this
+	// art -- zRenderState.cpp:52 -- and the console draws it opaque, cutting
+	// only what is fully transparent. Blending it was librw's own idea, taken
+	// from the raster having an alpha channel at all.
+	//
+	// A draw that writes no depth keeps the inference: particles, shadows,
+	// the sorted alpha models, the font and the interface are all ordered by
+	// the game itself and are not part of this argument.
 	bool32 blend = rwStateCache.vertexAlpha ||
-	               (rwStateCache.textureAlpha && !coverage);
+	               (rwStateCache.textureAlpha && !cutout);
+
+	// Where the band is cut.
+	//
+	// The game leaves the reference at 1 for all of this art -- kelp, vines,
+	// grass, the flower cards -- so nothing rejects the filtered band, and
+	// drawing it unblended paints it: the transparent parts of a cutout
+	// texture hold black, so a cut edge comes out with a black fringe as wide
+	// as the magnification made the band. Cutting at the middle of the ramp
+	// puts the silhouette back where the artwork drew it and writes no depth
+	// outside it.
+	//
+	// Only for a cutout, and only when the game has not asked for something
+	// stricter: a bucket that names its own reference gets exactly that.
+	uint32 alpharef = cutout && rwStateCache.alpharef <= 1 ?
+	                  ALPHACUTOUTREF : rwStateCache.alpharef;
 
 	setRenderState(D3DRS_ALPHABLENDENABLE, blend);
 	setRenderState(D3DRS_ALPHATESTENABLE, test);
 	// The application's own reference throughout. Coverage does not replace the
 	// test, it reads the alpha that survives it, so moving the reference would
 	// cut the shape before the samples ever saw it.
-	setRenderState(D3DRS_ALPHAREF, rwStateCache.alpharef);
+	setRenderState(D3DRS_ALPHAREF, alpharef);
 	setAlphaToCoverage(coverage);
 }
 
