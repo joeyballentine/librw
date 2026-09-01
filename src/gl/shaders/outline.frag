@@ -1,0 +1,42 @@
+// The inverted hull: flat colour, nothing else.
+//
+// This is the second half of the oldest trick for a cartoon outline. The model
+// is drawn twice: once inflated along its normals with the FRONT faces culled,
+// which leaves only the parts of the swollen copy that stick out past the real
+// one -- a band around the silhouette -- and once normally on top. There is no
+// edge detection anywhere; the outline is a shape, not a filter, which is why
+// it survives at any resolution and costs one extra draw.
+//
+// Note for anyone editing this file: it becomes a C string literal one line at
+// a time, through a sed recipe that does not escape anything. A double quote
+// character here is a compile error in the generated .inc.
+
+uniform sampler2D tex0;
+
+FSIN vec4 v_color;
+FSIN vec2 v_tex0;
+FSIN float v_fog;
+FSIN vec4 v_shadowPos;
+FSIN vec4 v_outline;
+
+void
+main(void)
+{
+	// **The ink is the surface's own colour, darkened.** A flat black line
+	// round everything reads as a diagram; the show inks each part of a
+	// character in a darker version of what that part is painted, which is why
+	// SpongeBob's edge is olive against his yellow and not black.
+	//
+	// So the hull samples the very texture the model is about to be drawn with
+	// and multiplies it down. v_outline carries how far down, per region, which
+	// is what lets his trousers still come out black -- a scale of zero is
+	// black whatever the texture underneath says.
+	vec4 tex = texture(tex0, vec2(v_tex0.x, 1.0-v_tex0.y));
+	vec4 color = vec4(tex.rgb*v_outline.rgb, 1.0);
+
+	// Into the fog like everything else. An outline that stayed black as the
+	// model behind it faded would draw a hard shape around a ghost.
+	color.rgb = mix(u_fogColor.rgb, color.rgb, v_fog);
+
+	FRAGCOLOR(color);
+}

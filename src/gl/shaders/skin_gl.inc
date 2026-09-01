@@ -9,6 +9,13 @@ const char *skin_vert_src =
 "// World position in the shadow map's space. Interpolated, then biased into\n"
 "// texture coordinates by the fragment shader.\n"
 "VSOUT vec4 v_shadowPos;\n"
+"#ifdef OUTLINE\n"
+"// Which ink this vertex is drawn in. Flat across the triangle would be truer to\n"
+"// a pen, but the regions are split by height and the boundary runs through the\n"
+"// middle of triangles, so an interpolated colour blends the two over a band of\n"
+"// a few pixels instead of stepping mid-face.\n"
+"VSOUT vec4 v_outline;\n"
+"#endif\n"
 "#ifdef PERPIXEL\n"
 "// The skinned normal, world space and not normalized. Same output as\n"
 "// default.vert's; both feed simple.frag's PERPIXEL build.\n"
@@ -30,8 +37,25 @@ const char *skin_vert_src =
 "	}\n"
 
 "	vec4 Vertex = u_world * vec4(SkinVertex, 1.0);\n"
-"	gl_Position = u_proj * u_view * Vertex;\n"
 "	vec3 Normal = mat3(u_normal) * SkinNormal;\n"
+
+"#ifdef OUTLINE\n"
+"	// Push the surface out along its own normal before projecting. The normal\n"
+"	// has to be in hand first, which is why it is computed above the\n"
+"	// projection here and below it in a stock librw.\n"
+"	//\n"
+"	// In world units, so the band is thicker up close and thinner far away --\n"
+"	// which is what a drawn line does NOT do, but scaling by depth instead\n"
+"	// makes distant characters look inked in marker.\n"
+"	Vertex.xyz += normalize(Normal)*u_outlineColor.a;\n"
+
+"	// Which of the two inks this vertex belongs to, decided here rather than\n"
+"	// in a second pass over the whole model: a vertex shader can branch, and\n"
+"	// the earlier GameCube version could not.\n"
+"	v_outline = SkinVertex.y < u_outlineColor2.a ? u_outlineColor2 : u_outlineColor;\n"
+"#endif\n"
+
+"	gl_Position = u_proj * u_view * Vertex;\n"
 
 "	v_tex0 = in_tex0;\n"
 

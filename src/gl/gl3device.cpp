@@ -143,6 +143,10 @@ int32 u_shadowMatrix;
 int32 u_shadowParams;
 int32 u_shadowParams2;
 int32 u_shadowLightDir;
+int32 u_toonParams;
+int32 u_outlineColor;
+int32 u_outlineColor2;
+int32 u_toonLightDir;
 
 bool32 constantVertexColorWhite;
 
@@ -197,6 +201,7 @@ Shader *uvXformShader_fullLight, *uvXformShader_fullLight_noAT;
 Shader *defaultShader_pp, *defaultShader_pp_noAT;
 Shader *uvXformShader_pp, *uvXformShader_pp_noAT;
 Shader *depthShader;
+Shader *outlineShader, *skinOutlineShader;
 Shader *depthShader_tex;
 
 static bool32 perPixelLighting;
@@ -251,6 +256,174 @@ setShadowMap(Texture *tex, float32 *matrix, float32 *lightDir, const ShadowMapPa
 	p2[2] = 0.0f;
 	p2[3] = 0.0f;
 	setUniform(u_shadowParams2, p2);
+}
+
+// The stylised look. Set once, and read by every shader that draws a lit
+// surface -- the world and the characters alike, because a cartoon that only
+// applied to one of them would look like a bug.
+//
+// **Held, not pushed, until the uniform exists.** The application sets this
+// beside setPerPixelLightingEnabled, which is before Engine::open, and until
+// open runs there is no uniform registry to write into -- u_toonParams is
+// still zero, and setUniform would happily write these four floats over
+// whichever uniform registered first. So the values are kept here and the
+// registration site pushes them; a call after the device is up pushes
+// immediately, as a caller would expect.
+// How much brighter than authored every light burns.
+//
+// The kits were lit for a television in 2003 and read dark on a modern
+// display, and there is nowhere else to put this: the colours come out of the
+// level's own assets, and scaling them there would mean writing to the asset.
+// Scaled on the way to the uniform instead, so nothing the game owns changes.
+//
+// The shader clamps after summing, so a scale that overshoots flattens the
+// brightest surfaces to white rather than wrapping.
+static float32 lightIntensity = 1.0f;
+
+void
+setLightIntensity(float32 scale)
+{
+	if(scale < 0.0f)
+		scale = 0.0f;
+
+	lightIntensity = scale;
+}
+
+float32
+getLightIntensity(void)
+{
+	return lightIntensity;
+}
+
+// Whether the uniform registry exists yet. Both setters below are called before
+// Engine::open, and until it runs there is nothing to write into -- see
+// setToonShading, which explains what happens if you try.
+static bool32 toonRegistered;
+
+// The outline's colour, and its thickness in world units in alpha. Zero
+// thickness is how the pass is turned off -- see getOutline.
+static float32 outlineColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+// The second ink, and in alpha the object-space height below which it is used.
+// The height is set per atomic by the renderer, because it is a property of the
+// model rather than of the setting.
+static float32 outlineColor2[4] = { 0.0f, 0.0f, 0.0f, -1e30f };
+
+// Whether what is about to be drawn gets a hull at all, and whether it gets one
+// ink or two.
+//
+// **Set by the application, per draw, and off by default.** Deciding here from
+// what the geometry looks like was the first attempt -- anything skinned is a
+// character, near enough -- and it is not near enough: it outlines every
+// skinned prop, every cutscene stand-in and anything else that happens to have
+// bones. Only the game knows which atomic is a character and which character it
+// is, so only the game can say.
+static int32 outlineMode;
+
+// Where a character's own light comes from, in world space, with w as the
+// switch. See u_toonLightDir in header.vert for what it is for.
+static float32 toonLightDir[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+void
+setToonLightDir(float32 x, float32 y, float32 z)
+{
+	toonLightDir[0] = x;
+	toonLightDir[1] = y;
+	toonLightDir[2] = z;
+	toonLightDir[3] = 1.0f;
+
+	if(toonRegistered)
+		setUniform(u_toonLightDir, toonLightDir);
+}
+
+void
+clearToonLightDir(void)
+{
+	toonLightDir[3] = 0.0f;
+
+	if(toonRegistered)
+		setUniform(u_toonLightDir, toonLightDir);
+}
+
+void
+setOutlineMode(int32 mode)
+{
+	outlineMode = mode;
+}
+
+int32
+getOutlineMode(void)
+{
+	return outlineColor[3] > 0.0f ? outlineMode : OUTLINE_NONE;
+}
+
+void
+setOutlineLower(float32 r, float32 g, float32 b)
+{
+	outlineColor2[0] = r;
+	outlineColor2[1] = g;
+	outlineColor2[2] = b;
+
+	if(toonRegistered)
+		setUniform(u_outlineColor2, outlineColor2);
+	setUniform(u_toonLightDir, toonLightDir);
+}
+
+// Where the two inks meet on this model, in object space.
+//
+// Below any vertex means one ink everywhere, which is what a model with no
+// second region wants -- and what every model but the player gets, since
+// nothing else has pants.
+void
+setOutlineSplit(float32 y)
+{
+	outlineColor2[3] = y;
+
+	if(toonRegistered)
+		setUniform(u_outlineColor2, outlineColor2);
+}
+
+void
+setOutline(float32 r, float32 g, float32 b, float32 thickness)
+{
+	if(thickness < 0.0f)
+		thickness = 0.0f;
+
+	outlineColor[0] = r;
+	outlineColor[1] = g;
+	outlineColor[2] = b;
+	outlineColor[3] = thickness;
+
+	if(toonRegistered)
+		setUniform(u_outlineColor, outlineColor);
+	setUniform(u_outlineColor2, outlineColor2);
+}
+
+// The colour strip the light term looks up. Bound to stage 3 and left there:
+// nothing else in the renderer uses that stage, so it survives every draw.
+void
+setToonRamp(Texture *tex)
+{
+	setTexture(3, tex);
+}
+
+static float32 toonParams[4] = { 0.0f, 3.0f, 1.0f, 0.0f };
+
+void
+setToonShading(bool32 enable, float32 bands, float32 saturation, float32 strength)
+{
+	// One band would leave a surface either fully lit or fully dark with
+	// nothing between, which is a silhouette rather than a drawing.
+	if(bands < 2.0f)
+		bands = 2.0f;
+
+	toonParams[0] = enable ? 1.0f : 0.0f;
+	toonParams[1] = bands;
+	toonParams[2] = saturation;
+	toonParams[3] = strength;
+
+	if(toonRegistered)
+		setUniform(u_toonParams, toonParams);
 }
 
 void
@@ -1566,7 +1739,10 @@ setLights(WorldLights *lightData)
 	Light *l;
 	int32 bits;
 
-	uniformObject.ambLight = lightData->ambient;
+	uniformObject.ambLight.red = lightData->ambient.red*lightIntensity;
+	uniformObject.ambLight.green = lightData->ambient.green*lightIntensity;
+	uniformObject.ambLight.blue = lightData->ambient.blue*lightIntensity;
+	uniformObject.ambLight.alpha = lightData->ambient.alpha;
 
 	bits = 0;
 
@@ -1577,7 +1753,10 @@ setLights(WorldLights *lightData)
 	for(i = 0; i < lightData->numDirectionals && i < 8; i++){
 		l = lightData->directionals[i];
 		uniformObject.lightParams[n].type = 1.0f;
-		uniformObject.lightColor[n] = l->color;
+		uniformObject.lightColor[n].red = l->color.red*lightIntensity;
+		uniformObject.lightColor[n].green = l->color.green*lightIntensity;
+		uniformObject.lightColor[n].blue = l->color.blue*lightIntensity;
+		uniformObject.lightColor[n].alpha = l->color.alpha;
 		memcpy(&uniformObject.lightDirection[n], &l->getFrame()->getLTM()->at, sizeof(V3d));
 		bits |= VSLIGHT_DIRECT;
 		n++;
@@ -2721,6 +2900,13 @@ initOpenGL(void)
 	u_shadowParams = registerUniform("u_shadowParams", UNIFORM_VEC4);
 	u_shadowParams2 = registerUniform("u_shadowParams2", UNIFORM_VEC4);
 	u_shadowLightDir = registerUniform("u_shadowLightDir", UNIFORM_VEC4);
+	u_toonParams = registerUniform("u_toonParams", UNIFORM_VEC4);
+	u_outlineColor = registerUniform("u_outlineColor", UNIFORM_VEC4);
+	u_outlineColor2 = registerUniform("u_outlineColor2", UNIFORM_VEC4);
+	u_toonLightDir = registerUniform("u_toonLightDir", UNIFORM_VEC4);
+	toonRegistered = 1;
+	setUniform(u_toonParams, toonParams);
+	setUniform(u_outlineColor, outlineColor);
 
 	// for im2d
 	registerUniform("u_xform", UNIFORM_VEC4);
@@ -2852,6 +3038,15 @@ initOpenGL(void)
 		const char *fs_depth_tex[] = { shaderDecl, "#define TEX\n", header_frag_src, depth_frag_src, nil };
 		depthShader_tex = Shader::create(vs, fs_depth_tex);
 		assert(depthShader_tex);
+
+		// The outline hull. Its own vertex shader because the inflation
+		// happens there, and the plain fragment shader because a flat colour
+		// needs nothing from the surface it is drawn around.
+#include "shaders/outline_fs.inc"
+		const char *vs_outline[] = { shaderDecl, "#define OUTLINE\n", header_vert_src, default_vert_src, nil };
+		const char *fs_outline[] = { shaderDecl, header_frag_src, outline_frag_src, nil };
+		outlineShader = Shader::create(vs_outline, fs_outline);
+		assert(outlineShader);
 	}
 
 	openIm2D();

@@ -13,6 +13,13 @@ VSOUT float v_fog;
 // World position in the shadow map's space. Interpolated, then biased into
 // texture coordinates by the fragment shader.
 VSOUT vec4 v_shadowPos;
+#ifdef OUTLINE
+// Which ink this vertex is drawn in. Flat across the triangle would be truer to
+// a pen, but the regions are split by height and the boundary runs through the
+// middle of triangles, so an interpolated colour blends the two over a band of
+// a few pixels instead of stepping mid-face.
+VSOUT vec4 v_outline;
+#endif
 #ifdef PERPIXEL
 // World space, and NOT normalized: interpolating two unit normals across a
 // triangle does not give a unit normal, which is why simple.frag normalizes it
@@ -29,8 +36,25 @@ void
 main(void)
 {
 	vec4 Vertex = u_world * vec4(in_pos, 1.0);
-	gl_Position = u_proj * u_view * Vertex;
 	vec3 Normal = mat3(u_normal) * in_normal;
+
+#ifdef OUTLINE
+	// Push the surface out along its own normal before projecting. The normal
+	// has to be in hand first, which is why it is computed above the
+	// projection here and below it in a stock librw.
+	//
+	// In world units, so the band is thicker up close and thinner far away --
+	// which is what a drawn line does NOT do, but scaling by depth instead
+	// makes distant characters look inked in marker.
+	Vertex.xyz += normalize(Normal)*u_outlineColor.a;
+
+	// Which of the two inks this vertex belongs to, decided here rather than
+	// in a second pass over the whole model: a vertex shader can branch, and
+	// the earlier GameCube version could not.
+	v_outline = in_pos.y < u_outlineColor2.a ? u_outlineColor2 : u_outlineColor;
+#endif
+
+	gl_Position = u_proj * u_view * Vertex;
 
 #ifdef UVXFORM
 	vec4 uv = vec4(in_tex0, 1.0, 1.0);

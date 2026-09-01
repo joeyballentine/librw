@@ -128,6 +128,8 @@ extern Shader *uvXformShader_pp, *uvXformShader_pp_noAT;
 // The caster pass: depth packed into an ordinary colour target. Paired with the
 // plain vertex shader, and with skin.vert's in gl3skin.cpp.
 extern Shader *depthShader, *depthShader_tex;
+// The inverted hull, drawn around a model before the model itself.
+extern Shader *outlineShader, *skinOutlineShader;
 
 // Draw atomics as depth rather than as a picture, for the shadow map's caster
 // pass. While this is on, the default and skin pipelines ignore lighting,
@@ -177,6 +179,66 @@ extern int32 u_shadowMatrix;
 extern int32 u_shadowParams;
 extern int32 u_shadowParams2;
 extern int32 u_shadowLightDir;
+extern int32 u_toonParams;
+extern int32 u_outlineColor;
+extern int32 u_outlineColor2;
+extern int32 u_toonLightDir;
+
+enum OutlineMode
+{
+	// No hull. The default, and what everything the application does not
+	// speak up about gets.
+	OUTLINE_NONE = 0,
+	// One ink over the whole model.
+	OUTLINE_PLAIN,
+	// Two, split by height -- see setOutlineLower.
+	OUTLINE_TWOTONE
+};
+
+// Light what is drawn next from a fixed direction of the application's
+// choosing rather than from the scene's lights, keeping their colour. For
+// characters, whose shading in a cartoon describes their shape and not the room
+// -- see u_toonLightDir in header.vert.
+void setToonLightDir(float32 x, float32 y, float32 z);
+void clearToonLightDir(void);
+
+// Whether what is drawn next gets an inverted hull around it, and with how many
+// inks. Set per draw by the application and cleared after; there is no way to
+// tell a character from a prop by looking at its geometry.
+void setOutlineMode(int32 mode);
+int32 getOutlineMode(void);
+
+// The ink and how far out the hull is pushed, in world units. Thickness 0 turns
+// the whole thing off whatever the mode says.
+void setOutline(float32 r, float32 g, float32 b, float32 thickness);
+
+// A second ink for the lower part of a model, and the object-space height
+// where the two meet. The renderer sets the height per atomic, because it
+// belongs to the model rather than to the setting; a height below every vertex
+// means one ink everywhere, which is the default.
+void setOutlineLower(float32 r, float32 g, float32 b);
+void setOutlineSplit(float32 y);
+
+// The strip of colour the light term looks up in place of being multiplied in
+// directly -- band count, widths and colours all live in the texture. nil
+// leaves the stage as it was.
+void setToonRamp(Texture *tex);
+
+// How much brighter than authored every light from a light kit burns. 1 is as
+// the level says. Applied on the way to the uniform, so nothing the
+// application owns is modified. Safe before the device exists.
+void setLightIntensity(float32 scale);
+float32 getLightIntensity(void);
+
+// Draw in the stylised look: the light cut into `bands` steps instead of a
+// smooth ramp, and colour pushed away from grey by `saturation` -- 1 leaves it
+// alone, above 1 pushes outward. Off until this is called.
+//
+// The banding is applied to the LIGHT and the saturation to the final colour,
+// which is the difference between a drawing and a posterised photograph.
+// `strength` dials the whole stylised shading against the plain lighting: 0 is
+// the game as it was, 1 is the full cartoon.
+void setToonShading(bool32 enable, float32 bands, float32 saturation, float32 strength);
 
 // Evaluate lighting per fragment rather than per vertex, in the default,
 // uvxform and skin pipelines. Directional lights only: an atomic reached by a

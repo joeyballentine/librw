@@ -306,6 +306,47 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 
 	uploadSkinMatrices(atomic);
 
+	// The hull first, so the model is drawn over the middle of it and only the
+	// band that sticks out past the silhouette survives.
+	//
+	// Front faces culled: what is left of an inflated copy after removing the
+	// faces pointing at the camera is its far side, which the real model then
+	// covers except around the edge. Depth still written, so the band sorts
+	// against the scene like any other geometry.
+	int32 outline = getOutlineMode();
+
+	if(outline != OUTLINE_NONE){
+		// Where this model's second ink starts, from its own bounding sphere.
+		// The earlier GameCube version walked every vertex for a true Y range
+		// and split at 30% of it; the sphere is already to hand and lands in
+		// the same place on a character, who fills it.
+		//
+		// Below every vertex for a one-ink model, which is a split that never
+		// fires rather than a second code path.
+		if(outline == OUTLINE_TWOTONE){
+			Sphere *bs = &atomic->geometry->morphTargets[0].boundingSphere;
+			setOutlineSplit(bs->center.y - bs->radius*0.4f);
+		}else
+			setOutlineSplit(-1.0e30f);
+
+		SetRenderState(CULLMODE, CULLFRONT);
+		skinOutlineShader->use();
+
+		InstanceData *oinst = header->inst;
+		int32 on = header->numMeshes;
+
+		while(on--){
+			// The hull reads the material's texture to tint its own ink -- see
+			// outline.frag -- so it has to be bound here as well as in the
+			// pass that draws the model itself.
+			setTexture(0, oinst->material->texture);
+			drawInst(header, oinst);
+			oinst++;
+		}
+
+		SetRenderState(CULLMODE, CULLBACK);
+	}
+
 	while(n--){
 		m = inst->material;
 
@@ -387,6 +428,14 @@ skinOpen(void *o, int32, int32)
 		const char *fs_depth_tex[] = { shaderDecl, "#define TEX\n", header_frag_src, depth_frag_src, nil };
 		skinDepthShader_tex = Shader::create(vs, fs_depth_tex);
 		assert(skinDepthShader_tex);
+
+		// The skinned outline hull. Same fragment shader as the unskinned one
+		// -- a flat colour does not care how the vertex got where it is.
+#include "shaders/outline_fs.inc"
+		const char *vs_outline[] = { shaderDecl, "#define OUTLINE\n", header_vert_src, skin_vert_src, nil };
+		const char *fs_outline[] = { shaderDecl, header_frag_src, outline_frag_src, nil };
+		skinOutlineShader = Shader::create(vs_outline, fs_outline);
+		assert(skinOutlineShader);
 	}
 
 	createSkinMatFXShaders();

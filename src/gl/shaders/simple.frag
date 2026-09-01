@@ -24,14 +24,41 @@ main(void)
 	vec4 color = v_color;
 
 #ifdef PERPIXEL
-	// The vertex shader handed over the prelight and a normal and did nothing
-	// else. What follows is default.vert's lighting, in the same order and with
-	// the same clamp, evaluated here instead. lighting.frag declares the
-	// uniforms it reads.
+	// lighting.frag declares the uniforms both arms below read.
 	vec3 N = normalize(v_normal);
-	color.rgb += u_ambLight.rgb*surfAmbient;
-	color.rgb += DoDynamicLightPP(N)*surfDiffuse;
-	color = clamp(color, 0.0, 1.0);
+
+	if(toonEnabled != 0.0){
+		// **The lighting is replaced, not shaded on top of.**
+		//
+		// Mixing the room's per-pixel lighting back in was the obvious way to
+		// keep a character tied to where he is standing, and it reads wrong:
+		// what comes back with it is the smooth falloff the bands exist to
+		// remove, so every band has a gradient inside it and the whole thing
+		// looks like banding laid over lighting rather than like a drawing.
+		//
+		// So the room contributes its COLOUR and nothing else. ToonRoomLight
+		// is flat across the model -- how bright and what colour it is in here,
+		// with no direction in it -- and it tints the shadow band alone. The
+		// lit band stays the artwork's own colour whatever the room is doing,
+		// which is what a cel is: one flat tone for the light side, one for the
+		// dark, and the dark one painted to match the background.
+		vec3 L = u_toonLightDir.w != 0.0 ? u_toonLightDir.xyz : ToonKeyDir();
+		vec3 cel = ToonRamp(max(0.0, dot(N, -L)));
+
+		float dark = 1.0 - max(cel.r, max(cel.g, cel.b));
+		vec3 band = cel*mix(vec3(1.0), ToonRoomLight(), dark);
+
+		// How deep the shadow band goes. 0 leaves a character flat and fully
+		// lit, 1 is the ramp at its full depth.
+		color.rgb = mix(vec3(1.0), band, toonStrength);
+	}else{
+		color.rgb = v_color.rgb;
+		color.rgb += u_ambLight.rgb*surfAmbient;
+		color.rgb += DoDynamicLightPP(N)*surfDiffuse;
+		color.rgb = clamp(color.rgb, 0.0, 1.0);
+	}
+
+	color.a = clamp(color.a, 0.0, 1.0);
 	color *= u_matColor;
 #endif
 
@@ -60,6 +87,8 @@ main(void)
 	color.rgb *= ShadowFactorV(v_shadowPos, v_shadowNdl);
 #endif
 #endif
+
+	color.rgb = ToonSaturate(color.rgb);
 
 	color.rgb = mix(u_fogColor.rgb, color.rgb, v_fog);
 	DoAlphaTest(color.a);

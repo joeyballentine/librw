@@ -147,6 +147,80 @@ ShadowFactorN(vec4 shadowPos, vec3 N)
 	return ShadowFactorV(shadowPos, dot(N, -u_shadowLightDir.xyz)*inversesqrt(len2));
 }
 
+// The outline's colour, with its thickness in world units in alpha.
+uniform vec4 u_outlineColor;
+uniform vec4 u_outlineColor2;
+
+// A light locked to the model rather than to the world, in xyz, with w saying
+// whether to use it.
+//
+// **This is how the show lights a character and it is not how a renderer does.**
+// An animator draws SpongeBob's front flat yellow and his side a solid darker
+// green, and that stays true however he turns or wherever the sun is -- the
+// shading describes the SHAPE, not the lighting. A world-space light cannot do
+// that: turn the character and the dark side swings round with the room.
+//
+// So for a character the direction is taken from his own matrix instead, and
+// travels straight back through him from the front. His face is then always in
+// the top band and his sides always in the bottom one, whichever way he faces.
+uniform vec4 u_toonLightDir;
+
+// The stylised look, off unless the application asks for it.
+//
+// x is on or off, y how many steps the light is cut into, z how far colour is
+// pushed away from grey, w how strongly a surface facing away from the camera
+// is lifted.
+uniform vec4 u_toonParams;
+
+#define toonEnabled (u_toonParams.x)
+#define toonBands (u_toonParams.y)
+#define toonSaturation (u_toonParams.z)
+#define toonStrength (u_toonParams.w)
+
+// The colour ramp: what the light term looks up instead of being multiplied in
+// directly.
+//
+// **This is the difference between a cel shade and a dimmer switch.** Banding
+// the light arithmetically gives every step the same hue and only varies how
+// much of it there is, so the shadow side of a character is the lit side turned
+// down. A drawing does not do that -- its shadows shift towards blue while the
+// lit side stays warm -- and no amount of arithmetic on a scalar can express
+// that, because the colour has to come from somewhere.
+//
+// So the term indexes a strip of authored colour instead. Band count, band
+// widths and band colours are all properties of the texture rather than of this
+// shader, which is what lets a character be retuned without a rebuild.
+//
+// tex3, above the material texture, the environment map and the shadow map.
+uniform sampler2D tex3;
+
+vec3 ToonRamp(float l)
+{
+	// Half a texel in, so the two ends of the strip sample their own colour
+	// rather than blending with the clamp.
+	return texture(tex3, vec2(clamp(l, 0.02, 0.98), 0.5)).rgb;
+}
+
+
+// Push colour away from grey.
+//
+// The show's palette is far more saturated than anything a light rig produces,
+// and the levels were painted to match it before the bake flattened them out.
+// Mixing AWAY from luminance -- a factor above one -- is the cheap way back:
+// it leaves greys alone and pulls everything else outward.
+//
+// Applied after the texture, unlike the banding, because it is the artwork's
+// colour that wants pushing and not the light's.
+vec3 ToonSaturate(vec3 c)
+{
+	if(toonEnabled == 0.0)
+		return c;
+
+	float l = dot(c, vec3(0.299, 0.587, 0.114));
+
+	return clamp(mix(vec3(l), c, toonSaturation), 0.0, 1.0);
+}
+
 void DoAlphaTest(float a)
 {
 #ifndef NO_ALPHATEST

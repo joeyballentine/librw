@@ -112,6 +112,40 @@ float DoShadowNdl(vec3 N)
 	return dot(N, -u_shadowLightDir.xyz)*inversesqrt(len2);
 }
 
+// The outline's colour, with its thickness in world units in alpha.
+uniform vec4 u_outlineColor;
+// The second outline colour, and in alpha the object-space height below which
+// it is used instead. SpongeBob's pants are drawn with a black line and the
+// rest of him with a green one, which is how the show inks him.
+uniform vec4 u_outlineColor2;
+
+// A light locked to the model rather than to the world, in xyz, with w saying
+// whether to use it.
+//
+// **This is how the show lights a character and it is not how a renderer does.**
+// An animator draws SpongeBob's front flat yellow and his side a solid darker
+// green, and that stays true however he turns or wherever the sun is -- the
+// shading describes the SHAPE, not the lighting. A world-space light cannot do
+// that: turn the character and the dark side swings round with the room.
+//
+// So for a character the direction is taken from his own matrix instead, and
+// travels straight back through him from the front. His face is then always in
+// the top band and his sides always in the bottom one, whichever way he faces.
+uniform vec4 u_toonLightDir;
+
+// The stylised look, off unless the application asks for it.
+//
+// x is on or off, y how many steps the light is cut into, z how far colour is
+// pushed away from grey, w how strongly a surface facing away from the camera
+// is lifted.
+uniform vec4 u_toonParams;
+
+#define toonEnabled (u_toonParams.x)
+#define toonBands (u_toonParams.y)
+#define toonSaturation (u_toonParams.z)
+#define toonStrength (u_toonParams.w)
+
+
 #define surfAmbient (u_surfProps.x)
 #define surfSpecular (u_surfProps.y)
 #define surfDiffuse (u_surfProps.z)
@@ -124,7 +158,8 @@ vec3 DoDynamicLight(vec3 V, vec3 N)
 			break;
 #ifdef DIRECTIONALS
 		if(u_lightParams[i].x == 1.0){
-			// direct
+			// direct. Plain: the stylised look is worked out per pixel, in
+			// simple.frag, and does nothing at all with per_pixel_lighting off.
 			float l = max(0.0, dot(N, -u_lightDirection[i].xyz));
 			color += l*u_lightColor[i].rgb;
 		}else

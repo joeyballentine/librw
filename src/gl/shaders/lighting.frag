@@ -49,6 +49,53 @@ uniform vec4 u_surfProps;
 // The same equation as DoDynamicLight's directional arm in header.vert. The two
 // have to stay identical or the setting changes more than where the maths
 // happens.
+// The brightest directional the room has, which is what the bands are measured
+// from when a character is not being lit from his own front.
+//
+// The kits are four-light rigs, and banding against each in turn gives four
+// overlapping terminators -- a mess rather than a drawing. One direction gives
+// one edge.
+vec3 ToonKeyDir()
+{
+	vec3 best = vec3(0.0, -1.0, 0.0);
+	float bestLum = -1.0;
+
+	for(int i = 0; i < MAX_LIGHTS; i++){
+		if(u_lightParams[i].x == 0.0)
+			break;
+		if(u_lightParams[i].x == 1.0){
+			float lum = dot(u_lightColor[i].rgb, vec3(1.0));
+			if(lum > bestLum){
+				bestLum = lum;
+				best = u_lightDirection[i].xyz;
+			}
+		}
+	}
+
+	return best;
+}
+
+// What colour and how bright this room is, with no direction in it.
+//
+// Every light added up as if the surface faced all of them at once, which is a
+// meaningless quantity for lighting a surface and exactly the right one for
+// asking what colour it is in here. Nothing here depends on the normal, so it
+// is flat across a model -- which is the point: it is used to tint the shadow
+// band, and a tint that varied per pixel would put the smooth falloff back.
+vec3 ToonRoomLight()
+{
+	vec3 color = u_ambLight.rgb*surfAmbient;
+
+	for(int i = 0; i < MAX_LIGHTS; i++){
+		if(u_lightParams[i].x == 0.0)
+			break;
+		if(u_lightParams[i].x == 1.0)
+			color += u_lightColor[i].rgb*surfDiffuse;
+	}
+
+	return clamp(color, 0.0, 1.0);
+}
+
 vec3 DoDynamicLightPP(vec3 N)
 {
 	vec3 color = vec3(0.0, 0.0, 0.0);
@@ -56,6 +103,9 @@ vec3 DoDynamicLightPP(vec3 N)
 		if(u_lightParams[i].x == 0.0)
 			break;
 		if(u_lightParams[i].x == 1.0){
+			// Plain, always. simple.frag builds the stylised shading on top
+			// of what this returns, and a ramp applied here as well would be
+			// a ramp applied twice.
 			float l = max(0.0, dot(N, -u_lightDirection[i].xyz));
 			color += l*u_lightColor[i].rgb;
 		}
