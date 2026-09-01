@@ -45,12 +45,25 @@ main(void)
 		vec3 L = u_toonLightDir.w != 0.0 ? u_toonLightDir.xyz : ToonKeyDir();
 		vec3 cel = ToonRamp(max(0.0, dot(N, -L)));
 
-		float dark = 1.0 - max(cel.r, max(cel.g, cel.b));
-		vec3 band = cel*mix(vec3(1.0), ToonRoomLight(), dark);
+		// **The room's colour multiplies BOTH bands, not just the dark one.**
+		//
+		// Tinting only the shadow was an attempt to keep lit surfaces at the
+		// artwork's own colour, and it works right up until the room is not
+		// white: Rock Bottom is blue because its LIGHT is blue, so a lit
+		// surface that ignores the light comes out the same colour there as in
+		// daylight and the place stops being blue. A normally lit room sums to
+		// about white and multiplying by it changes nothing, which is why the
+		// mistake was invisible in the levels it was tuned in.
+		//
+		// Flat across the model either way -- ToonRoomLight has no normal in
+		// it -- so this dims and tints without putting back the smooth falloff
+		// the bands exist to remove.
+		vec3 room = ToonRoomLight();
 
-		// How deep the shadow band goes. 0 leaves a character flat and fully
-		// lit, 1 is the ramp at its full depth.
-		color.rgb = mix(vec3(1.0), band, toonStrength);
+		// 0 is the room's light with no shading at all, 1 the ramp at full
+		// depth. Not white at 0: an unshaded surface should still be as bright
+		// and as coloured as the room it is in.
+		color.rgb = room*mix(vec3(1.0), cel, toonStrength);
 	}else{
 		color.rgb = v_color.rgb;
 		color.rgb += u_ambLight.rgb*surfAmbient;

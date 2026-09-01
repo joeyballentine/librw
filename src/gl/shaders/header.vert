@@ -118,6 +118,9 @@ uniform vec4 u_outlineColor;
 // it is used instead. SpongeBob's pants are drawn with a black line and the
 // rest of him with a green one, which is how the show inks him.
 uniform vec4 u_outlineColor2;
+// Whether each ink is a colour in its own right (1) or a scale on the surface
+// it surrounds (0). x is the upper region, y the lower.
+uniform vec4 u_outlineFlags;
 
 // A light locked to the model rather than to the world, in xyz, with w saying
 // whether to use it.

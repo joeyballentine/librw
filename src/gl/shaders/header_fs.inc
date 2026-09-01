@@ -151,6 +151,7 @@ const char *header_frag_src =
 "// The outline's colour, with its thickness in world units in alpha.\n"
 "uniform vec4 u_outlineColor;\n"
 "uniform vec4 u_outlineColor2;\n"
+"uniform vec4 u_outlineFlags;\n"
 
 "// A light locked to the model rather than to the world, in xyz, with w saying\n"
 "// whether to use it.\n"

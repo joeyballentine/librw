@@ -119,6 +119,9 @@ const char *header_vert_src =
 "// it is used instead. SpongeBob's pants are drawn with a black line and the\n"
 "// rest of him with a green one, which is how the show inks him.\n"
 "uniform vec4 u_outlineColor2;\n"
+"// Whether each ink is a colour in its own right (1) or a scale on the surface\n"
+"// it surrounds (0). x is the upper region, y the lower.\n"
+"uniform vec4 u_outlineFlags;\n"
 
 "// A light locked to the model rather than to the world, in xyz, with w saying\n"
 "// whether to use it.\n"

@@ -93,7 +93,23 @@ vec3 ToonRoomLight()
 			color += u_lightColor[i].rgb*surfDiffuse;
 	}
 
-	return clamp(color, 0.0, 1.0);
+	// **Scaled down to fit, not clipped per channel.**
+	//
+	// Rock Bottom is lit by an ambient of 0.29 0.51 0.64 -- blue, and carrying
+	// nearly all of the light, since its directional is almost nothing. Raise
+	// that by the intensity setting and green and blue both pass 1 while red
+	// does not, so a per-channel clamp flattens the two of them together and
+	// the room comes out washed cyan. The hue is destroyed exactly when the
+	// light is bright and coloured, which is when it matters.
+	//
+	// Dividing by the largest channel keeps the ratios and only caps the
+	// brightness, so a blue room stays as blue as it was authored.
+	float m = max(color.r, max(color.g, color.b));
+
+	if(m > 1.0)
+		color /= m;
+
+	return max(color, 0.0);
 }
 
 vec3 DoDynamicLightPP(vec3 N)

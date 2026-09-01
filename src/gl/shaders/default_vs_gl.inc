@@ -52,7 +52,10 @@ const char *default_vert_src =
 "	// Which of the two inks this vertex belongs to, decided here rather than\n"
 "	// in a second pass over the whole model: a vertex shader can branch, and\n"
 "	// the earlier GameCube version could not.\n"
-"	v_outline = in_pos.y < u_outlineColor2.a ? u_outlineColor2 : u_outlineColor;\n"
+"	// rgb is the ink, w says how to read it -- see u_outlineFlags.\n"
+"	v_outline = in_pos.y < u_outlineColor2.a\n"
+"	          ? vec4(u_outlineColor2.rgb, u_outlineFlags.y)\n"
+"	          : vec4(u_outlineColor.rgb, u_outlineFlags.x);\n"
 "#endif\n"
 
 "	gl_Position = u_proj * u_view * Vertex;\n"

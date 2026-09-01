@@ -94,7 +94,23 @@ const char *lighting_frag_src =
 "			color += u_lightColor[i].rgb*surfDiffuse;\n"
 "	}\n"
 
-"	return clamp(color, 0.0, 1.0);\n"
+"	// **Scaled down to fit, not clipped per channel.**\n"
+"	//\n"
+"	// Rock Bottom is lit by an ambient of 0.29 0.51 0.64 -- blue, and carrying\n"
+"	// nearly all of the light, since its directional is almost nothing. Raise\n"
+"	// that by the intensity setting and green and blue both pass 1 while red\n"
+"	// does not, so a per-channel clamp flattens the two of them together and\n"
+"	// the room comes out washed cyan. The hue is destroyed exactly when the\n"
+"	// light is bright and coloured, which is when it matters.\n"
+"	//\n"
+"	// Dividing by the largest channel keeps the ratios and only caps the\n"
+"	// brightness, so a blue room stays as blue as it was authored.\n"
+"	float m = max(color.r, max(color.g, color.b));\n"
+
+"	if(m > 1.0)\n"
+"		color /= m;\n"
+
+"	return max(color, 0.0);\n"
 "}\n"
 
 "vec3 DoDynamicLightPP(vec3 N)\n"

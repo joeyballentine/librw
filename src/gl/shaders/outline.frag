@@ -31,8 +31,17 @@ main(void)
 	// and multiplies it down. v_outline carries how far down, per region, which
 	// is what lets his trousers still come out black -- a scale of zero is
 	// black whatever the texture underneath says.
+	// Two ways to read the ink, chosen per region.
+	//
+	// Scaled: a darkened copy of whatever the surface is painted, which is what
+	// gives every character an ink on its own hue for nothing.
+	//
+	// Flat: a colour named outright, for where a character has an ink that is
+	// not simply a darker version of himself. SpongeBob is the case -- the show
+	// draws him with the same green his holes are, which is nowhere near a
+	// darkened yellow.
 	vec4 tex = texture(tex0, vec2(v_tex0.x, 1.0-v_tex0.y));
-	vec4 color = vec4(tex.rgb*v_outline.rgb, 1.0);
+	vec4 color = vec4(mix(tex.rgb*v_outline.rgb, v_outline.rgb, v_outline.a), 1.0);
 
 	// Into the fog like everything else. An outline that stayed black as the
 	// model behind it faded would draw a hard shape around a ghost.

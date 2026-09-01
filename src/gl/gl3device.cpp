@@ -147,6 +147,7 @@ int32 u_toonParams;
 int32 u_outlineColor;
 int32 u_outlineColor2;
 int32 u_toonLightDir;
+int32 u_outlineFlags;
 
 bool32 constantVertexColorWhite;
 
@@ -300,6 +301,10 @@ getLightIntensity(void)
 // setToonShading, which explains what happens if you try.
 static bool32 toonRegistered;
 
+// Whether each ink is a colour outright or a scale on the surface. See
+// u_outlineFlags.
+static float32 outlineFlags[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
 // The outline's colour, and its thickness in world units in alpha. Zero
 // thickness is how the pass is turned off -- see getOutline.
 static float32 outlineColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -334,6 +339,7 @@ setToonLightDir(float32 x, float32 y, float32 z)
 
 	if(toonRegistered)
 		setUniform(u_toonLightDir, toonLightDir);
+	setUniform(u_outlineFlags, outlineFlags);
 }
 
 void
@@ -355,6 +361,16 @@ int32
 getOutlineMode(void)
 {
 	return outlineColor[3] > 0.0f ? outlineMode : OUTLINE_NONE;
+}
+
+void
+setOutlineFlat(bool32 upper, bool32 lower)
+{
+	outlineFlags[0] = upper ? 1.0f : 0.0f;
+	outlineFlags[1] = lower ? 1.0f : 0.0f;
+
+	if(toonRegistered)
+		setUniform(u_outlineFlags, outlineFlags);
 }
 
 void
@@ -2904,6 +2920,7 @@ initOpenGL(void)
 	u_outlineColor = registerUniform("u_outlineColor", UNIFORM_VEC4);
 	u_outlineColor2 = registerUniform("u_outlineColor2", UNIFORM_VEC4);
 	u_toonLightDir = registerUniform("u_toonLightDir", UNIFORM_VEC4);
+	u_outlineFlags = registerUniform("u_outlineFlags", UNIFORM_VEC4);
 	toonRegistered = 1;
 	setUniform(u_toonParams, toonParams);
 	setUniform(u_outlineColor, outlineColor);

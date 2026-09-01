@@ -183,6 +183,7 @@ extern int32 u_toonParams;
 extern int32 u_outlineColor;
 extern int32 u_outlineColor2;
 extern int32 u_toonLightDir;
+extern int32 u_outlineFlags;
 
 enum OutlineMode
 {
@@ -217,6 +218,11 @@ void setOutline(float32 r, float32 g, float32 b, float32 thickness);
 // belongs to the model rather than to the setting; a height below every vertex
 // means one ink everywhere, which is the default.
 void setOutlineLower(float32 r, float32 g, float32 b);
+
+// Whether each ink is a colour in its own right or a scale applied to the
+// surface it surrounds. Scaled suits a character whose ink is a darker version
+// of himself, which is most of them; flat suits one whose is not.
+void setOutlineFlat(bool32 upper, bool32 lower);
 void setOutlineSplit(float32 y);
 
 // The strip of colour the light term looks up in place of being multiplied in

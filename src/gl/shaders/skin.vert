@@ -51,7 +51,16 @@ main(void)
 	// Which of the two inks this vertex belongs to, decided here rather than
 	// in a second pass over the whole model: a vertex shader can branch, and
 	// the earlier GameCube version could not.
-	v_outline = SkinVertex.y < u_outlineColor2.a ? u_outlineColor2 : u_outlineColor;
+	// rgb is the ink, w says how to read it -- see u_outlineFlags.
+	// **in_pos, not SkinVertex: the bind pose, not the animated one.**
+	//
+	// Which ink a vertex belongs to is a fact about the model -- his trousers
+	// are his trousers -- and the height it is measured against is worked out
+	// once, from the bind pose. Testing the posed position against that
+	// threshold moves the boundary every time he lifts a leg.
+	v_outline = in_pos.y < u_outlineColor2.a
+	          ? vec4(u_outlineColor2.rgb, u_outlineFlags.y)
+	          : vec4(u_outlineColor.rgb, u_outlineFlags.x);
 #endif
 
 	gl_Position = u_proj * u_view * Vertex;

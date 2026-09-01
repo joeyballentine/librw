@@ -150,6 +150,7 @@ ShadowFactorN(vec4 shadowPos, vec3 N)
 // The outline's colour, with its thickness in world units in alpha.
 uniform vec4 u_outlineColor;
 uniform vec4 u_outlineColor2;
+uniform vec4 u_outlineFlags;
 
 // A light locked to the model rather than to the world, in xyz, with w saying
 // whether to use it.
