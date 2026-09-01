@@ -4,6 +4,13 @@
 #
 # Byte-for-byte the same output: a blank line passes through as a blank line,
 # because sed's `..*` does not match one.
+#
+# **A double quote in the shader is refused rather than emitted.** Every line
+# becomes a C string literal and nothing escapes anything, so one quote ends the
+# literal early and the error surfaces hundreds of lines away in a generated
+# file, naming a column in machine-written code. Escaping it here instead would
+# make this disagree with the Makefile, and the next person to run make would
+# get the broken version back.
 import io, sys
 
 name, var, out = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -13,7 +20,10 @@ if src.endswith('\n'):
     src = src[:-1]
 
 lines = ['const char *' + var + ' =']
-for line in src.split('\n'):
+for n, line in enumerate(src.split('\n'), 1):
+    if '"' in line:
+        sys.exit('%s:%d: a double quote cannot survive becoming a string '
+                 'literal -- reword the line\n  %s' % (name, n, line.strip()))
     lines.append('"' + line + '\\n"' if line else '')
 lines.append(';')
 
