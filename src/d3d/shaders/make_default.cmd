@@ -22,6 +22,16 @@ rem the rest, so there is nothing for DIRECTIONALS to switch on.
 "%FXC%" /nologo /T ps_2_0 /DPERPIXEL /Fh default_pp_PS.h default_PS.hlsl
 "%FXC%" /nologo /T ps_2_0 /DPERPIXEL /DTEX /Fh default_tex_pp_PS.h default_PS.hlsl
 
+rem The cel look. TOON replaces the lighting rather than adding to it, so it
+rem needs no light loop and is cheaper than the path it stands in for -- but
+rem ps_2_0 has no branches, so it has to be its own program rather than an if.
+"%FXC%" /nologo /T ps_2_0 /DTOON /Fh default_toon_PS.h default_PS.hlsl
+"%FXC%" /nologo /T ps_2_0 /DTOON /DTEX /Fh default_tex_toon_PS.h default_PS.hlsl
+
+rem The inverted hull, and the flat ink that goes round it.
+"%FXC%" /nologo /T vs_2_0 /DOUTLINE /Fh outline_VS.h default_VS.hlsl
+"%FXC%" /nologo /T ps_2_0 /Fh outline_PS.h outline_PS.hlsl
+
 "%FXC%" /nologo /T vs_2_0 /Fh im2d_VS.h im2d_VS.hlsl
 "%FXC%" /nologo /T ps_2_0 /Fh im2d_PS.h im2d_PS.hlsl
 "%FXC%" /nologo /T ps_2_0 /DTEX /Fh im2d_tex_PS.h im2d_PS.hlsl

@@ -73,6 +73,69 @@ bool32 getAlphaToCoverage(void);
 // lights are uploaded fresh per atomic and the material constants go to both
 // shader stages whatever this says.
 void setPerPixelLightingEnabled(bool32 enable);
+
+// The cel look. Mirrors rw::gl3's, and the arithmetic in the shaders is the
+// same -- see toonConstants.h for the one place they differ and why.
+//
+// **The key direction and the room colour are worked out on the way to the
+// uniform, not in the shader.** ps_2_0 has neither loops nor branches, so
+// picking the brightest of eight lights per pixel means eight unrolled
+// comparisons. They are per-draw quantities, so uploadLights resolves them
+// once. That is what makes the toon path cheaper than the lighting it replaces
+// rather than an addition to it.
+enum OutlineMode
+{
+	OUTLINE_NONE = 0,
+	OUTLINE_PLAIN,
+	OUTLINE_TWOTONE
+};
+
+// How much brighter than authored every light from a light kit burns. 1 is as
+// the level says. Applied on the way to the uniform, so nothing the
+// application owns is modified.
+void setLightIntensity(float32 scale);
+float32 getLightIntensity(void);
+
+void setToonShading(bool32 enable, float32 bands, float32 saturation, float32 strength);
+void setToonRamp(Texture *tex);
+void setToonRoomTint(float32 r, float32 g, float32 b);
+void clearToonRoomTint(void);
+void setToonLightDir(float32 x, float32 y, float32 z);
+void clearToonLightDir(void);
+bool32 getToonShading(void);
+
+void setOutline(float32 r, float32 g, float32 b, float32 thickness);
+void setOutlineLower(float32 r, float32 g, float32 b);
+void setOutlineFlat(bool32 upper, bool32 lower);
+void setOutlineSplit(float32 y);
+void setOutlineMode(int32 mode);
+int32 getOutlineMode(void);
+
+// Push what the toon shaders read. The pixel constants go once a draw, after
+// the lights, because the direction and the room colour are resolved from
+// them; the vertex ones go before the hull pass that reads them.
+void uploadToonConstants(void);
+void uploadOutlineConstants(void);
+
+// Where the toon constants live. c27..c29 in the pixel shader, above
+// perPixelConstants.h; c233..c235 in the vertex shader, above the skin
+// pipeline's bone matrices.
+enum
+{
+	PSLOC_toonParams = 27,
+	PSLOC_toonLightDir = 28,
+	PSLOC_toonRoom = 29,
+
+	VSLOC_outlineColor = 233,
+	VSLOC_outlineColor2 = 234,
+	VSLOC_outlineFlags = 235
+};
+
+extern void *default_toon_PS;
+extern void *default_tex_toon_PS;
+extern void *outline_VS;
+extern void *outline_PS;
+extern void *skin_outline_VS;
 bool32 getPerPixelLighting(void);
 // The single-sampled picture, for anything that needs to read the frame back:
 // the samples are collapsed into it on the way out. nil when there is no

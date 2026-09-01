@@ -100,6 +100,32 @@ createDefaultShaders(void)
 		default_pp_VS = createVertexShader((void*)VS_NAME);
 		assert(default_pp_VS);
 	}
+
+	// The cel look and the hull that goes round it.
+	{
+		static
+#include "shaders/default_toon_PS.h"
+		default_toon_PS = createPixelShader((void*)PS_NAME);
+		assert(default_toon_PS);
+	}
+	{
+		static
+#include "shaders/default_tex_toon_PS.h"
+		default_tex_toon_PS = createPixelShader((void*)PS_NAME);
+		assert(default_tex_toon_PS);
+	}
+	{
+		static
+#include "shaders/outline_VS.h"
+		outline_VS = createVertexShader((void*)VS_NAME);
+		assert(outline_VS);
+	}
+	{
+		static
+#include "shaders/outline_PS.h"
+		outline_PS = createPixelShader((void*)PS_NAME);
+		assert(outline_PS);
+	}
 	{
 		static
 #include "shaders/uvxform_pp_VS.h"
@@ -334,6 +360,167 @@ setNumLights(int numDir, int numPoint, int numSpot)
 	}
 }
 
+// The cel look's state. Held rather than pushed where it is set: some of it is
+// set before the device exists, and all of it is per-draw rather than per-frame.
+// How much brighter than authored every light burns. The kits were lit for a
+// television and read dark on a modern display; scaled on the way to the
+// uniform, so nothing the application owns is modified.
+static float32 lightIntensity = 1.0f;
+
+void
+setLightIntensity(float32 scale)
+{
+	if(scale < 0.0f)
+		scale = 0.0f;
+
+	lightIntensity = scale;
+}
+
+float32
+getLightIntensity(void)
+{
+	return lightIntensity;
+}
+
+void *default_toon_PS;
+void *default_tex_toon_PS;
+void *outline_VS;
+void *outline_PS;
+
+static float32 toonParams[4] = { 0.0f, 3.0f, 1.0f, 0.0f };
+static float32 toonLightDir[4] = { 0.0f, -1.0f, 0.0f, 0.0f };
+static float32 toonRoom[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
+static float32 outlineColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+static float32 outlineColor2[4] = { 0.0f, 0.0f, 0.0f, -1.0e30f };
+static float32 outlineFlags[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+static int32 outlineMode;
+static Texture *toonRamp;
+
+// What the application asked for, kept apart from what gets uploaded: the
+// direction and the room are resolved per draw from the lights unless the
+// application has overridden them.
+static bool32 toonLightDirSet;
+static bool32 toonRoomSet;
+
+void
+setToonShading(bool32 enable, float32 bands, float32 saturation, float32 strength)
+{
+	(void)bands;	// the ramp texture carries the band count
+
+	toonParams[0] = enable ? 1.0f : 0.0f;
+	toonParams[2] = saturation;
+	toonParams[3] = strength;
+}
+
+bool32
+getToonShading(void)
+{
+	return toonParams[0] != 0.0f;
+}
+
+void
+setToonRamp(Texture *tex)
+{
+	toonRamp = tex;
+}
+
+void
+setToonRoomTint(float32 r, float32 g, float32 b)
+{
+	toonRoom[0] = r;
+	toonRoom[1] = g;
+	toonRoom[2] = b;
+	toonRoomSet = 1;
+}
+
+void
+clearToonRoomTint(void)
+{
+	toonRoomSet = 0;
+}
+
+void
+setToonLightDir(float32 x, float32 y, float32 z)
+{
+	toonLightDir[0] = x;
+	toonLightDir[1] = y;
+	toonLightDir[2] = z;
+	toonLightDirSet = 1;
+}
+
+void
+clearToonLightDir(void)
+{
+	toonLightDirSet = 0;
+}
+
+void
+setOutline(float32 r, float32 g, float32 b, float32 thickness)
+{
+	if(thickness < 0.0f)
+		thickness = 0.0f;
+
+	outlineColor[0] = r;
+	outlineColor[1] = g;
+	outlineColor[2] = b;
+	outlineColor[3] = thickness;
+}
+
+void
+setOutlineLower(float32 r, float32 g, float32 b)
+{
+	outlineColor2[0] = r;
+	outlineColor2[1] = g;
+	outlineColor2[2] = b;
+}
+
+void
+setOutlineFlat(bool32 upper, bool32 lower)
+{
+	outlineFlags[0] = upper ? 1.0f : 0.0f;
+	outlineFlags[1] = lower ? 1.0f : 0.0f;
+}
+
+void
+setOutlineSplit(float32 y)
+{
+	outlineColor2[3] = y;
+}
+
+void
+setOutlineMode(int32 mode)
+{
+	outlineMode = mode;
+}
+
+int32
+getOutlineMode(void)
+{
+	return outlineColor[3] > 0.0f ? outlineMode : OUTLINE_NONE;
+}
+
+// Push what the toon pixel shaders read. Called once a draw, after the lights
+// are known, because two of the three are resolved from them.
+void
+uploadToonConstants(void)
+{
+	if(!getToonShading())
+		return;
+
+	setTexture(3, toonRamp);
+	d3ddevice->SetPixelShaderConstantF(PSLOC_toonParams, toonParams, 1);
+	d3ddevice->SetPixelShaderConstantF(PSLOC_toonLightDir, toonLightDir, 1);
+	d3ddevice->SetPixelShaderConstantF(PSLOC_toonRoom, toonRoom, 1);
+}
+
+void
+uploadOutlineConstants(void)
+{
+	d3ddevice->SetVertexShaderConstantF(VSLOC_outlineColor, outlineColor, 1);
+	d3ddevice->SetVertexShaderConstantF(VSLOC_outlineColor2, outlineColor2, 1);
+	d3ddevice->SetVertexShaderConstantF(VSLOC_outlineFlags, outlineFlags, 1);
+}
+
 int32
 uploadLights(WorldLights *lightData)
 {
@@ -353,11 +540,60 @@ uploadLights(WorldLights *lightData)
 	LightVS spots[8];
 	for(i = 0; i < lightData->numDirectionals; i++){
 		Light *l = lightData->directionals[i];
-		directionals[i].color.x = l->color.red;
-		directionals[i].color.y = l->color.green;
-		directionals[i].color.z = l->color.blue;
+		directionals[i].color.x = l->color.red*lightIntensity;
+		directionals[i].color.y = l->color.green*lightIntensity;
+		directionals[i].color.z = l->color.blue*lightIntensity;
 		directionals[i].direction = l->getFrame()->getLTM()->at;
 		bits |= VSLIGHT_DIRECT;
+	}
+
+	// The two things the toon pixel shader would otherwise have to loop for.
+	//
+	// The room is every light summed as if the surface faced all of them at
+	// once -- a meaningless quantity for lighting a surface and the right one
+	// for asking what colour it is in here -- scaled down to fit rather than
+	// clamped per channel, so a blue room stays blue instead of clipping to
+	// cyan. The key is simply the brightest directional.
+	if(getToonShading()){
+		float32 room[3];
+		float32 bestLum = -1.0f;
+
+		room[0] = lightData->ambient.red;
+		room[1] = lightData->ambient.green;
+		room[2] = lightData->ambient.blue;
+
+		for(i = 0; i < lightData->numDirectionals; i++){
+			Light *l = lightData->directionals[i];
+			float32 lum = l->color.red + l->color.green + l->color.blue;
+
+			room[0] += l->color.red;
+			room[1] += l->color.green;
+			room[2] += l->color.blue;
+
+			if(lum > bestLum && !toonLightDirSet){
+				bestLum = lum;
+				toonLightDir[0] = l->getFrame()->getLTM()->at.x;
+				toonLightDir[1] = l->getFrame()->getLTM()->at.y;
+				toonLightDir[2] = l->getFrame()->getLTM()->at.z;
+			}
+		}
+
+		if(!toonRoomSet){
+			float32 m = room[0];
+
+			if(room[1] > m) m = room[1];
+			if(room[2] > m) m = room[2];
+
+			if(m > 1.0f){
+				room[0] /= m;
+				room[1] /= m;
+				room[2] /= m;
+			}
+
+			toonRoom[0] = room[0];
+			toonRoom[1] = room[1];
+			toonRoom[2] = room[2];
+		}
 	}
 
 	int np = 0;
@@ -468,7 +704,16 @@ lightingCB_Shader(Atomic *atomic)
 
 	if(atomic->geometry->flags & rw::Geometry::LIGHT){
 		((World*)engine->currentWorld)->enumerateLights(atomic, &lightData);
-		setAmbient(lightData.ambient);
+
+		// Scaled like the directionals below, or the setting would brighten
+		// only half the rig and warm every shadow.
+		RGBAf amb = lightData.ambient;
+
+		amb.red *= lightIntensity;
+		amb.green *= lightIntensity;
+		amb.blue *= lightIntensity;
+		setAmbient(amb);
+
 		return uploadLights(&lightData);
 	}else{
 		static const RGBAf black = { 0.0f, 0.0f, 0.0f, 0.0f };
