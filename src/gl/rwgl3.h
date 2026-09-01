@@ -148,11 +148,17 @@ bool32 getDepthPass(void);
 // `bias` is subtracted from the receiver's own depth before comparing, and
 // `strength` is what a shadowed pixel is multiplied by: 1 is no shadow, 0 is
 // black. nil clears it, as does clearShadowMap.
-void setShadowMap(Texture *tex, float32 *matrix, float32 bias, float32 strength);
+// `lightDir` is where the light travels, from it towards what it lights. It is
+// what lets a receiver with a normal skip the test on a surface facing away
+// from the light -- which is not an optimisation but the cure for the acne that
+// storing back faces leaves behind.
+void setShadowMap(Texture *tex, float32 *matrix, float32 *lightDir,
+                  float32 bias, float32 strength);
 void clearShadowMap(void);
 
 extern int32 u_shadowMatrix;
 extern int32 u_shadowParams;
+extern int32 u_shadowLightDir;
 
 // Evaluate lighting per fragment rather than per vertex, in the default,
 // uvxform and skin pipelines. Directional lights only: an atomic reached by a

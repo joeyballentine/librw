@@ -42,7 +42,14 @@ main(void)
 	// or every shadowed surface goes black. docs/SHADOWS.md says so too; this
 	// is the one line it is talking about.
 #ifdef SHADOWRECEIVER
+#ifdef PERPIXEL
+	// The normal is already here for the lighting, so the shadow test can use
+	// it to skip surfaces that face away from the light. Those are the ones the
+	// caster pass recorded, so they would otherwise compare against themselves.
+	color.rgb *= ShadowFactorN(v_shadowPos, N);
+#else
 	color.rgb *= ShadowFactor(v_shadowPos);
+#endif
 #endif
 
 	color.rgb = mix(u_fogColor.rgb, color.rgb, v_fog);

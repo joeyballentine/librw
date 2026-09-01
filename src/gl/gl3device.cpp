@@ -141,6 +141,7 @@ int32 u_matColor;
 int32 u_surfProps;
 int32 u_shadowMatrix;
 int32 u_shadowParams;
+int32 u_shadowLightDir;
 
 bool32 constantVertexColorWhite;
 
@@ -220,11 +221,18 @@ setDepthPassEnabled(bool32 enable)
 // produce a value that is neither. That is the price of packing rather than
 // using a depth texture, and it is why there is no free hardware PCF.
 void
-setShadowMap(Texture *tex, float32 *matrix, float32 bias, float32 strength)
+setShadowMap(Texture *tex, float32 *matrix, float32 *lightDir, float32 bias, float32 strength)
 {
 	setTexture(2, tex);
 
 	setUniform(u_shadowMatrix, matrix);
+
+	float32 dir[4];
+	dir[0] = lightDir[0];
+	dir[1] = lightDir[1];
+	dir[2] = lightDir[2];
+	dir[3] = 0.0f;
+	setUniform(u_shadowLightDir, dir);
 
 	float32 params[4];
 	params[0] = tex ? 1.0f : 0.0f;
@@ -2679,6 +2687,7 @@ initOpenGL(void)
 	// shader reads it.
 	u_shadowMatrix = registerUniform("u_shadowMatrix", UNIFORM_MAT4);
 	u_shadowParams = registerUniform("u_shadowParams", UNIFORM_VEC4);
+	u_shadowLightDir = registerUniform("u_shadowLightDir", UNIFORM_VEC4);
 
 	// for im2d
 	registerUniform("u_xform", UNIFORM_VEC4);

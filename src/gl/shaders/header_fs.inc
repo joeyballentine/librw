@@ -31,6 +31,8 @@ const char *header_frag_src =
 "// shadow map there both redeclared the sampler and fought for the unit.\n"
 "uniform sampler2D tex2;\n"
 "uniform vec4 u_shadowParams;\n"
+"// Where the light travels, from it towards what it lights.\n"
+"uniform vec4 u_shadowLightDir;\n"
 
 "#define shadowEnabled (u_shadowParams.x)\n"
 "#define shadowBias (u_shadowParams.y)\n"
@@ -65,6 +67,24 @@ const char *header_frag_src =
 "	float casterDepth = UnpackDepth(texture(tex2, t.xy));\n"
 
 "	return t.z - shadowBias > casterDepth ? shadowStrength : 1.0;\n"
+"}\n"
+
+"// The same test, for a surface whose normal is known.\n"
+"//\n"
+"// A surface facing away from the light needs no map: it cannot see the light,\n"
+"// and the lighting has already darkened it. Asking anyway is worse than\n"
+"// pointless, because those are exactly the surfaces whose depth IS the map --\n"
+"// the caster pass stores back faces -- so each one compares against its own\n"
+"// record and breaks into stripes on the rounding. That is the acne that\n"
+"// survived storing back faces, and no bias fixes it: the two numbers are meant\n"
+"// to be equal.\n"
+"float\n"
+"ShadowFactorN(vec4 shadowPos, vec3 N)\n"
+"{\n"
+"	if(dot(N, -u_shadowLightDir.xyz) <= 0.0)\n"
+"		return 1.0;\n"
+
+"	return ShadowFactor(shadowPos);\n"
 "}\n"
 
 "void DoAlphaTest(float a)\n"

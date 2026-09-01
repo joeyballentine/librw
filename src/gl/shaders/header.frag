@@ -30,6 +30,8 @@ out vec4 fragColor;
 // shadow map there both redeclared the sampler and fought for the unit.
 uniform sampler2D tex2;
 uniform vec4 u_shadowParams;
+// Where the light travels, from it towards what it lights.
+uniform vec4 u_shadowLightDir;
 
 #define shadowEnabled (u_shadowParams.x)
 #define shadowBias (u_shadowParams.y)
@@ -64,6 +66,24 @@ ShadowFactor(vec4 shadowPos)
 	float casterDepth = UnpackDepth(texture(tex2, t.xy));
 
 	return t.z - shadowBias > casterDepth ? shadowStrength : 1.0;
+}
+
+// The same test, for a surface whose normal is known.
+//
+// A surface facing away from the light needs no map: it cannot see the light,
+// and the lighting has already darkened it. Asking anyway is worse than
+// pointless, because those are exactly the surfaces whose depth IS the map --
+// the caster pass stores back faces -- so each one compares against its own
+// record and breaks into stripes on the rounding. That is the acne that
+// survived storing back faces, and no bias fixes it: the two numbers are meant
+// to be equal.
+float
+ShadowFactorN(vec4 shadowPos, vec3 N)
+{
+	if(dot(N, -u_shadowLightDir.xyz) <= 0.0)
+		return 1.0;
+
+	return ShadowFactor(shadowPos);
 }
 
 void DoAlphaTest(float a)
