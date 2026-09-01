@@ -436,6 +436,10 @@ struct Gl3Raster
 
 	uint32 fbo;		// used for camera texture only!
 	Raster *fboMate;	// color or zbuffer raster mate of this one
+	// Whether the fbo above has been checked for completeness. Once is enough
+	// and once is all it can afford -- see setFrameBuffer, which explains why
+	// the check exists at all.
+	uint8 fboChecked;
 	RasterLevels *backingStore;	// if we can't read back GPU memory but have to
 };
 

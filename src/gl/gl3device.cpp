@@ -1822,6 +1822,27 @@ setFrameBuffer(Camera *cam)
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
 		natfb->fboMate = nil;
 	}
+
+	// **Say so when a camera texture cannot be drawn into.**
+	//
+	// An incomplete framebuffer is not an error GL raises anywhere: draws
+	// aimed at it are discarded and the texture keeps whatever it held, so the
+	// symptom is a render target that reads as one flat colour and never
+	// changes however much is drawn. Nothing in that points at the target --
+	// it looks like the geometry, the transform or the shader, and all three
+	// can be ruled out at length before anyone suspects the framebuffer.
+	//
+	// Once per raster, and only when it is actually incomplete. A size the
+	// driver will not attach is the usual cause.
+	if(natfb->fbo && !natfb->fboChecked){
+		natfb->fboChecked = 1;
+		GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+		if(status != GL_FRAMEBUFFER_COMPLETE)
+			fprintf(stderr, "librw: camera texture %dx%d cannot be rendered into "
+			                "(framebuffer status 0x%x); everything drawn to it is "
+			                "discarded\n",
+			        fbuf->width, fbuf->height, (unsigned)status);
+	}
 }
 
 static Rect
