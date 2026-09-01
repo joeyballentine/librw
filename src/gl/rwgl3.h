@@ -184,6 +184,7 @@ extern int32 u_outlineColor;
 extern int32 u_outlineColor2;
 extern int32 u_toonLightDir;
 extern int32 u_outlineFlags;
+extern int32 u_toonRoomTint;
 
 enum OutlineMode
 {
@@ -200,6 +201,12 @@ enum OutlineMode
 // choosing rather than from the scene's lights, keeping their colour. For
 // characters, whose shading in a cartoon describes their shape and not the room
 // -- see u_toonLightDir in header.vert.
+// Paint what is drawn next in the colour of the room, rather than in the
+// colour of the lights that happen to reach it. A level lights its world and
+// its objects with different rigs; a cartoon does not.
+void setToonRoomTint(float32 r, float32 g, float32 b);
+void clearToonRoomTint(void);
+
 void setToonLightDir(float32 x, float32 y, float32 z);
 void clearToonLightDir(void);
 

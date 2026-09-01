@@ -148,6 +148,7 @@ int32 u_outlineColor;
 int32 u_outlineColor2;
 int32 u_toonLightDir;
 int32 u_outlineFlags;
+int32 u_toonRoomTint;
 
 bool32 constantVertexColorWhite;
 
@@ -305,6 +306,10 @@ static bool32 toonRegistered;
 // u_outlineFlags.
 static float32 outlineFlags[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
+// The room a character is standing in, in xyz, with w as the switch. See
+// u_toonRoomTint.
+static float32 toonRoomTint[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
+
 // The outline's colour, and its thickness in world units in alpha. Zero
 // thickness is how the pass is turned off -- see getOutline.
 static float32 outlineColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -330,6 +335,27 @@ static int32 outlineMode;
 static float32 toonLightDir[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
 void
+setToonRoomTint(float32 r, float32 g, float32 b)
+{
+	toonRoomTint[0] = r;
+	toonRoomTint[1] = g;
+	toonRoomTint[2] = b;
+	toonRoomTint[3] = 1.0f;
+
+	if(toonRegistered)
+		setUniform(u_toonRoomTint, toonRoomTint);
+}
+
+void
+clearToonRoomTint(void)
+{
+	toonRoomTint[3] = 0.0f;
+
+	if(toonRegistered)
+		setUniform(u_toonRoomTint, toonRoomTint);
+}
+
+void
 setToonLightDir(float32 x, float32 y, float32 z)
 {
 	toonLightDir[0] = x;
@@ -340,6 +366,7 @@ setToonLightDir(float32 x, float32 y, float32 z)
 	if(toonRegistered)
 		setUniform(u_toonLightDir, toonLightDir);
 	setUniform(u_outlineFlags, outlineFlags);
+	setUniform(u_toonRoomTint, toonRoomTint);
 }
 
 void
@@ -2921,6 +2948,7 @@ initOpenGL(void)
 	u_outlineColor2 = registerUniform("u_outlineColor2", UNIFORM_VEC4);
 	u_toonLightDir = registerUniform("u_toonLightDir", UNIFORM_VEC4);
 	u_outlineFlags = registerUniform("u_outlineFlags", UNIFORM_VEC4);
+	u_toonRoomTint = registerUniform("u_toonRoomTint", UNIFORM_VEC4);
 	toonRegistered = 1;
 	setUniform(u_toonParams, toonParams);
 	setUniform(u_outlineColor, outlineColor);
@@ -3061,7 +3089,9 @@ initOpenGL(void)
 		// needs nothing from the surface it is drawn around.
 #include "shaders/outline_fs.inc"
 		const char *vs_outline[] = { shaderDecl, "#define OUTLINE\n", header_vert_src, default_vert_src, nil };
-		const char *fs_outline[] = { shaderDecl, header_frag_src, outline_frag_src, nil };
+		// lighting.frag between the two, because the ink is lit and
+		// ToonRoomLight is where the light uniforms are declared.
+		const char *fs_outline[] = { shaderDecl, header_frag_src, lighting_frag_src, outline_frag_src, nil };
 		outlineShader = Shader::create(vs_outline, fs_outline);
 		assert(outlineShader);
 	}

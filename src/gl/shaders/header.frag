@@ -165,6 +165,16 @@ uniform vec4 u_outlineFlags;
 // travels straight back through him from the front. His face is then always in
 // the top band and his sides always in the bottom one, whichever way he faces.
 uniform vec4 u_toonLightDir;
+// The colour of the room a character is standing in, with w saying whether to
+// use it in place of his own lighting.
+//
+// A level lights its world and its objects with different rigs, and Rock Bottom
+// is the case that shows why it matters: the room gets a blue kit summing to
+// 0.83 1.52 1.77 and the characters get a grey one summing to 1.50 1.50 1.50.
+// That is the game's own authoring and it is right for a renderer that draws
+// characters as objects -- but a cartoon paints everything in a scene from the
+// same palette, so a character standing in a blue room is drawn blue.
+uniform vec4 u_toonRoomTint;
 
 // The stylised look, off unless the application asks for it.
 //

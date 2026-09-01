@@ -41,7 +41,16 @@ main(void)
 	// draws him with the same green his holes are, which is nowhere near a
 	// darkened yellow.
 	vec4 tex = texture(tex0, vec2(v_tex0.x, 1.0-v_tex0.y));
-	vec4 color = vec4(mix(tex.rgb*v_outline.rgb, v_outline.rgb, v_outline.a), 1.0);
+	vec3 ink = mix(tex.rgb*v_outline.rgb, v_outline.rgb, v_outline.a);
+
+	// **The ink is lit like everything else.** An outline is drawn in ink that
+	// belongs to the picture, not stamped on top of it, so a line that stayed
+	// the same colour while the surface it surrounds went blue would read as
+	// something laid over the scene rather than part of it. Flat across the
+	// model, like the shading it borders.
+	vec3 room = u_toonRoomTint.w != 0.0 ? u_toonRoomTint.rgb : ToonRoomLight();
+
+	vec4 color = vec4(ink*room, 1.0);
 
 	// Into the fog like everything else. An outline that stayed black as the
 	// model behind it faded would draw a hard shape around a ghost.

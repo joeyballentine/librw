@@ -135,6 +135,7 @@ uniform vec4 u_outlineFlags;
 // travels straight back through him from the front. His face is then always in
 // the top band and his sides always in the bottom one, whichever way he faces.
 uniform vec4 u_toonLightDir;
+uniform vec4 u_toonRoomTint;
 
 // The stylised look, off unless the application asks for it.
 //

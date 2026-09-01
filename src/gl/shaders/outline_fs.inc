@@ -42,7 +42,16 @@ const char *outline_frag_src =
 "	// draws him with the same green his holes are, which is nowhere near a\n"
 "	// darkened yellow.\n"
 "	vec4 tex = texture(tex0, vec2(v_tex0.x, 1.0-v_tex0.y));\n"
-"	vec4 color = vec4(mix(tex.rgb*v_outline.rgb, v_outline.rgb, v_outline.a), 1.0);\n"
+"	vec3 ink = mix(tex.rgb*v_outline.rgb, v_outline.rgb, v_outline.a);\n"
+
+"	// **The ink is lit like everything else.** An outline is drawn in ink that\n"
+"	// belongs to the picture, not stamped on top of it, so a line that stayed\n"
+"	// the same colour while the surface it surrounds went blue would read as\n"
+"	// something laid over the scene rather than part of it. Flat across the\n"
+"	// model, like the shading it borders.\n"
+"	vec3 room = u_toonRoomTint.w != 0.0 ? u_toonRoomTint.rgb : ToonRoomLight();\n"
+
+"	vec4 color = vec4(ink*room, 1.0);\n"
 
 "	// Into the fog like everything else. An outline that stayed black as the\n"
 "	// model behind it faded would draw a hard shape around a ghost.\n"

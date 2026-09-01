@@ -58,7 +58,9 @@ main(void)
 		// Flat across the model either way -- ToonRoomLight has no normal in
 		// it -- so this dims and tints without putting back the smooth falloff
 		// the bands exist to remove.
-		vec3 room = ToonRoomLight();
+		// The level's own room colour where one was handed over -- see
+		// u_toonRoomTint -- and this surface's own lights otherwise.
+		vec3 room = u_toonRoomTint.w != 0.0 ? u_toonRoomTint.rgb : ToonRoomLight();
 
 		// 0 is the room's light with no shading at all, 1 the ramp at full
 		// depth. Not white at 0: an unshaded surface should still be as bright

@@ -136,6 +136,7 @@ const char *header_vert_src =
 "// travels straight back through him from the front. His face is then always in\n"
 "// the top band and his sides always in the bottom one, whichever way he faces.\n"
 "uniform vec4 u_toonLightDir;\n"
+"uniform vec4 u_toonRoomTint;\n"
 
 "// The stylised look, off unless the application asks for it.\n"
 "//\n"

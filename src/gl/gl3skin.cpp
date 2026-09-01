@@ -451,7 +451,9 @@ skinOpen(void *o, int32, int32)
 		// -- a flat colour does not care how the vertex got where it is.
 #include "shaders/outline_fs.inc"
 		const char *vs_outline[] = { shaderDecl, "#define OUTLINE\n", header_vert_src, skin_vert_src, nil };
-		const char *fs_outline[] = { shaderDecl, header_frag_src, outline_frag_src, nil };
+		// lighting.frag between the two, because the ink is lit and
+		// ToonRoomLight is where the light uniforms are declared.
+		const char *fs_outline[] = { shaderDecl, header_frag_src, lighting_frag_src, outline_frag_src, nil };
 		skinOutlineShader = Shader::create(vs_outline, fs_outline);
 		assert(skinOutlineShader);
 	}
