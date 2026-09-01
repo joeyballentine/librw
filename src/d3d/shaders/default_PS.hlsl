@@ -33,6 +33,11 @@ float4 main(VS_out input) : COLOR
 {
 	float4 color = input.Color;
 
+	// Held rather than applied where they are found: both are wanted after the
+	// texture. See simple.frag on the GL3 side.
+	float3 toonRoomC = float3(1.0, 1.0, 1.0);
+	float toonRimAmt = 0.0;
+
 #ifdef TOON
 	// **The lighting is replaced, not shaded on top of.**
 	//
@@ -51,9 +56,10 @@ float4 main(VS_out input) : COLOR
 
 	color.rgb = toonRoom.rgb * lerp(float3(1.0, 1.0, 1.0), cel, toonStrength);
 
-	// The silhouette light, added rather than blended: it is a light, not a
-	// shade, and the room says what colour it is.
-	color.rgb += ToonRimLight(Ns, input.ViewDir, toonRoom.rgb);
+	// **N and not Ns.** The rim wants the real surface; the hardened normal is
+	// for the bands. ToonRimAmount says what that cost.
+	toonRoomC = toonRoom.rgb;
+	toonRimAmt = ToonRimAmount(N, input.ViewDir);
 	color.a *= ppMatCol.a;
 #elif defined(PERPIXEL)
 	// The vertex shader handed over the prelight and a normal and did nothing
@@ -85,6 +91,12 @@ float4 main(VS_out input) : COLOR
 	color *= tex2D(tex0, input.TexCoord0.xy);
 #endif
 #ifdef TOON
+	// The silhouette light, after the texture and as a blend rather than an
+	// addition. Towards the colour of the room, which is what light in here
+	// looks like, and which cannot take the result out of range however bright
+	// the surface already is.
+	color.rgb = lerp(color.rgb, toonRoomC, toonRimAmt);
+
 	color.rgb = ToonSaturate(color.rgb);
 
 	// **Flattening is the last thing that happens to the colour.**

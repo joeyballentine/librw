@@ -114,20 +114,37 @@ float ToonOcclusion(float3 prelit)
 	return lerp(1.0, v, toonOcclusion);
 }
 
-// A hard edge of light along the silhouette, in the colour of the room. Cheap,
-// and what keeps a dark character legible against a dark background.
+// How far round the silhouette this pixel is, as an amount to blend by.
 //
-// Characters only: a rim on the world draws a bright line along every wall the
+// **Two things went wrong here and both are worth naming.**
+//
+// It took the HARDENED normal, which is worked out from screen derivatives and
+// is therefore garbage on the one-pixel border where a 2x2 quad straddles two
+// triangles. Every internal edge of the model got a wrong facing, fwidth of it
+// came out huge, and the smoothstep below -- which is supposed to soften one
+// pixel -- smeared the rim across whole patches of the face instead. A rim
+// describes the SILHOUETTE, and a silhouette is a property of the real surface,
+// so it takes the interpolated normal and always did want to.
+//
+// And it was ADDED to the lighting before the texture multiplied it, so a lit
+// surface went past one, the texture scaled it further, and the result clipped.
+// White blotches on SpongeBob, hardest where his texture was brightest. It is
+// returned as an amount now and the caller blends the surface towards the
+// colour of the room, which cannot leave the range however bright either is.
+//
+// Characters only. A rim on the world draws a bright line along every wall the
 // camera happens to see edge-on.
-float3 ToonRimLight(float3 N, float3 V, float3 room)
+float ToonRimAmount(float3 N, float3 V)
 {
 	if(toonRim <= 0.0 || toonIsCharacter == 0.0)
-		return float3(0.0, 0.0, 0.0);
+		return 0.0;
 
 	float f = 1.0 - saturate(dot(N, normalize(V)));
-	float w = max(abs(ddx(f)) + abs(ddy(f)), 1.0/255.0);
 
-	return room*(toonRim*smoothstep(toonRimEdge - w, toonRimEdge + w, f));
+	// Capped like ToonRamp's, and for the same reason.
+	float w = clamp(abs(ddx(f)) + abs(ddy(f)), 1.0/255.0, 0.05);
+
+	return toonRim*smoothstep(toonRimEdge - w, toonRimEdge + w, f);
 }
 
 // The face's own normal, from how the surface moves across the triangle.
@@ -181,19 +198,37 @@ float3 ToonQuantize(float3 c)
 
 // Push colour away from grey. Mixing AWAY from luminance -- a factor above one
 // -- leaves greys alone and pulls everything else outward.
+// How far the colour can be pushed away from grey along one channel before that
+// channel leaves 0..1. See header.frag, which says the whole of it.
+float ToonGainLimit(float l, float d)
+{
+	if(d > 1.0/255.0)
+		return (1.0 - l)/d;
+
+	if(d < -1.0/255.0)
+		return -l/d;
+
+	return 1.0e6;
+}
+
+// Push colour away from grey WITHOUT moving how bright it is.
+//
+// **Three ways to do this and two of them cost you the picture.** Clipping each
+// channel at one shifts the hue of the colours the setting was turned up for.
+// Scaling the whole colour down to fit keeps the hue and takes the brightness
+// with it, so the levels go dim precisely where they were most colourful.
+//
+// The luminance is held and the offset from it grown until the first channel
+// reaches an end of the range: full setting where there is room, as much as it
+// can take where there is not, and the same brightness either way.
 float3 ToonSaturate(float3 c)
 {
 	float l = dot(c, float3(0.299, 0.587, 0.114));
-	float3 s = max(lerp(l.xxx, c, toonSaturation), 0.0);
+	float3 d = c - l.xxx;
 
-	// **Scaled down to fit, not clipped per channel** -- the same rule as
-	// ToonQuantize above and as the room colour in d3drender.cpp. Pushing away
-	// from grey is what drives a channel past one, so clamping each on its own
-	// shifts the hue of exactly the colours the setting was turned up for.
-	float m = max(s.r, max(s.g, s.b));
+	float g = min(toonSaturation,
+	              min(ToonGainLimit(l, d.r),
+	                  min(ToonGainLimit(l, d.g), ToonGainLimit(l, d.b))));
 
-	if(m > 1.0)
-		s /= m;
-
-	return s;
+	return saturate(l.xxx + max(g, 0.0)*d);
 }

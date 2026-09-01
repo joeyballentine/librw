@@ -309,24 +309,38 @@ float ToonOcclusion(vec3 prelit)
 	return mix(1.0, v, toonOcclusion);
 }
 
-// A hard edge of light along the silhouette, in the colour of the room.
+// How far round the silhouette this pixel is, as an amount to blend by.
 //
-// Cheap, and the thing that keeps a dark character readable against a dark
-// background -- which the show does by simply not drawing the two in the same
-// value. Stepped rather than faded, like everything else here, and antialiased
-// against its own derivative for the same reason ToonRamp is.
+// **Two things went wrong here and both are worth naming.**
 //
-// Characters only. A rim on the world would draw a bright line along every wall
-// the camera happens to see edge-on.
-vec3 ToonRimLight(vec3 N, vec3 V, vec3 room)
+// It took the HARDENED normal, which is worked out from screen derivatives and
+// is therefore garbage on the one-pixel border where a 2x2 quad straddles two
+// triangles. Every internal edge of the model got a wrong facing, fwidth of it
+// came out huge, and the smoothstep below -- which is supposed to soften one
+// pixel -- smeared the rim across whole patches of the face instead. A rim
+// describes the SILHOUETTE, and a silhouette is a property of the real surface,
+// so it takes the interpolated normal and always did want to.
+//
+// And it was ADDED to the lighting before the texture multiplied it, so a lit
+// surface went past one, the texture scaled it further, and the result clipped.
+// White blotches on SpongeBob, hardest where his texture was brightest. It is
+// returned as an amount now and the caller blends the surface towards the
+// colour of the room, which cannot leave the range however bright either is.
+//
+// Characters only. A rim on the world draws a bright line along every wall the
+// camera happens to see edge-on.
+float ToonRimAmount(vec3 N, vec3 V)
 {
 	if(toonRim <= 0.0 || toonIsCharacter == 0.0)
-		return vec3(0.0);
+		return 0.0;
 
 	float f = 1.0 - clamp(dot(N, normalize(V)), 0.0, 1.0);
-	float w = max(fwidth(f), 1.0/255.0);
 
-	return room*(toonRim*smoothstep(toonRimEdge - w, toonRimEdge + w, f));
+	// Capped like ToonRamp's, and for the same reason: this is meant to soften
+	// one pixel, and an uncapped spread turns it into a wash.
+	float w = clamp(fwidth(f), 1.0/255.0, 0.05);
+
+	return toonRim*smoothstep(toonRimEdge - w, toonRimEdge + w, f);
 }
 
 // The face's own normal, from how the surface moves across the triangle.
@@ -403,25 +417,53 @@ vec3 ToonQuantize(vec3 c)
 	return c*(floor(v*toonColors + 0.5)/toonColors)/v;
 }
 
+// How far the colour can be pushed away from grey along one channel before
+// that channel leaves 0..1.
+//
+// Solving l + g*d = 1 for a channel heading up and l + g*d = 0 for one heading
+// down. A channel that is not moving constrains nothing.
+float ToonGainLimit(float l, float d)
+{
+	if(d > 1.0/255.0)
+		return (1.0 - l)/d;
+
+	if(d < -1.0/255.0)
+		return -l/d;
+
+	return 1.0e6;
+}
+
+// Push colour away from grey WITHOUT moving how bright it is.
+//
+// **Three ways to do this and two of them cost you the picture.** Clipping each
+// channel at one shifts the hue of exactly the colours the setting was turned
+// up for -- a saturated yellow clips red and green together and drifts orange.
+// Scaling the whole colour down to fit keeps the hue and takes the brightness
+// with it, so the levels go dim precisely where they were most colourful, which
+// is the opposite of what turning saturation up is for.
+//
+// What is actually wanted is the most chroma that still fits, at the brightness
+// the surface already had. The luminance is held and the offset from it is
+// grown until the first channel reaches an end of the range -- so a colour with
+// room to move gets the full setting, and one that is already near the edge of
+// what the display can show gets as much as it can take and stays as bright as
+// it was.
 vec3 ToonSaturate(vec3 c)
 {
 	if(toonEnabled == 0.0)
 		return c;
 
 	float l = dot(c, vec3(0.299, 0.587, 0.114));
-	vec3 s = max(mix(vec3(l), c, toonSaturation), 0.0);
+	vec3 d = c - vec3(l);
 
-	// **Scaled down to fit, not clipped per channel** -- the same rule as
-	// ToonQuantize and as the room colour, and for the same reason. Pushing
-	// away from grey is what drives a channel past one, so clamping each on its
-	// own shifts the hue of exactly the colours the setting was turned up for:
-	// a saturated yellow clips red and green together and drifts orange.
-	float m = max(s.r, max(s.g, s.b));
+	float g = min(toonSaturation,
+	              min(ToonGainLimit(l, d.r),
+	                  min(ToonGainLimit(l, d.g), ToonGainLimit(l, d.b))));
 
-	if(m > 1.0)
-		s /= m;
-
-	return s;
+	// The dot of d with the same weights is zero, so adding a multiple of it
+	// back cannot change the luminance. The clamp is against arithmetic, not
+	// against the gain: that is already inside the range by construction.
+	return clamp(vec3(l) + max(g, 0.0)*d, 0.0, 1.0);
 }
 
 void DoAlphaTest(float a)

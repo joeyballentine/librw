@@ -27,6 +27,12 @@ const char *simple_frag_src =
 "{\n"
 "	vec4 color = v_color;\n"
 
+"	// What colour it is in here, and how far round the silhouette this pixel\n"
+"	// sits. Both are worked out with the lighting and both are wanted after the\n"
+"	// texture, so they are held rather than applied where they are found.\n"
+"	vec3 toonRoom = vec3(1.0);\n"
+"	float toonRimAmt = 0.0;\n"
+
 "#ifdef PERPIXEL\n"
 "	// lighting.frag declares the uniforms both arms below read.\n"
 "	vec3 N = normalize(v_normal);\n"
@@ -49,6 +55,8 @@ const char *simple_frag_src =
 "		// resolved by setLights before the draw -- see lighting.frag.\n"
 "		vec3 L = u_toonLightDir.xyz;\n"
 "		vec3 room = u_toonRoomTint.rgb;\n"
+
+"		toonRoom = room;\n"
 
 "		// The shading normal, hardened back towards the face's own where the\n"
 "		// setting asks. Separate from the one handed to the shadow test, which\n"
@@ -85,9 +93,9 @@ const char *simple_frag_src =
 "		// should still be in shadow when something is over it.\n"
 "		color.rgb = room*mix(vec3(sh), cel, toonStrength);\n"
 
-"		// The silhouette light, added rather than blended: it is a light, not\n"
-"		// a shade, and the room says what colour it is.\n"
-"		color.rgb += ToonRimLight(Ns, v_viewDir, room);\n"
+"		// **N and not Ns.** The rim wants the real surface; the hardened\n"
+"		// normal is for the bands. ToonRimAmount says what that cost.\n"
+"		toonRimAmt = ToonRimAmount(N, v_viewDir);\n"
 "	}else{\n"
 "		color.rgb = v_color.rgb;\n"
 "		color.rgb += u_ambLight.rgb*surfAmbient;\n"
@@ -100,6 +108,12 @@ const char *simple_frag_src =
 "#endif\n"
 
 "	color *= texture(tex0, vec2(v_tex0.x, 1.0-v_tex0.y));\n"
+
+"	// The silhouette light, after the texture and as a blend rather than an\n"
+"	// addition. Towards the colour of the room, which is what light in here\n"
+"	// looks like -- white in daylight, blue in Rock Bottom -- and which cannot\n"
+"	// take the result out of range however bright the surface already is.\n"
+"	color.rgb = mix(color.rgb, toonRoom, toonRimAmt);\n"
 
 "	// After the material and before the fog. Before the fog because a shadow is\n"
 "	// a property of the surface and fog is a property of the air in front of it\n"

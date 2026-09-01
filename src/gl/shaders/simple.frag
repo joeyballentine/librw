@@ -26,6 +26,12 @@ main(void)
 {
 	vec4 color = v_color;
 
+	// What colour it is in here, and how far round the silhouette this pixel
+	// sits. Both are worked out with the lighting and both are wanted after the
+	// texture, so they are held rather than applied where they are found.
+	vec3 toonRoom = vec3(1.0);
+	float toonRimAmt = 0.0;
+
 #ifdef PERPIXEL
 	// lighting.frag declares the uniforms both arms below read.
 	vec3 N = normalize(v_normal);
@@ -48,6 +54,8 @@ main(void)
 		// resolved by setLights before the draw -- see lighting.frag.
 		vec3 L = u_toonLightDir.xyz;
 		vec3 room = u_toonRoomTint.rgb;
+
+		toonRoom = room;
 
 		// The shading normal, hardened back towards the face's own where the
 		// setting asks. Separate from the one handed to the shadow test, which
@@ -84,9 +92,9 @@ main(void)
 		// should still be in shadow when something is over it.
 		color.rgb = room*mix(vec3(sh), cel, toonStrength);
 
-		// The silhouette light, added rather than blended: it is a light, not
-		// a shade, and the room says what colour it is.
-		color.rgb += ToonRimLight(Ns, v_viewDir, room);
+		// **N and not Ns.** The rim wants the real surface; the hardened
+		// normal is for the bands. ToonRimAmount says what that cost.
+		toonRimAmt = ToonRimAmount(N, v_viewDir);
 	}else{
 		color.rgb = v_color.rgb;
 		color.rgb += u_ambLight.rgb*surfAmbient;
@@ -99,6 +107,12 @@ main(void)
 #endif
 
 	color *= texture(tex0, vec2(v_tex0.x, 1.0-v_tex0.y));
+
+	// The silhouette light, after the texture and as a blend rather than an
+	// addition. Towards the colour of the room, which is what light in here
+	// looks like -- white in daylight, blue in Rock Bottom -- and which cannot
+	// take the result out of range however bright the surface already is.
+	color.rgb = mix(color.rgb, toonRoom, toonRimAmt);
 
 	// After the material and before the fog. Before the fog because a shadow is
 	// a property of the surface and fog is a property of the air in front of it
