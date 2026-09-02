@@ -39,7 +39,6 @@ static struct {
 	uint32 srcblend, destblend;
 	bool32 blendenable;
 	uint32 colorwritemask;
-	bool32 alphaToCoverage;
 
 	// Depth and stencil
 	bool32 ztest, zwrite;
@@ -268,11 +267,7 @@ bindBlendState(void)
 	D3D11_BLEND_DESC desc;
 	memset(&desc, 0, sizeof(desc));
 
-	// Coverage from alpha, but never on a 2D primitive: a screen-space quad's
-	// edges are placed in pixels rather than found by the rasterizer, and
-	// spreading its alpha over the samples softens an edge the artwork drew
-	// hard. The same rule the D3D9 backend follows.
-	desc.AlphaToCoverageEnable = rwStateCache.alphaToCoverage && !im2DActive;
+	desc.AlphaToCoverageEnable = FALSE;
 	desc.IndependentBlendEnable = FALSE;
 
 	D3D11_RENDER_TARGET_BLEND_DESC *rt = &desc.RenderTarget[0];
@@ -432,6 +427,9 @@ setPipelineVertexAlpha(bool32 enable)
 	updateBlendEnable();
 }
 
+// Bracket a 2D primitive. A screen-space quad's edges are placed in pixels
+// rather than found by the rasterizer, so nothing about them wants
+// multisampling: a letterbox bar ends where the game said it ends.
 void
 setIm2DActive(bool32 active)
 {
@@ -673,16 +671,6 @@ resetRenderState(void)
 	setAlphaTestConstants(rwStateCache.alphafunc, rwStateCache.alpharef);
 	im2DActive = 0;
 	stateDirty = 1;
-}
-
-// setVirtualScreen's alpha-to-coverage switch reaches the blend desc here.
-void
-setAlphaToCoverageState(bool32 enable)
-{
-	if(rwStateCache.alphaToCoverage != enable){
-		rwStateCache.alphaToCoverage = enable;
-		stateDirty = 1;
-	}
 }
 
 // The D3D9 interface the pipelines still call. D3DRS_ keys have no counterpart

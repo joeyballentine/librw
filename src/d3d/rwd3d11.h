@@ -85,7 +85,6 @@ void unlockBuffer11(void *buffer);
 void resetRenderState(void);
 void setRwRenderState(int32 state, void *pvalue);
 void *getRwRenderState(int32 state);
-void setAlphaToCoverageState(bool32 enable);
 void setRasterStage(uint32 stage, Raster *raster);
 bool32 getIm2DActive(void);
 void releaseStateObjects(void);

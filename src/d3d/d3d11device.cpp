@@ -32,7 +32,6 @@ ID3D11DeviceContext *d3d11context;
 int32 virtualScreenWidth;
 int32 virtualScreenHeight;
 static int32 virtualScreenSamples = 1;
-static bool32 alphaToCoverageWanted;
 
 static void forgetBindings(void);
 
@@ -71,12 +70,6 @@ getVirtualScreen(int32 *width, int32 *height)
 
 void setVirtualScreenSamples(int32 samples) { virtualScreenSamples = samples < 1 ? 1 : samples; }
 int32 getVirtualScreenSamples(void) { return 1; }
-
-// Coverage needs samples to spread across and there is no multisampled target
-// yet, so this is recorded and refused. setAlphaToCoverageState is where it
-// reaches the blend description when there is.
-void setAlphaToCoverageEnabled(bool32 enable) { alphaToCoverageWanted = enable; }
-bool32 getAlphaToCoverage(void) { return 0; }
 
 // --- the swap chain ---------------------------------------------------------
 
