@@ -287,7 +287,7 @@ uploadSkinMatrices(Atomic *a)
 			m += 12;
 		}
 	}
-	d3ddevice->SetVertexShaderConstantF(VSLOC_boneMatrices, skinMatrices, skin->numBones*3);
+	d3d::setVertexShaderConstantF(VSLOC_boneMatrices, skinMatrices, skin->numBones*3);
 }
 
 void

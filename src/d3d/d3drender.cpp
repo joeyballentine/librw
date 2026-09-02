@@ -311,12 +311,12 @@ setAmbient(const RGBAf &color)
 {
 	if(!equal(d3dShaderState.ambient, color)){
 		d3dShaderState.ambient = color;
-		d3ddevice->SetVertexShaderConstantF(VSLOC_ambLight, (float*)&color, 1);
+		setVertexShaderConstantF(VSLOC_ambLight, (float*)&color, 1);
 		// The pixel stage gets it too, whether or not per-pixel lighting is on
 		// right now. Both uploads sit inside the same cache test on purpose: if
 		// this one were conditional, turning the setting on would not upload
 		// until the ambient next changed, which for most levels is never.
-		d3ddevice->SetPixelShaderConstantF(PSLOC_ppAmbient, (float*)&color, 1);
+		setPixelShaderConstantF(PSLOC_ppAmbient, (float*)&color, 1);
 	}
 }
 
@@ -330,7 +330,7 @@ setNumLights(int numDir, int numPoint, int numSpot)
 		numLights[0] = d3dShaderState.numDir = numDir;
 		numLights[4] = d3dShaderState.numPoint = numPoint;
 		numLights[8] = d3dShaderState.numSpot = numSpot;
-		d3ddevice->SetVertexShaderConstantI(VSLOC_numLights, numLights, 3);
+		setVertexShaderConstantI(VSLOC_numLights, numLights, 3);
 	}
 }
 
@@ -409,7 +409,7 @@ uploadLights(WorldLights *lightData)
 		d3dShaderState.lightOffset[0] = firstLight[0];
 		d3dShaderState.lightOffset[1] = firstLight[1];
 		d3dShaderState.lightOffset[2] = firstLight[2];
-		d3ddevice->SetVertexShaderConstantF(VSLOC_lightOffset, firstLight, 1);
+		setVertexShaderConstantF(VSLOC_lightOffset, firstLight, 1);
 	}
 
 	// The per-pixel path's copy of the directional lights.
@@ -436,21 +436,21 @@ uploadLights(WorldLights *lightData)
 			psDir[i*4+1] = directionals[i].direction.y;
 			psDir[i*4+2] = directionals[i].direction.z;
 		}
-		d3ddevice->SetPixelShaderConstantF(PSLOC_ppLightColor, psColor, MAX_LIGHTS);
-		d3ddevice->SetPixelShaderConstantF(PSLOC_ppLightDirection, psDir, MAX_LIGHTS);
+		setPixelShaderConstantF(PSLOC_ppLightColor, psColor, MAX_LIGHTS);
+		setPixelShaderConstantF(PSLOC_ppLightDirection, psDir, MAX_LIGHTS);
 	}
 
 	int32 off = VSLOC_lights;
 	if(numDir)
-		d3ddevice->SetVertexShaderConstantF(off, (float*)&directionals, numDir*3);
+		setVertexShaderConstantF(off, (float*)&directionals, numDir*3);
 	off += numDir*3;
 
 	if(numPoint)
-		d3ddevice->SetVertexShaderConstantF(off, (float*)&points, numPoint*3);
+		setVertexShaderConstantF(off, (float*)&points, numPoint*3);
 	off += numPoint*3;
 
 	if(numSpot)
-		d3ddevice->SetVertexShaderConstantF(off, (float*)&spots, numSpot*3);
+		setVertexShaderConstantF(off, (float*)&spots, numSpot*3);
 
 	return bits;
 }
@@ -506,11 +506,11 @@ uploadMatrices(void)
 {
 	RawMatrix combined;
 	Camera *cam = engine->currentCamera;
-	d3ddevice->SetVertexShaderConstantF(VSLOC_world, (float*)&identityXform, 4);
-	d3ddevice->SetVertexShaderConstantF(VSLOC_normal, (float*)&identityXform, 4);
+	setVertexShaderConstantF(VSLOC_world, (float*)&identityXform, 4);
+	setVertexShaderConstantF(VSLOC_normal, (float*)&identityXform, 4);
 
 	RawMatrix::mult(&combined, &cam->devView, &cam->devProj);
-	d3ddevice->SetVertexShaderConstantF(VSLOC_combined, (float*)&combined, 4);
+	setVertexShaderConstantF(VSLOC_combined, (float*)&combined, 4);
 }
 
 void
@@ -519,15 +519,15 @@ uploadMatrices(Matrix *worldMat)
 	RawMatrix combined, world, worldview;
 	Camera *cam = engine->currentCamera;
 	convMatrix(&world, worldMat);
-	d3ddevice->SetVertexShaderConstantF(VSLOC_world, (float*)&world, 4);
+	setVertexShaderConstantF(VSLOC_world, (float*)&world, 4);
 
 	RawMatrix normal;
 	RawMatrix::normalMatrix(&normal, &world);
-	d3ddevice->SetVertexShaderConstantF(VSLOC_normal, (float*)&normal, 4);
+	setVertexShaderConstantF(VSLOC_normal, (float*)&normal, 4);
 
 	RawMatrix::mult(&worldview, &world, &cam->devView);
 	RawMatrix::mult(&combined, &worldview, &cam->devProj);
-	d3ddevice->SetVertexShaderConstantF(VSLOC_combined, (float*)&combined, 4);
+	setVertexShaderConstantF(VSLOC_combined, (float*)&combined, 4);
 }
 
 

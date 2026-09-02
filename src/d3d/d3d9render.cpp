@@ -27,9 +27,9 @@ void
 drawInst_simple(d3d9::InstanceDataHeader *header, d3d9::InstanceData *inst)
 {
 	d3d::flushCache();
-	d3ddevice->DrawIndexedPrimitive((D3DPRIMITIVETYPE)header->primType, inst->baseIndex,
-	                                0, inst->numVertices,
-	                                inst->startIndex, inst->numPrimitives);
+	d3d::drawIndexedPrimitive(header->primType, inst->baseIndex,
+	                          0, inst->numVertices,
+	                          inst->startIndex, inst->numPrimitives);
 }
 
 // Emulate PS2 GS alpha test FB_ONLY case: failed alpha writes to frame- but not to depth buffer
@@ -162,8 +162,8 @@ renderCB_Shader(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 	// animate -- so there is nothing here that stays the same long enough to
 	// be worth comparing against.
 	if(uvXform)
-		d3ddevice->SetVertexShaderConstantF(VSLOC_uvXform, uvTransform,
-		                                    NUMUVTRANSFORMELEMENTS/4);
+		d3d::setVertexShaderConstantF(VSLOC_uvXform, uvTransform,
+		                              NUMUVTRANSFORMELEMENTS/4);
 
 	// Pick a shader.
 	//

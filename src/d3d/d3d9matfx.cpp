@@ -78,7 +78,7 @@ void
 uploadEnvMapState(Texture *envTex, MatFXEnvState *es, int32 vslocBase)
 {
 	d3d::setTexture(1, envTex);
-	d3ddevice->SetVertexShaderConstantF(vslocBase, (float*)&es->texMatrix, 4);
+	d3d::setVertexShaderConstantF(vslocBase, (float*)&es->texMatrix, 4);
 
 	struct  {
 		float shininess;
@@ -87,10 +87,10 @@ uploadEnvMapState(Texture *envTex, MatFXEnvState *es, int32 vslocBase)
 	} fxparams;
 	fxparams.shininess = es->shininess;
 	fxparams.disableFBA = es->disableFBA;
-	d3ddevice->SetPixelShaderConstantF(PSLOC_shininess, (float*)&fxparams, 1);
+	d3d::setPixelShaderConstantF(PSLOC_shininess, (float*)&fxparams, 1);
 
-	d3ddevice->SetVertexShaderConstantF(vslocBase + 4, (float*)&es->colorClamp, 1);
-	d3ddevice->SetVertexShaderConstantF(vslocBase + 5, (float*)&es->color, 1);
+	d3d::setVertexShaderConstantF(vslocBase + 4, (float*)&es->colorClamp, 1);
+	d3d::setVertexShaderConstantF(vslocBase + 5, (float*)&es->color, 1);
 }
 
 void

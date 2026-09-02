@@ -369,6 +369,16 @@ inline void setMaterial(uint32 flags, const RGBA &color, const SurfaceProperties
 
 void setVertexShader(void *vs);
 void setPixelShader(void *ps);
+// The shader constant registers and the draw calls. Pipelines reach the device
+// through these rather than through d3ddevice, so that a backend with no
+// IDirect3DDevice9 behind it can carry the same pipeline code. Register
+// numbering is the D3D9 constant file's: a register is four floats wide.
+void setVertexShaderConstantF(uint32 reg, const float32 *data, int32 numRegs);
+void setVertexShaderConstantI(uint32 reg, const int32 *data, int32 numRegs);
+void setPixelShaderConstantF(uint32 reg, const float32 *data, int32 numRegs);
+void drawPrimitive(uint32 primType, uint32 startVertex, uint32 numPrimitives);
+void drawIndexedPrimitive(uint32 primType, int32 baseVertex, uint32 minVertex,
+	uint32 numVertices, uint32 startIndex, uint32 numPrimitives);
 void setIndices(void *indexBuffer);
 void setStreamSource(int n, void *buffer, uint32 offset, uint32 stride);
 void setVertexDeclaration(void *declaration);

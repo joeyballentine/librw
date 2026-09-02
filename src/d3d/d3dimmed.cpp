@@ -112,7 +112,7 @@ im2DSetXform(void)
 	xform[2] = -1.0f;
 	xform[3] = 1.0f;
 	// TODO: should cache this...
-	d3ddevice->SetVertexShaderConstantF(VSLOC_afterLights, xform, 1);
+	setVertexShaderConstantF(VSLOC_afterLights, xform, 1);
 }
 
 void
@@ -170,7 +170,7 @@ im2DRenderPrimitive(PrimitiveType primType, void *vertices, int32 numVertices)
 		primCount = numVertices;
 		break;
 	}
-	d3ddevice->DrawPrimitive((D3DPRIMITIVETYPE)primTypeMap[primType], 0, primCount);
+	drawPrimitive(primTypeMap[primType], 0, primCount);
 	setIm2DActive(0);
 }
 
@@ -236,9 +236,9 @@ im2DRenderIndexedPrimitive(PrimitiveType primType,
 		primCount = numIndices;
 		break;
 	}
-	d3ddevice->DrawIndexedPrimitive((D3DPRIMITIVETYPE)primTypeMap[primType], 0,
-	                                0, numVertices,
-	                                0, primCount);
+	drawIndexedPrimitive(primTypeMap[primType], 0,
+	                     0, numVertices,
+	                     0, primCount);
 	setIm2DActive(0);
 }
 
@@ -371,7 +371,7 @@ im3DRenderPrimitive(PrimitiveType primType)
 		primCount = num3DVertices;
 		break;
 	}
-	d3ddevice->DrawPrimitive((D3DPRIMITIVETYPE)primTypeMap[primType], 0, primCount);
+	drawPrimitive(primTypeMap[primType], 0, primCount);
 }
 
 void
@@ -415,9 +415,9 @@ im3DRenderIndexedPrimitive(PrimitiveType primType, void *indices, int32 numIndic
 		primCount = numIndices;
 		break;
 	}
-	d3ddevice->DrawIndexedPrimitive((D3DPRIMITIVETYPE)primTypeMap[primType], 0,
-	                                0, num3DVertices,
-	                                0, primCount);
+	drawIndexedPrimitive(primTypeMap[primType], 0,
+	                     0, num3DVertices,
+	                     0, primCount);
 }
 
 void

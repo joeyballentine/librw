@@ -1080,6 +1080,38 @@ setVertexDeclaration(void *declaration)
 	}
 }
 
+void
+setVertexShaderConstantF(uint32 reg, const float32 *data, int32 numRegs)
+{
+	d3ddevice->SetVertexShaderConstantF(reg, data, numRegs);
+}
+
+void
+setVertexShaderConstantI(uint32 reg, const int32 *data, int32 numRegs)
+{
+	d3ddevice->SetVertexShaderConstantI(reg, data, numRegs);
+}
+
+void
+setPixelShaderConstantF(uint32 reg, const float32 *data, int32 numRegs)
+{
+	d3ddevice->SetPixelShaderConstantF(reg, data, numRegs);
+}
+
+void
+drawPrimitive(uint32 primType, uint32 startVertex, uint32 numPrimitives)
+{
+	d3ddevice->DrawPrimitive((D3DPRIMITIVETYPE)primType, startVertex, numPrimitives);
+}
+
+void
+drawIndexedPrimitive(uint32 primType, int32 baseVertex, uint32 minVertex,
+	uint32 numVertices, uint32 startIndex, uint32 numPrimitives)
+{
+	d3ddevice->DrawIndexedPrimitive((D3DPRIMITIVETYPE)primType, baseVertex,
+	                                minVertex, numVertices, startIndex, numPrimitives);
+}
+
 void*
 createVertexShader(void *csosrc)
 {
