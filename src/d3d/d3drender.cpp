@@ -23,8 +23,6 @@ IDirect3DDevice9 *d3ddevice = nil;
 #define MAX_LIGHTS 8
 
 
-#define VS_NAME g_vs20_main
-#define PS_NAME g_ps20_main
 void *default_amb_VS;
 void *default_amb_dir_VS;
 void *default_all_VS;
@@ -56,102 +54,100 @@ getPerPixelLighting(void)
 }
 
 
-#ifdef RW_D3D9
-
 void
 createDefaultShaders(void)
 {
 	{
 		static
-#include "shaders/default_amb_VS.h"
+#include "default_amb_VS.h"
 		default_amb_VS = createVertexShader((void*)VS_NAME);
 		assert(default_amb_VS);
 	}
 	{
 		static
-#include "shaders/default_amb_dir_VS.h"
+#include "default_amb_dir_VS.h"
 		default_amb_dir_VS = createVertexShader((void*)VS_NAME);
 		assert(default_amb_dir_VS);
 	}
 	{
 		static
-#include "shaders/default_all_VS.h"
+#include "default_all_VS.h"
 		default_all_VS = createVertexShader((void*)VS_NAME);
 		assert(default_all_VS);
 	}
 
 	{
 		static
-#include "shaders/uvxform_amb_VS.h"
+#include "uvxform_amb_VS.h"
 		uvxform_amb_VS = createVertexShader((void*)VS_NAME);
 		assert(uvxform_amb_VS);
 	}
 	{
 		static
-#include "shaders/uvxform_amb_dir_VS.h"
+#include "uvxform_amb_dir_VS.h"
 		uvxform_amb_dir_VS = createVertexShader((void*)VS_NAME);
 		assert(uvxform_amb_dir_VS);
 	}
 	{
 		static
-#include "shaders/uvxform_all_VS.h"
+#include "uvxform_all_VS.h"
 		uvxform_all_VS = createVertexShader((void*)VS_NAME);
 		assert(uvxform_all_VS);
 	}
 
 	{
 		static
-#include "shaders/default_pp_VS.h"
+#include "default_pp_VS.h"
 		default_pp_VS = createVertexShader((void*)VS_NAME);
 		assert(default_pp_VS);
 	}
 	{
 		static
-#include "shaders/uvxform_pp_VS.h"
+#include "uvxform_pp_VS.h"
 		uvxform_pp_VS = createVertexShader((void*)VS_NAME);
 		assert(uvxform_pp_VS);
 	}
 
 	{
 		static
-#include "shaders/default_PS.h"
+#include "default_PS.h"
 		default_PS = createPixelShader((void*)PS_NAME);
 		assert(default_PS);
 	}
 	{
 		static
-#include "shaders/default_tex_PS.h"
+#include "default_tex_PS.h"
 		default_tex_PS = createPixelShader((void*)PS_NAME);
 		assert(default_tex_PS);
 	}
 	{
 		static
-#include "shaders/default_pp_PS.h"
+#include "default_pp_PS.h"
 		default_pp_PS = createPixelShader((void*)PS_NAME);
 		assert(default_pp_PS);
 	}
 	{
 		static
-#include "shaders/default_tex_pp_PS.h"
+#include "default_tex_pp_PS.h"
 		default_tex_pp_PS = createPixelShader((void*)PS_NAME);
 		assert(default_tex_pp_PS);
 	}
 
 	{
 		static
-#include "shaders/im2d_VS.h"
+#include "im2d_VS.h"
 		im2d_VS = createVertexShader((void*)VS_NAME);
 		assert(im2d_VS);
 	}
 	{
 		static
-#include "shaders/im2d_PS.h"
+#include "im2d_PS.h"
 		im2d_PS = createPixelShader((void*)PS_NAME);
 		assert(im2d_PS);
 	}
 	{
 		static
-#include "shaders/im2d_tex_PS.h"
+#include "im2d_tex_PS.h"
 		im2d_tex_PS = createPixelShader((void*)PS_NAME);
 		assert(im2d_tex_PS);
 	}
@@ -194,6 +190,8 @@ destroyDefaultShaders(void)
 	im2d_tex_PS = nil;
 }
 
+
+#ifdef RW_D3D9
 
 void
 lightingCB_Fix(Atomic *atomic)

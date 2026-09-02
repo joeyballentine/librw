@@ -105,6 +105,15 @@ add_library(librw
 )
 add_library(librw::librw ALIAS librw)
 
+# The compiled shader blobs. Both trees carry the same file names -- the SM2
+# ones for D3D9, the SM4 ones for D3D11 -- so which is on the include path is
+# what decides the model a build loads.
+if(LIBRW_PLATFORM_D3D11)
+    target_include_directories(librw PRIVATE d3d/shaders11)
+elseif(LIBRW_PLATFORM_D3D9 OR LIBRW_PLATFORM_D3D8)
+    target_include_directories(librw PRIVATE d3d/shaders)
+endif()
+
 target_include_directories(librw
     INTERFACE
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>

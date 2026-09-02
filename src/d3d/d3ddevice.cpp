@@ -607,6 +607,14 @@ setVertexAlpha(bool32 enable)
 // just chose never reach the framebuffer. Real RenderWare's console drivers
 // leave blending to the application; only the D3D pipelines here infer it, so
 // the inference has to be additive to the request, not a substitute for it.
+bool32
+getBlendEnabled(void)
+{
+	uint32 value;
+	getRenderState(D3DRS_ALPHABLENDENABLE, &value);
+	return value;
+}
+
 void
 setPipelineVertexAlpha(bool32 enable)
 {

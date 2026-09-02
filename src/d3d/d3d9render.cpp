@@ -17,7 +17,7 @@ namespace rw {
 namespace d3d9 {
 using namespace d3d;
 
-#ifndef RW_D3D9
+#if !defined(RW_D3D9) && !defined(RW_D3D11)
 void defaultRenderCB(Atomic*, InstanceDataHeader*) {}
 void defaultRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header) {}
 void uvTransformRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header) {}
@@ -36,11 +36,9 @@ drawInst_simple(d3d9::InstanceDataHeader *header, d3d9::InstanceData *inst)
 void
 drawInst_GSemu(d3d9::InstanceDataHeader *header, InstanceData *inst)
 {
-	uint32 hasAlpha;
 	int alphafunc, alpharef, gsalpharef;
 	int zwrite;
-	d3d::getRenderState(D3DRS_ALPHABLENDENABLE, &hasAlpha);
-	if(hasAlpha){
+	if(d3d::getBlendEnabled()){
 		zwrite = rw::GetRenderState(rw::ZWRITEENABLE);
 		alphafunc = rw::GetRenderState(rw::ALPHATESTFUNC);
 		if(zwrite){

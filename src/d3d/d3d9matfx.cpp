@@ -20,7 +20,7 @@ namespace rw {
 namespace d3d9 {
 using namespace d3d;
 
-#ifndef RW_D3D9
+#if !defined(RW_D3D9) && !defined(RW_D3D11)
 void matfxRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header) {}
 #else
 
@@ -136,10 +136,10 @@ matfxRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header)
 {
 	int vsBits;
 	uint32 flags = atomic->geometry->flags;
-	setStreamSource(0, (IDirect3DVertexBuffer9*)header->vertexStream[0].vertexBuffer,
+	setStreamSource(0, header->vertexStream[0].vertexBuffer,
 	                           0, header->vertexStream[0].stride);
-	setIndices((IDirect3DIndexBuffer9*)header->indexBuffer);
-	setVertexDeclaration((IDirect3DVertexDeclaration9*)header->vertexDeclaration);
+	setIndices(header->indexBuffer);
+	setVertexDeclaration(header->vertexDeclaration);
 
 	vsBits = lightingCB_Shader(atomic);
 	uploadMatrices(atomic->getFrame()->getLTM());
@@ -178,27 +178,25 @@ matfxRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header)
 	d3d::setTexture(1, nil);
 }
 
-#define VS_NAME g_vs20_main
-#define PS_NAME g_ps20_main
 
 void
 createMatFXShaders(void)
 {
 	{
 		static
-#include "shaders/matfx_env_amb_VS.h"
+#include "matfx_env_amb_VS.h"
 		matfx_env_amb_VS = createVertexShader((void*)VS_NAME);
 		assert(matfx_env_amb_VS);
 	}
 	{
 		static
-#include "shaders/matfx_env_amb_dir_VS.h"
+#include "matfx_env_amb_dir_VS.h"
 		matfx_env_amb_dir_VS = createVertexShader((void*)VS_NAME);
 		assert(matfx_env_amb_dir_VS);
 	}
 	{
 		static
-#include "shaders/matfx_env_all_VS.h"
+#include "matfx_env_all_VS.h"
 		matfx_env_all_VS = createVertexShader((void*)VS_NAME);
 		assert(matfx_env_all_VS);
 	}
@@ -206,13 +204,13 @@ createMatFXShaders(void)
 
 	{
 		static
-#include "shaders/matfx_env_PS.h"
+#include "matfx_env_PS.h"
 		matfx_env_PS = createPixelShader((void*)PS_NAME);
 		assert(matfx_env_PS);
 	}
 	{
 		static
-#include "shaders/matfx_env_tex_PS.h"
+#include "matfx_env_tex_PS.h"
 		matfx_env_tex_PS = createPixelShader((void*)PS_NAME);
 		assert(matfx_env_tex_PS);
 	}
@@ -244,7 +242,7 @@ destroyMatFXShaders(void)
 static void*
 matfxOpen(void *o, int32, int32)
 {
-#ifdef RW_D3D9
+#if defined(RW_D3D9) || defined(RW_D3D11)
 	createMatFXShaders();
 #endif
 
@@ -255,7 +253,7 @@ matfxOpen(void *o, int32, int32)
 static void*
 matfxClose(void *o, int32, int32)
 {
-#ifdef RW_D3D9
+#if defined(RW_D3D9) || defined(RW_D3D11)
 	destroyMatFXShaders();
 #endif
 

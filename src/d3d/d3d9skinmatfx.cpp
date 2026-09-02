@@ -35,7 +35,7 @@ namespace rw {
 namespace d3d9 {
 using namespace d3d;
 
-#ifndef RW_D3D9
+#if !defined(RW_D3D9) && !defined(RW_D3D11)
 void skinMatfxRenderCB(Atomic *atomic, InstanceDataHeader *header) {}
 void createSkinMatFXShaders(void) {}
 void destroySkinMatFXShaders(void) {}
@@ -131,10 +131,10 @@ skinMatfxRenderCB(Atomic *atomic, InstanceDataHeader *header)
 {
 	int vsBits;
 	uint32 flags = atomic->geometry->flags;
-	setStreamSource(0, (IDirect3DVertexBuffer9*)header->vertexStream[0].vertexBuffer,
+	setStreamSource(0, header->vertexStream[0].vertexBuffer,
 	                           0, header->vertexStream[0].stride);
-	setIndices((IDirect3DIndexBuffer9*)header->indexBuffer);
-	setVertexDeclaration((IDirect3DVertexDeclaration9*)header->vertexDeclaration);
+	setIndices(header->indexBuffer);
+	setVertexDeclaration(header->vertexDeclaration);
 
 	vsBits = lightingCB_Shader(atomic);
 	uploadMatrices(atomic->getFrame()->getLTM());
@@ -164,20 +164,19 @@ skinMatfxRenderCB(Atomic *atomic, InstanceDataHeader *header)
 	d3d::setTexture(1, nil);
 }
 
-#define VS_NAME g_vs20_main
 
 void
 createSkinMatFXShaders(void)
 {
 	{
 		static
-#include "shaders/skin_matfx_env_amb_VS.h"
+#include "skin_matfx_env_amb_VS.h"
 		skin_matfx_env_amb_VS = createVertexShader((void*)VS_NAME);
 		assert(skin_matfx_env_amb_VS);
 	}
 	{
 		static
-#include "shaders/skin_matfx_env_amb_dir_VS.h"
+#include "skin_matfx_env_amb_dir_VS.h"
 		skin_matfx_env_amb_dir_VS = createVertexShader((void*)VS_NAME);
 		assert(skin_matfx_env_amb_dir_VS);
 	}
@@ -187,7 +186,7 @@ createSkinMatFXShaders(void)
 	// is skipped for that lighting setup rather than drawn wrong.
 	{
 		static
-#include "shaders/skin_matfx_env_all_VS.h"
+#include "skin_matfx_env_all_VS.h"
 		skin_matfx_env_all_VS = createVertexShader((void*)VS_NAME);
 	}
 }

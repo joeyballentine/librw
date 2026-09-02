@@ -87,6 +87,20 @@ void setD3dMaterial(D3DMATERIAL9 *mat9);
 
 #if defined(RW_D3D9) || defined(RW_D3D11)
 
+// What fxc called the array inside a compiled blob.
+//
+// The blobs themselves are included by bare name and found on the include path,
+// which CMake points at shaders/ or shaders11/ depending on the build's shader
+// model. The two trees carry the same file names and the same permutations, so
+// the code that loads them is one copy.
+#ifdef RW_D3D11
+#define VS_NAME g_main
+#define PS_NAME g_main
+#else
+#define VS_NAME g_vs20_main
+#define PS_NAME g_ps20_main
+#endif
+
 #define COLOR_ARGB(a, r, g, b) ((rw::uint32)((((a)&0xff)<<24)|(((r)&0xff)<<16)|(((g)&0xff)<<8)|((b)&0xff)))
 
 struct Im3DVertex
@@ -379,6 +393,9 @@ void setTexture(uint32 stage, Texture *tex);
 // Object pipelines announce what the instanced geometry needs here; it is
 // combined with the application's own VERTEXALPHA request, never replaces it.
 void setPipelineVertexAlpha(bool32 enable);
+// Whether the draw about to happen is blending: what the application asked for
+// or what the pipeline asked for, whichever is on.
+bool32 getBlendEnabled(void);
 // Bracket a 2D primitive. Alpha to coverage is a statement about a surface's
 // place in the depth buffer, and a screen-space quad has none.
 void setIm2DActive(bool32 active);
