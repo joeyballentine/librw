@@ -14,8 +14,11 @@
 namespace rw {
 namespace d3d {
 
+#if defined(RW_D3D9) || defined(RW_D3D11)
+
 #ifdef RW_D3D9
 IDirect3DDevice9 *d3ddevice = nil;
+#endif
 
 #define MAX_LIGHTS 8
 
@@ -52,6 +55,8 @@ getPerPixelLighting(void)
 	return perPixelLighting;
 }
 
+
+#ifdef RW_D3D9
 
 void
 createDefaultShaders(void)
@@ -297,6 +302,8 @@ lightingCB_Fix(Atomic *atomic)
 	for(; n < MAX_LIGHTS; n++)
 		d3ddevice->LightEnable(n, FALSE);
 }
+
+#endif
 
 
 struct LightVS

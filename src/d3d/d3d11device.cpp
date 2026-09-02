@@ -33,7 +33,8 @@ int32 virtualScreenWidth;
 int32 virtualScreenHeight;
 static int32 virtualScreenSamples = 1;
 static bool32 alphaToCoverageWanted;
-static bool32 perPixelLighting;
+
+static void forgetBindings(void);
 
 // What OMSetRenderTargets was last given. Kept so a clear lands on the camera's
 // own surfaces rather than on the window's.
@@ -70,10 +71,12 @@ getVirtualScreen(int32 *width, int32 *height)
 
 void setVirtualScreenSamples(int32 samples) { virtualScreenSamples = samples < 1 ? 1 : samples; }
 int32 getVirtualScreenSamples(void) { return 1; }
+
+// Coverage needs samples to spread across and there is no multisampled target
+// yet, so this is recorded and refused. setAlphaToCoverageState is where it
+// reaches the blend description when there is.
 void setAlphaToCoverageEnabled(bool32 enable) { alphaToCoverageWanted = enable; }
 bool32 getAlphaToCoverage(void) { return 0; }
-void setPerPixelLightingEnabled(bool32 enable) { perPixelLighting = enable; }
-bool32 getPerPixelLighting(void) { return perPixelLighting; }
 
 // --- the swap chain ---------------------------------------------------------
 
@@ -312,9 +315,25 @@ initD3D11(void)
 	// D3D11 has no paletted texture format at all, so librw expands a palette
 	// into true colour before a raster is created rather than after.
 	isP8supported = 0;
+
+	forgetBindings();
+	resetRenderState();
+	openShaderConstants();
+	openIm2D();
+	openIm3D();
 	return 1;
 }
-static int termD3D11(void) { return stopD3D11(); }
+static int
+termD3D11(void)
+{
+	closeIm3D();
+	closeIm2D();
+	closeShaderConstants();
+	releaseInputLayouts();
+	releaseStateObjects();
+	forgetBindings();
+	return stopD3D11();
+}
 static int finalizeD3D11(void) { return 1; }
 
 // --- the camera -------------------------------------------------------------
@@ -462,29 +481,159 @@ rasterRenderFast(Raster *raster, int32 x, int32 y)
 	return 0;
 }
 
-// --- render state -----------------------------------------------------------
+// --- what is bound to draw with ---------------------------------------------
 
+// The input assembler and the shader stages. An input layout depends on both
+// the declaration and the vertex shader, so the two are remembered and the
+// layout is settled at draw time rather than when either is set.
+static struct {
+	void *vertexShader;
+	void *pixelShader;
+	void *declaration;
+	void *indexBuffer;
+	struct {
+		void *buffer;
+		uint32 offset;
+		uint32 stride;
+	} streams[2];
+	ID3D11InputLayout *layout;
+	uint32 primType;
+} bound;
+
+void
+setVertexShader(void *vs)
+{
+	if(bound.vertexShader != vs){
+		bound.vertexShader = vs;
+		bound.layout = nil;
+		d3d11context->VSSetShader(vertexShaderResource(vs), nil, 0);
+	}
+}
+
+void
+setPixelShader(void *ps)
+{
+	if(bound.pixelShader != ps){
+		bound.pixelShader = ps;
+		d3d11context->PSSetShader((ID3D11PixelShader*)ps, nil, 0);
+	}
+}
+
+void
+setVertexDeclaration(void *declaration)
+{
+	if(bound.declaration != declaration){
+		bound.declaration = declaration;
+		bound.layout = nil;
+	}
+}
+
+void
+setIndices(void *indexBuffer)
+{
+	if(bound.indexBuffer != indexBuffer){
+		bound.indexBuffer = indexBuffer;
+		d3d11context->IASetIndexBuffer(bufferResource(indexBuffer), DXGI_FORMAT_R16_UINT, 0);
+	}
+}
+
+void
+setStreamSource(int n, void *buffer, uint32 offset, uint32 stride)
+{
+	if(n < 0 || n > 1)
+		return;
+	if(bound.streams[n].buffer == buffer &&
+	   bound.streams[n].offset == offset &&
+	   bound.streams[n].stride == stride)
+		return;
+	bound.streams[n].buffer = buffer;
+	bound.streams[n].offset = offset;
+	bound.streams[n].stride = stride;
+
+	ID3D11Buffer *buf = bufferResource(buffer);
+	UINT strides = stride, offsets = offset;
+	d3d11context->IASetVertexBuffers(n, 1, &buf, &strides, &offsets);
+}
+
+// D3D9 counts primitives, D3D11 counts vertices, and the two disagree by the
+// primitive's shape rather than by a factor.
+static uint32
+indexCount(uint32 primType, uint32 numPrimitives)
+{
+	switch(primType){
+	case D3DPT_LINELIST:		return numPrimitives*2;
+	case D3DPT_LINESTRIP:		return numPrimitives+1;
+	case D3DPT_TRIANGLELIST:	return numPrimitives*3;
+	case D3DPT_TRIANGLESTRIP:	return numPrimitives+2;
+	case D3DPT_POINTLIST:		return numPrimitives;
+	}
+	return 0;
+}
+
+static D3D11_PRIMITIVE_TOPOLOGY
+topology(uint32 primType)
+{
+	switch(primType){
+	case D3DPT_POINTLIST:		return D3D11_PRIMITIVE_TOPOLOGY_POINTLIST;
+	case D3DPT_LINELIST:		return D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
+	case D3DPT_LINESTRIP:		return D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP;
+	case D3DPT_TRIANGLELIST:	return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	case D3DPT_TRIANGLESTRIP:	return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+	}
+	// D3D11 dropped the triangle fan. Nothing in this driver emits one --
+	// im2DRenderPrimitive is the only caller that could, and the game's 2D
+	// passes are lists and strips.
+	return D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
+}
+
+// Settle what depends on more than one binding: the input layout on the
+// declaration and the vertex shader, the topology on the draw.
+static bool32
+readyToDraw(uint32 primType)
+{
+	D3D11_PRIMITIVE_TOPOLOGY topo = topology(primType);
+	if(topo == D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED)
+		return 0;
+	if(bound.primType != primType){
+		bound.primType = primType;
+		d3d11context->IASetPrimitiveTopology(topo);
+	}
+	if(bound.layout == nil){
+		bound.layout = inputLayoutFor(bound.declaration, bound.vertexShader);
+		if(bound.layout == nil)
+			return 0;
+		d3d11context->IASetInputLayout(bound.layout);
+	}
+	return 1;
+}
+
+void
+drawPrimitive(uint32 primType, uint32 startVertex, uint32 numPrimitives)
+{
+	if(numPrimitives == 0 || !readyToDraw(primType))
+		return;
+	d3d11context->Draw(indexCount(primType, numPrimitives), startVertex);
+}
+
+void
+drawIndexedPrimitive(uint32 primType, int32 baseVertex, uint32 minVertex,
+	uint32 numVertices, uint32 startIndex, uint32 numPrimitives)
+{
+	(void)minVertex;
+	(void)numVertices;
+	if(numPrimitives == 0 || !readyToDraw(primType))
+		return;
+	d3d11context->DrawIndexed(indexCount(primType, numPrimitives), startIndex, baseVertex);
+}
+
+// Nothing the context holds survives a device teardown, and the shadow above
+// would otherwise claim it did.
 static void
-setRwRenderState(int32 state, void *pvalue)
+forgetBindings(void)
 {
+	memset(&bound, 0, sizeof(bound));
+	bound.primType = 0xFFFFFFFF;
 }
-
-static void*
-getRwRenderState(int32 state)
-{
-	return nil;
-}
-
-// --- immediate mode ---------------------------------------------------------
-
-static void im2DRenderLine(void*, int32, int32, int32) {}
-static void im2DRenderTriangle(void*, int32, int32, int32, int32) {}
-static void im2DRenderPrimitive(PrimitiveType, void*, int32) {}
-static void im2DRenderIndexedPrimitive(PrimitiveType, void*, int32, void*, int32) {}
-static void im3DTransform(void*, int32, Matrix*, uint32) {}
-static void im3DRenderPrimitive(PrimitiveType) {}
-static void im3DRenderIndexedPrimitive(PrimitiveType, void*, int32) {}
-static void im3DEnd(void) {}
 
 // --- the device interface ---------------------------------------------------
 

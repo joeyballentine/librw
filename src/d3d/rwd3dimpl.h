@@ -1,7 +1,7 @@
 namespace rw {
 namespace d3d {
 
-#ifdef RW_D3D9
+#if defined(RW_D3D9) || defined(RW_D3D11)
 void openIm2D(void);
 void closeIm2D(void);
 void im2DRenderLine(void *vertices, int32 numVertices, int32 vert1, int32 vert2);
@@ -16,6 +16,9 @@ void im3DRenderPrimitive(PrimitiveType primType);
 void im3DRenderIndexedPrimitive(PrimitiveType primType, void *indices, int32 numIndices);
 void im3DEnd(void);
 
+#endif
+
+#ifdef RW_D3D9
 
 struct DisplayMode
 {

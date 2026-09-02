@@ -98,6 +98,8 @@ createIndexBuffer(uint32 length, bool dynamic)
 	if(ibuf)
 		d3d9Globals.numIndexBuffers++;
 	return ibuf;
+#elif defined(RW_D3D11)
+	return createIndexBuffer11(length, dynamic);
 #else
 	return rwNewT(uint8, length, MEMDUR_EVENT | ID_DRIVER);
 #endif
@@ -112,6 +114,8 @@ destroyIndexBuffer(void *indexBuffer)
 			printf("indexBuffer wasn't destroyed\n");
 		d3d9Globals.numIndexBuffers--;
 	}
+#elif defined(RW_D3D11)
+	destroyIndexBuffer11(indexBuffer);
 #else
 	rwFree(indexBuffer);
 #endif
@@ -127,6 +131,9 @@ lockIndices(void *indexBuffer, uint32 offset, uint32 size, uint32 flags)
 	IDirect3DIndexBuffer9 *ibuf = (IDirect3DIndexBuffer9*)indexBuffer;
 	ibuf->Lock(offset, size, (void**)&indices, flags);
 	return indices;
+#elif defined(RW_D3D11)
+	(void)flags;
+	return (uint16*)lockBuffer11(indexBuffer, offset, size);
 #else
 	(void)offset;
 	(void)size;
@@ -143,6 +150,8 @@ unlockIndices(void *indexBuffer)
 #ifdef RW_D3D9
 	IDirect3DIndexBuffer9 *ibuf = (IDirect3DIndexBuffer9*)indexBuffer;
 	ibuf->Unlock();
+#elif defined(RW_D3D11)
+	unlockBuffer11(indexBuffer);
 #endif
 }
 
@@ -158,6 +167,9 @@ createVertexBuffer(uint32 length, uint32 fvf, bool dynamic)
 	if(vbuf)
 		d3d9Globals.numVertexBuffers++;
 	return vbuf;
+#elif defined(RW_D3D11)
+	(void)fvf;
+	return createVertexBuffer11(length, dynamic);
 #else
 	(void)fvf;
 	return rwNewT(uint8, length, MEMDUR_EVENT | ID_DRIVER);
@@ -173,6 +185,8 @@ destroyVertexBuffer(void *vertexBuffer)
 			printf("vertexBuffer wasn't destroyed\n");
 		d3d9Globals.numVertexBuffers--;
 	}
+#elif defined(RW_D3D11)
+	destroyVertexBuffer11(vertexBuffer);
 #else
 	rwFree(vertexBuffer);
 #endif
@@ -188,6 +202,9 @@ lockVertices(void *vertexBuffer, uint32 offset, uint32 size, uint32 flags)
 	IDirect3DVertexBuffer9 *vertbuf = (IDirect3DVertexBuffer9*)vertexBuffer;
 	vertbuf->Lock(offset, size, (void**)&verts, flags);
 	return verts;
+#elif defined(RW_D3D11)
+	(void)flags;
+	return lockBuffer11(vertexBuffer, offset, size);
 #else
 	(void)offset;
 	(void)size;
@@ -204,6 +221,8 @@ unlockVertices(void *vertexBuffer)
 #ifdef RW_D3D9
 	IDirect3DVertexBuffer9 *vertbuf = (IDirect3DVertexBuffer9*)vertexBuffer;
 	vertbuf->Unlock();
+#elif defined(RW_D3D11)
+	unlockBuffer11(vertexBuffer);
 #endif
 }
 

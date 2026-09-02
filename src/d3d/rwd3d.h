@@ -255,9 +255,14 @@ enum {
 
 enum {
 	D3DLOCK_NOSYSLOCK     =  0,  // ignored
+	D3DLOCK_DISCARD       =  0,  // ignored
 	D3DPOOL_MANAGED       =  0,  // ignored
+	D3DPT_POINTLIST       =  1,
+	D3DPT_LINELIST        =  2,
+	D3DPT_LINESTRIP       =  3,
 	D3DPT_TRIANGLELIST    =  4,
 	D3DPT_TRIANGLESTRIP   =  5,
+	D3DPT_TRIANGLEFAN     =  6,
 
 
 	D3DDECLTYPE_FLOAT1    =  0,  // 1D float expanded to (value, 0., 0., 1.)

@@ -17,7 +17,7 @@
 namespace rw {
 namespace d3d {
 
-#ifdef RW_D3D9
+#if defined(RW_D3D9) || defined(RW_D3D11)
 
 // might want to tweak this
 #define NUMINDICES 10000
@@ -33,49 +33,55 @@ static int primTypeMap[] = {
 	D3DPT_POINTLIST,	// actually not supported!
 };
 
-static IDirect3DVertexDeclaration9 *im2ddecl;
-static IDirect3DVertexBuffer9 *im2dvertbuf;
-static IDirect3DIndexBuffer9 *im2dindbuf;
+static void *im2ddecl;
+static void *im2dvertbuf;
+static void *im2dindbuf;
 
 void *im2dOverridePS;
 
 void
 openIm2D(void)
 {
-	D3DVERTEXELEMENT9 elements[4] = {
+	d3d9::VertexElement elements[4] = {
 // can't get proper fog with this :(
 //		{ 0, 0, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITIONT, 0 },
 		{ 0, 0, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },
 		{ 0, offsetof(Im2DVertex, color), D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR, 0 },
 		{ 0, offsetof(Im2DVertex, u), D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0 },
-		D3DDECL_END()
+		{ 0xFF, 0, D3DDECLTYPE_UNUSED, 0, 0, 0 }
 	};
 	assert(im2ddecl == nil);
-	im2ddecl = (IDirect3DVertexDeclaration9*)d3d9::createVertexDeclaration((d3d9::VertexElement*)elements);
+	im2ddecl = d3d9::createVertexDeclaration((d3d9::VertexElement*)elements);
 	assert(im2ddecl);
 
 	assert(im2dvertbuf == nil);
-	im2dvertbuf = (IDirect3DVertexBuffer9*)createVertexBuffer(NUMVERTICES*sizeof(Im2DVertex), 0, true);
+	im2dvertbuf = createVertexBuffer(NUMVERTICES*sizeof(Im2DVertex), 0, true);
 	assert(im2dvertbuf);
-	addDynamicVB(NUMVERTICES*sizeof(Im2DVertex), 0, &im2dvertbuf);
 
 	assert(im2dindbuf == nil);
-	im2dindbuf = (IDirect3DIndexBuffer9*)createIndexBuffer(NUMINDICES*sizeof(uint16), true);
+	im2dindbuf = createIndexBuffer(NUMINDICES*sizeof(uint16), true);
 	assert(im2dindbuf);
-	addDynamicIB(NUMINDICES*sizeof(uint16), &im2dindbuf);
+
+#ifdef RW_D3D9
+	// The pool a lost device drops. D3D11 has no lost device and no pool.
+	addDynamicVB(NUMVERTICES*sizeof(Im2DVertex), 0, (IDirect3DVertexBuffer9**)&im2dvertbuf);
+	addDynamicIB(NUMINDICES*sizeof(uint16), (IDirect3DIndexBuffer9**)&im2dindbuf);
+#endif
 }
 
 void
 closeIm2D(void)
 {
+#ifdef RW_D3D9
+	removeDynamicVB((IDirect3DVertexBuffer9**)&im2dvertbuf);
+	removeDynamicIB((IDirect3DIndexBuffer9**)&im2dindbuf);
+#endif
 	d3d9::destroyVertexDeclaration(im2ddecl);
 	im2ddecl = nil;
 
-	removeDynamicVB(&im2dvertbuf);
 	destroyVertexBuffer(im2dvertbuf);
 	im2dvertbuf = nil;
 
-	removeDynamicIB(&im2dindbuf);
 	destroyIndexBuffer(im2dindbuf);
 	im2dindbuf = nil;
 }
@@ -246,48 +252,53 @@ im2DRenderIndexedPrimitive(PrimitiveType primType,
 // Im3D
 
 
-static IDirect3DVertexDeclaration9 *im3ddecl;
-static IDirect3DVertexBuffer9 *im3dvertbuf;
-static IDirect3DIndexBuffer9 *im3dindbuf;
+static void *im3ddecl;
+static void *im3dvertbuf;
+static void *im3dindbuf;
 static int32 num3DVertices;
 
 void
 openIm3D(void)
 {
-	D3DVERTEXELEMENT9 elements[5] = {
+	d3d9::VertexElement elements[5] = {
 		{ 0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },
 		{ 0, offsetof(Im3DVertex, normal), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL, 0 },
 		{ 0, offsetof(Im3DVertex, color), D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR, 0 },
 		{ 0, offsetof(Im3DVertex, u), D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0 },
-		D3DDECL_END()
+		{ 0xFF, 0, D3DDECLTYPE_UNUSED, 0, 0, 0 }
 	};
 
 	assert(im3ddecl == nil);
-	im3ddecl = (IDirect3DVertexDeclaration9*)d3d9::createVertexDeclaration((d3d9::VertexElement*)elements);
+	im3ddecl = d3d9::createVertexDeclaration((d3d9::VertexElement*)elements);
 	assert(im3ddecl);
 
 	assert(im3dvertbuf == nil);
-	im3dvertbuf = (IDirect3DVertexBuffer9*)createVertexBuffer(NUMVERTICES*sizeof(Im3DVertex), 0, true);
+	im3dvertbuf = createVertexBuffer(NUMVERTICES*sizeof(Im3DVertex), 0, true);
 	assert(im3dvertbuf);
-	addDynamicVB(NUMVERTICES*sizeof(Im3DVertex), 0, &im3dvertbuf);
 
 	assert(im3dindbuf == nil);
-	im3dindbuf = (IDirect3DIndexBuffer9*)createIndexBuffer(NUMINDICES*sizeof(uint16), true);
+	im3dindbuf = createIndexBuffer(NUMINDICES*sizeof(uint16), true);
 	assert(im3dindbuf);
-	addDynamicIB(NUMINDICES*sizeof(uint16), &im3dindbuf);
+
+#ifdef RW_D3D9
+	addDynamicVB(NUMVERTICES*sizeof(Im3DVertex), 0, (IDirect3DVertexBuffer9**)&im3dvertbuf);
+	addDynamicIB(NUMINDICES*sizeof(uint16), (IDirect3DIndexBuffer9**)&im3dindbuf);
+#endif
 }
 
 void
 closeIm3D(void)
 {
+#ifdef RW_D3D9
+	removeDynamicVB((IDirect3DVertexBuffer9**)&im3dvertbuf);
+	removeDynamicIB((IDirect3DIndexBuffer9**)&im3dindbuf);
+#endif
 	d3d9::destroyVertexDeclaration(im3ddecl);
 	im3ddecl = nil;
 
-	removeDynamicVB(&im3dvertbuf);
 	destroyVertexBuffer(im3dvertbuf);
 	im3dvertbuf = nil;
 
-	removeDynamicIB(&im3dindbuf);
 	destroyIndexBuffer(im3dindbuf);
 	im3dindbuf = nil;
 }

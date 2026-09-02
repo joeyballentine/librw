@@ -50,6 +50,10 @@ struct D3d11Globals
 extern D3d11Globals d3d11Globals;
 
 DXGI_FORMAT formatToDXGI(uint32 format);
+// The resource behind one of d3d11buffer.cpp's buffers.
+ID3D11Buffer *bufferResource(void *buffer);
+ID3D11VertexShader *vertexShaderResource(void *shader);
+ID3D11InputLayout *inputLayoutFor(void *declaration, void *vertexShader);
 
 #endif
 
@@ -66,6 +70,33 @@ void *rasterShaderResource(Raster *raster);
 uint8 *rasterLockTarget(Raster *raster, int32 level, int32 lockMode);
 void rasterUnlockTarget(Raster *raster);
 void rasterDestroy(Raster *raster, D3dRaster *natras);
+
+// Vertex and index buffers, in d3d11buffer.cpp. A locked buffer hands out a
+// pointer into a system copy; unlock is what sends it.
+void *createVertexBuffer11(uint32 length, bool dynamic);
+void destroyVertexBuffer11(void *buffer);
+void *createIndexBuffer11(uint32 length, bool dynamic);
+void destroyIndexBuffer11(void *buffer);
+uint8 *lockBuffer11(void *buffer, uint32 offset, uint32 size);
+void unlockBuffer11(void *buffer);
+
+// The render state, in d3d11state.cpp. setRwRenderState and getRwRenderState
+// are the Device's; the rest is what the backend's own files need.
+void resetRenderState(void);
+void setRwRenderState(int32 state, void *pvalue);
+void *getRwRenderState(int32 state);
+void setAlphaToCoverageState(bool32 enable);
+void setRasterStage(uint32 stage, Raster *raster);
+bool32 getIm2DActive(void);
+void releaseStateObjects(void);
+
+// Shader constants, shaders and input layouts, in d3d11shader.cpp.
+void openShaderConstants(void);
+void closeShaderConstants(void);
+void uploadShaderConstants(void);
+void setAlphaTestConstants(uint32 func, uint32 ref);
+void releaseInputLayouts(void);
+void forgetInputLayouts(void *declaration);
 
 #endif
 

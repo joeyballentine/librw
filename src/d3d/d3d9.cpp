@@ -33,7 +33,7 @@ static VertexElement _d3ddec_end = {0xFF,0,D3DDECLTYPE_UNUSED,0,0,0};
 static void*
 driverOpen(void *o, int32, int32)
 {
-#ifdef RW_D3D9
+#if defined(RW_D3D9) || defined(RW_D3D11)
 	createDefaultShaders();
 #endif
 	engine->driver[PLATFORM_D3D9]->defaultPipeline = makeDefaultPipeline();
@@ -53,7 +53,7 @@ driverOpen(void *o, int32, int32)
 static void*
 driverClose(void *o, int32, int32)
 {
-#ifdef RW_D3D9
+#if defined(RW_D3D9) || defined(RW_D3D11)
 	destroyDefaultShaders();
 #endif
 	if(uvTransformPipelines[PLATFORM_D3D9]){

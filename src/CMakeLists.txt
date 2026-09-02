@@ -50,8 +50,11 @@ add_library(librw
     d3d/d3d9skin.cpp
     d3d/d3d9skinmatfx.cpp
     d3d/d3d.cpp
+    d3d/d3d11buffer.cpp
     d3d/d3d11device.cpp
     d3d/d3d11raster.cpp
+    d3d/d3d11shader.cpp
+    d3d/d3d11state.cpp
     d3d/d3ddevice.cpp
     d3d/d3dimmed.cpp
     d3d/d3drender.cpp
