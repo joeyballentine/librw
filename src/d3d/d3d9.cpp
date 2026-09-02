@@ -22,12 +22,6 @@ namespace rw {
 namespace d3d9 {
 using namespace d3d;
 
-// TODO: move to header, but not as #define
-#ifndef RW_D3D9
-static VertexElement _d3ddec_end = {0xFF,0,D3DDECLTYPE_UNUSED,0,0,0};
-#define D3DDECL_END() _d3ddec_end
-#endif
-
 #define NUMDECLELT 12
 
 static void*
@@ -558,6 +552,19 @@ defaultInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance)
 		}
 
 		// We expect some attributes to always be there, use the constant buffer as fallback
+		if(!hasNormals){
+			// A vertex shader that lights reads NORMAL whether the geometry
+			// has one or not. D3D9 fed a missing element as zeroes; D3D11
+			// refuses to make an input layout that does not provide every
+			// semantic the shader reads, so the fallback is spelled out.
+			dcl[i].stream = 2;
+			dcl[i].offset = offsetof(VertexConstantData, normal);
+			dcl[i].type = D3DDECLTYPE_FLOAT3;
+			dcl[i].method = D3DDECLMETHOD_DEFAULT;
+			dcl[i].usage = D3DDECLUSAGE_NORMAL;
+			dcl[i].usageIndex = 0;
+			i++;
+		}
 		if(!isPrelit){
 			dcl[i].stream = 2;
 			dcl[i].offset = offsetof(VertexConstantData, color);

@@ -20,7 +20,7 @@ namespace rw {
 namespace d3d9 {
 using namespace d3d;
 
-#ifndef RW_D3D9
+#if !defined(RW_D3D9) && !defined(RW_D3D11)
 void skinInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance) {}
 void skinRenderCB(Atomic *atomic, InstanceDataHeader *header) {}
 #else
@@ -123,6 +123,17 @@ skinInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance)
 		stride += 4;
 
 		// We expect some attributes to always be there, use the constant buffer as fallback
+		if(!hasNormals){
+			// As in d3d9.cpp: a lighting vertex shader reads NORMAL whether
+			// the geometry carries one or not.
+			dcl[i].stream = 2;
+			dcl[i].offset = offsetof(VertexConstantData, normal);
+			dcl[i].type = D3DDECLTYPE_FLOAT3;
+			dcl[i].method = D3DDECLMETHOD_DEFAULT;
+			dcl[i].usage = D3DDECLUSAGE_NORMAL;
+			dcl[i].usageIndex = 0;
+			i++;
+		}
 		if(!isPrelit){
 			dcl[i].stream = 2;
 			dcl[i].offset = offsetof(VertexConstantData, color);
@@ -295,10 +306,10 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 {
 	int vsBits;
 	uint32 flags = atomic->geometry->flags;
-	setStreamSource(0, (IDirect3DVertexBuffer9*)header->vertexStream[0].vertexBuffer,
+	setStreamSource(0, header->vertexStream[0].vertexBuffer,
 	                           0, header->vertexStream[0].stride);
-	setIndices((IDirect3DIndexBuffer9*)header->indexBuffer);
-	setVertexDeclaration((IDirect3DVertexDeclaration9*)header->vertexDeclaration);
+	setIndices(header->indexBuffer);
+	setVertexDeclaration(header->vertexDeclaration);
 
 	vsBits = lightingCB_Shader(atomic);
 	uploadMatrices(atomic->getFrame()->getLTM());
@@ -338,21 +349,19 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 	}
 }
 
-#define VS_NAME g_vs20_main
-#define PS_NAME g_ps20_main
 
 void
 createSkinShaders(void)
 {
 	{
 		static
-#include "shaders/skin_amb_VS.h"
+#include "skin_amb_VS.h"
 		skin_amb_VS = createVertexShader((void*)VS_NAME);
 		assert(skin_amb_VS);
 	}
 	{
 		static
-#include "shaders/skin_amb_dir_VS.h"
+#include "skin_amb_dir_VS.h"
 		skin_amb_dir_VS = createVertexShader((void*)VS_NAME);
 		assert(skin_amb_dir_VS);
 	}
@@ -360,7 +369,7 @@ createSkinShaders(void)
 	// TODO: should do something about this
 	{
 		static
-#include "shaders/skin_all_VS.h"
+#include "skin_all_VS.h"
 		skin_all_VS = createVertexShader((void*)VS_NAME);
 //		assert(skin_all_VS);
 	}
@@ -368,7 +377,7 @@ createSkinShaders(void)
 	// all, only carrying the skinned normal out to the pixel shader.
 	{
 		static
-#include "shaders/skin_pp_VS.h"
+#include "skin_pp_VS.h"
 		skin_pp_VS = createVertexShader((void*)VS_NAME);
 		assert(skin_pp_VS);
 	}
@@ -397,7 +406,7 @@ destroySkinShaders(void)
 static void*
 skinOpen(void *o, int32, int32)
 {
-#ifdef RW_D3D9
+#if defined(RW_D3D9) || defined(RW_D3D11)
 	createSkinShaders();
 	createSkinMatFXShaders();
 #endif
@@ -413,7 +422,7 @@ skinOpen(void *o, int32, int32)
 static void*
 skinClose(void *o, int32, int32)
 {
-#ifdef RW_D3D9
+#if defined(RW_D3D9) || defined(RW_D3D11)
 	destroySkinShaders();
 	destroySkinMatFXShaders();
 #endif

@@ -20,6 +20,16 @@ struct VertexElement
 	uint8    usageIndex;
 };
 
+// The terminator every vertex declaration ends with. d3d9.h supplies it in a
+// D3D9 build; otherwise it is spelled here rather than taken from rwd3d.h's
+// portable table, so that this header does not depend on which of the two a
+// translation unit included first.
+#ifndef RW_D3D9
+enum { RWDECLTYPE_UNUSED = 17 };
+static VertexElement _rwd3ddecl_end = { 0xFF, 0, RWDECLTYPE_UNUSED, 0, 0, 0 };
+#define D3DDECL_END() _rwd3ddecl_end
+#endif
+
 struct VertexStream
 {
 	void  *vertexBuffer;
