@@ -337,6 +337,17 @@ struct D3dRaster
 	// One of AlphaKind. ALPHAGRADED is the safe default: it is what every
 	// raster with an alpha channel was treated as before this existed.
 	uint8 alphaKind;
+#ifdef RW_D3D11
+	// The GPU side. `texture` above stays the system-memory copy, because
+	// D3D11 has nothing like D3D9's managed pool: a texture the GPU reads
+	// cannot also hand out a pointer to lock. So the texels are kept twice,
+	// and `dirty` says the copy has been written since it was last uploaded.
+	void *tex11;	// ID3D11Texture2D
+	void *srv;	// ID3D11ShaderResourceView
+	void *rtv;	// ID3D11RenderTargetView, camera textures only
+	void *dsv;	// ID3D11DepthStencilView, z buffers only
+	bool dirty;
+#endif
 };
 
 int32 getLevelSize(Raster *raster, int32 level);

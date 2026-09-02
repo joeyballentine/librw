@@ -587,6 +587,11 @@ getMaxSupportedMaxAnisotropy(void)
 #ifdef RW_D3D9
 	return d3d::d3d9Globals.caps.MaxAnisotropy;
 #endif
+#ifdef RW_D3D11
+	// Feature level 9_2 and up guarantee it, and every level this backend
+	// asks for is 10_0 or better.
+	return D3D11_REQ_MAXANISOTROPY;
+#endif
 #ifdef RW_GL3
 	return (int32)gl3::gl3Caps.maxAnisotropy;
 #endif

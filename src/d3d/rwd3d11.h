@@ -49,7 +49,23 @@ struct D3d11Globals
 
 extern D3d11Globals d3d11Globals;
 
+DXGI_FORMAT formatToDXGI(uint32 format);
+
 #endif
+
+// The raster layer, in d3d11raster.cpp. The system-memory copy and the lock
+// against it are d3d.cpp's non-D3D9 arms, unchanged; these are the GPU side.
+Raster *rasterCreateCameraTexture(Raster *raster);
+Raster *rasterCreateCamera(Raster *raster);
+Raster *rasterCreateZbuffer(Raster *raster);
+// Send the system copy to the GPU if it has been written since last time.
+void rasterUpload(Raster *raster);
+// The view to bind, uploading first if needed. nil when there is nothing to
+// sample -- an unallocated raster, or a format with no D3D11 equivalent.
+void *rasterShaderResource(Raster *raster);
+uint8 *rasterLockTarget(Raster *raster, int32 level, int32 lockMode);
+void rasterUnlockTarget(Raster *raster);
+void rasterDestroy(Raster *raster, D3dRaster *natras);
 
 #endif
 

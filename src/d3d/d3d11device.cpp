@@ -35,6 +35,11 @@ static int32 virtualScreenSamples = 1;
 static bool32 alphaToCoverageWanted;
 static bool32 perPixelLighting;
 
+// What OMSetRenderTargets was last given. Kept so a clear lands on the camera's
+// own surfaces rather than on the window's.
+static ID3D11RenderTargetView *currentTarget;
+static ID3D11DepthStencilView *currentDepth;
+
 void
 getScreenExtent(int32 *width, int32 *height)
 {
@@ -140,6 +145,8 @@ resizeToWindow(void)
 		return;
 
 	d3d11context->OMSetRenderTargets(0, nil, nil);
+	currentTarget = nil;
+	currentDepth = nil;
 	releaseBackBuffer();
 	d3d11Globals.swapChain->ResizeBuffers(0, rect.right, rect.bottom, DXGI_FORMAT_UNKNOWN, 0);
 	acquireBackBuffer();
@@ -280,6 +287,8 @@ static int
 stopD3D11(void)
 {
 	releaseBackBuffer();
+	currentTarget = nil;
+	currentDepth = nil;
 	if(d3d11Globals.swapChain){
 		d3d11Globals.swapChain->SetFullscreenState(FALSE, nil);
 		d3d11Globals.swapChain->Release();
@@ -297,11 +306,54 @@ stopD3D11(void)
 	return 1;
 }
 
-static int initD3D11(void) { return 1; }
+static int
+initD3D11(void)
+{
+	// D3D11 has no paletted texture format at all, so librw expands a palette
+	// into true colour before a raster is created rather than after.
+	isP8supported = 0;
+	return 1;
+}
 static int termD3D11(void) { return stopD3D11(); }
 static int finalizeD3D11(void) { return 1; }
 
 // --- the camera -------------------------------------------------------------
+
+static void
+setRenderSurfaces(Camera *cam)
+{
+	ID3D11RenderTargetView *rtv = d3d11Globals.backBufferTarget;
+	ID3D11DepthStencilView *dsv = d3d11Globals.depthBufferView;
+	int32 width = d3d11Globals.backBufferWidth;
+	int32 height = d3d11Globals.backBufferHeight;
+
+	if(cam->frameBuffer){
+		D3dRaster *natras = GETD3DRASTEREXT(cam->frameBuffer);
+		if(natras->rtv){
+			rtv = (ID3D11RenderTargetView*)natras->rtv;
+			width = cam->frameBuffer->width;
+			height = cam->frameBuffer->height;
+		}
+	}
+	if(cam->zBuffer){
+		D3dRaster *natras = GETD3DRASTEREXT(cam->zBuffer);
+		if(natras->dsv)
+			dsv = (ID3D11DepthStencilView*)natras->dsv;
+	}
+
+	currentTarget = rtv;
+	currentDepth = dsv;
+	d3d11context->OMSetRenderTargets(1, &rtv, dsv);
+
+	D3D11_VIEWPORT vp;
+	vp.TopLeftX = 0.0f;
+	vp.TopLeftY = 0.0f;
+	vp.Width = (float)width;
+	vp.Height = (float)height;
+	vp.MinDepth = 0.0f;
+	vp.MaxDepth = 1.0f;
+	d3d11context->RSSetViewports(1, &vp);
+}
 
 // The same view and projection as the D3D9 backend builds. D3D11 keeps D3D9's
 // clip space -- left handed, z in [0,1] -- so the matrices are unchanged.
@@ -360,18 +412,7 @@ beginUpdate(Camera *cam)
 	proj[14] = -cam->nearPlane*proj[10];
 	memcpy(&cam->devProj, proj, sizeof(RawMatrix));
 
-	resizeToWindow();
-
-	d3d11context->OMSetRenderTargets(1, &d3d11Globals.backBufferTarget, d3d11Globals.depthBufferView);
-
-	D3D11_VIEWPORT vp;
-	vp.TopLeftX = 0.0f;
-	vp.TopLeftY = 0.0f;
-	vp.Width = (float)d3d11Globals.backBufferWidth;
-	vp.Height = (float)d3d11Globals.backBufferHeight;
-	vp.MinDepth = 0.0f;
-	vp.MaxDepth = 1.0f;
-	d3d11context->RSSetViewports(1, &vp);
+	setRenderSurfaces(cam);
 }
 
 static void
@@ -382,7 +423,10 @@ endUpdate(Camera *cam)
 static void
 clearCamera(Camera *cam, RGBA *col, uint32 mode)
 {
-	if(d3d11Globals.backBufferTarget == nil)
+	// Not only for beginUpdate's sake: a clear before the scene opens is how
+	// the game wipes a camera texture it is about to render into.
+	setRenderSurfaces(cam);
+	if(currentTarget == nil)
 		return;
 
 	if(mode & Camera::CLEARIMAGE){
@@ -391,15 +435,15 @@ clearCamera(Camera *cam, RGBA *col, uint32 mode)
 		c[1] = col->green/255.0f;
 		c[2] = col->blue/255.0f;
 		c[3] = col->alpha/255.0f;
-		d3d11context->ClearRenderTargetView(d3d11Globals.backBufferTarget, c);
+		d3d11context->ClearRenderTargetView(currentTarget, c);
 	}
 	uint32 depthFlags = 0;
 	if(mode & Camera::CLEARZ)
 		depthFlags |= D3D11_CLEAR_DEPTH;
 	if(mode & Camera::CLEARSTENCIL)
 		depthFlags |= D3D11_CLEAR_STENCIL;
-	if(depthFlags && d3d11Globals.depthBufferView)
-		d3d11context->ClearDepthStencilView(d3d11Globals.depthBufferView, depthFlags, 1.0f, 0);
+	if(depthFlags && currentDepth)
+		d3d11context->ClearDepthStencilView(currentDepth, depthFlags, 1.0f, 0);
 }
 
 // One place where D3D11 is simply better: the presentation interval is an

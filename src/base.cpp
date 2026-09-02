@@ -31,7 +31,10 @@ int32 build = 0xFFFF;
 	int32 platform = PLATFORM_WDGL;
 #elif RW_GL3
 	int32 platform = PLATFORM_GL3;
-#elif RW_D3D9
+#elif defined(RW_D3D9) || defined(RW_D3D11)
+	// D3D11 answers to PLATFORM_D3D9: backends are exclusive in a build, so
+	// nothing else claims it here, and the pipelines and the native raster
+	// reader are registered against it either way.
 	int32 platform = PLATFORM_D3D9;
 #else
 	int32 platform = PLATFORM_NULL;

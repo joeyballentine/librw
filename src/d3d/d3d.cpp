@@ -11,6 +11,7 @@
 #include "../rwobjects.h"
 #include "../rwengine.h"
 #include "rwd3d.h"
+#include "rwd3d11.h"
 #include "rwd3dimpl.h"
 
 #define PLUGIN_ID ID_DRIVER
@@ -389,6 +390,19 @@ rasterSetFormat(Raster *raster)
 				raster->format = Raster::C8888;
 			break;
 #endif
+#ifdef RW_D3D11
+		// Fixed rather than asked of the device. The swap chain is created
+		// 8888 and the depth buffer D24S8, so there is nothing to query.
+		case Raster::ZBUFFER:
+			raster->format = Raster::D32;
+			break;
+		case Raster::CAMERATEXTURE:
+			raster->format = Raster::C888;
+			break;
+		case Raster::CAMERA:
+			raster->format = Raster::C8888;
+			break;
+#endif
 		}
 	}
 
@@ -543,7 +557,7 @@ rasterCreate(Raster *raster)
 		ret = rasterCreateTexture(raster);
 		break;
 
-#ifdef RW_D3D9
+#if defined(RW_D3D9) || defined(RW_D3D11)
 	case Raster::CAMERATEXTURE:
 		ret = rasterCreateCameraTexture(raster);
 		break;
@@ -626,6 +640,15 @@ rasterLock(Raster *raster, int32 level, int32 lockMode)
 	if(raster->width == 0) raster->width = 1;
 	if(raster->height == 0) raster->height = 1;
 #else
+#ifdef RW_D3D11
+	if(raster->type == Raster::CAMERA || raster->type == Raster::CAMERATEXTURE){
+		if(rasterLockTarget(raster, level, lockMode) == nil)
+			return nil;
+		if(lockMode & Raster::LOCKREAD) raster->privateFlags |= Raster::PRIVATELOCK_READ;
+		if(lockMode & Raster::LOCKWRITE) raster->privateFlags |= Raster::PRIVATELOCK_WRITE;
+		return raster->pixels;
+	}
+#endif
 	RasterLevels *levels = (RasterLevels*)natras->texture;
 	raster->pixels = levels->levels[level].data;
 	raster->width = levels->levels[level].width;
@@ -647,6 +670,13 @@ rasterUnlock(Raster *raster, int32 level)
 	surf->UnlockRect();
 	surf->Release();
 	natras->lockedSurf = nil;
+#endif
+#ifdef RW_D3D11
+	D3dRaster *natras = GETD3DRASTEREXT(raster);
+	if(raster->type == Raster::CAMERA || raster->type == Raster::CAMERATEXTURE)
+		rasterUnlockTarget(raster);
+	else if(raster->privateFlags & Raster::PRIVATELOCK_WRITE)
+		natras->dirty = 1;
 #endif
 	raster->width = raster->originalWidth;
 	raster->height = raster->originalHeight;
@@ -1053,6 +1083,13 @@ createNativeRaster(void *object, int32 offset, int32)
 	raster->hasAlpha = 0;
 	raster->customFormat = 0;
 	raster->alphaKind = ALPHAGRADED;
+#ifdef RW_D3D11
+	raster->tex11 = nil;
+	raster->srv = nil;
+	raster->rtv = nil;
+	raster->dsv = nil;
+	raster->dirty = 0;
+#endif
 	return object;
 }
 
@@ -1064,6 +1101,9 @@ destroyNativeRaster(void *object, int32 offset, int32)
 #ifdef RW_D3D9
 	removeVidmemRaster(raster);
 	evictD3D9Raster(raster);
+#endif
+#ifdef RW_D3D11
+	rasterDestroy(raster, natras);
 #endif
 	switch(raster->type){
 	case Raster::NORMAL:
@@ -1099,6 +1139,13 @@ copyNativeRaster(void *dst, void *, int32 offset, int32)
 	raster->hasAlpha = 0;
 	raster->customFormat = 0;
 	raster->alphaKind = ALPHAGRADED;
+#ifdef RW_D3D11
+	raster->tex11 = nil;
+	raster->srv = nil;
+	raster->rtv = nil;
+	raster->dsv = nil;
+	raster->dirty = 0;
+#endif
 	return dst;
 }
 
