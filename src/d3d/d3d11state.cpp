@@ -335,8 +335,11 @@ bindRasterizerState(void)
 	case CULLFRONT:	desc.CullMode = D3D11_CULL_FRONT; break;
 	default:	desc.CullMode = D3D11_CULL_NONE; break;
 	}
-	// RenderWare's winding, which is D3D9's default and not D3D11's.
-	desc.FrontCounterClockwise = FALSE;
+	// RenderWare's front face is counter-clockwise: librw maps CULLBACK onto
+	// D3DCULL_CW, which is D3D9 for "cull the clockwise ones", and GL3 pairs
+	// GL_BACK with OpenGL's CCW default. D3D11 says the same thing the other
+	// way round, as a property of the rasterizer rather than of the cull.
+	desc.FrontCounterClockwise = TRUE;
 	desc.DepthClipEnable = TRUE;
 	desc.ScissorEnable = rwStateCache.scissorenable != 0;
 	// Off for a 2D primitive, for the reason in bindBlendState.
@@ -394,6 +397,11 @@ bindTextures(void)
 void
 flushCache(void)
 {
+	if(d3dShaderState.fogDirty){
+		setVertexShaderConstantF(VSLOC_fogData, (float*)&d3dShaderState.fogData, 1);
+		setPixelShaderConstantF(PSLOC_fogColor, (float*)&d3dShaderState.fogColor, 1);
+		d3dShaderState.fogDirty = false;
+	}
 	uploadShaderConstants();
 	if(!stateDirty)
 		return;
@@ -418,6 +426,12 @@ updateBlendEnable(void)
 		rwStateCache.blendenable = want;
 		stateDirty = 1;
 	}
+}
+
+bool32
+getBlendEnabled(void)
+{
+	return rwStateCache.blendenable;
 }
 
 void

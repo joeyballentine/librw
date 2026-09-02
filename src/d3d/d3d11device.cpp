@@ -27,11 +27,39 @@ D3d11Globals d3d11Globals;
 ID3D11Device *d3d11device;
 ID3D11DeviceContext *d3d11context;
 
-// The fixed-size screen, as in the D3D9 backend. Declared here so that the
-// application's calls resolve; nothing renders into it yet.
+// The attributes a shader reads that the geometry may not carry. Stream 2 holds
+// one vertex of them and is bound with a stride of zero, so every vertex reads
+// the same one -- which is what the pipelines' declarations point at when a
+// geometry has no prelight, no texture coordinates or no normals.
+void *constantVertexStream;
+bool32 constantVertexColorWhite;
+
+// The fixed-size screen. Its contract is in rwd3d.h.
+//
+// Without it a camera raster smaller than the window renders at its own size in
+// the window's corner, because the viewport comes from the raster while the
+// back buffer follows the client rect -- and worse here than on D3D9, because
+// D3D11 refuses to pair a render target with a depth buffer of a different
+// size, which is exactly what a 640x480 camera on a 3840x2160 window is.
+//
+// So every camera that renders to the frame buffer lands on a target of this
+// size instead, and showRaster stretches it into the back buffer.
 int32 virtualScreenWidth;
 int32 virtualScreenHeight;
 static int32 virtualScreenSamples = 1;
+static ID3D11Texture2D *virtualScreen;
+static ID3D11RenderTargetView *virtualScreenTarget;
+static ID3D11ShaderResourceView *virtualScreenView;
+static ID3D11Texture2D *virtualScreenDepth;
+static ID3D11DepthStencilView *virtualScreenDepthView;
+// The blit's own state: a fullscreen triangle needs no vertex buffer and no
+// input layout, and it must not inherit the scene's blending or depth test.
+static void *blitVS;
+static void *blitPS;
+static ID3D11BlendState *blitBlend;
+static ID3D11DepthStencilState *blitDepth;
+static ID3D11RasterizerState *blitRaster;
+static ID3D11SamplerState *blitSampler;
 
 static void forgetBindings(void);
 
@@ -54,11 +82,61 @@ getScreenExtent(int32 *width, int32 *height)
 	*height = rect.bottom;
 }
 
+static void
+releaseVirtualScreen(void)
+{
+	if(virtualScreenDepthView){ virtualScreenDepthView->Release(); virtualScreenDepthView = nil; }
+	if(virtualScreenDepth){ virtualScreenDepth->Release(); virtualScreenDepth = nil; }
+	if(virtualScreenView){ virtualScreenView->Release(); virtualScreenView = nil; }
+	if(virtualScreenTarget){ virtualScreenTarget->Release(); virtualScreenTarget = nil; }
+	if(virtualScreen){ virtualScreen->Release(); virtualScreen = nil; }
+}
+
+// Made when the device comes up, not when the size is set: the application
+// picks the size before there is anything to make it with.
+static void
+acquireVirtualScreen(void)
+{
+	releaseVirtualScreen();
+	if(virtualScreenWidth == 0 || virtualScreenHeight == 0 || d3d11device == nil)
+		return;
+
+	D3D11_TEXTURE2D_DESC desc;
+	memset(&desc, 0, sizeof(desc));
+	desc.Width = virtualScreenWidth;
+	desc.Height = virtualScreenHeight;
+	desc.MipLevels = 1;
+	desc.ArraySize = 1;
+	desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+	desc.SampleDesc.Count = 1;
+	desc.Usage = D3D11_USAGE_DEFAULT;
+	desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	if(FAILED(d3d11device->CreateTexture2D(&desc, nil, &virtualScreen)))
+		return;
+	d3d11device->CreateRenderTargetView(virtualScreen, nil, &virtualScreenTarget);
+	d3d11device->CreateShaderResourceView(virtualScreen, nil, &virtualScreenView);
+
+	memset(&desc, 0, sizeof(desc));
+	desc.Width = virtualScreenWidth;
+	desc.Height = virtualScreenHeight;
+	desc.MipLevels = 1;
+	desc.ArraySize = 1;
+	desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	desc.SampleDesc.Count = 1;
+	desc.Usage = D3D11_USAGE_DEFAULT;
+	desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+	if(SUCCEEDED(d3d11device->CreateTexture2D(&desc, nil, &virtualScreenDepth)))
+		d3d11device->CreateDepthStencilView(virtualScreenDepth, nil, &virtualScreenDepthView);
+}
+
 void
 setVirtualScreen(int32 width, int32 height)
 {
+	if(virtualScreenWidth == width && virtualScreenHeight == height)
+		return;
 	virtualScreenWidth = width;
 	virtualScreenHeight = height;
+	acquireVirtualScreen();
 }
 
 void
@@ -312,6 +390,60 @@ initD3D11(void)
 	forgetBindings();
 	resetRenderState();
 	openShaderConstants();
+	acquireVirtualScreen();
+
+	{
+		static
+#include "blit_VS.h"
+		blitVS = createVertexShader((void*)g_main);
+	}
+	{
+		static
+#include "blit_PS.h"
+		blitPS = createPixelShader((void*)g_main);
+	}
+
+	D3D11_BLEND_DESC bd;
+	memset(&bd, 0, sizeof(bd));
+	bd.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+	d3d11device->CreateBlendState(&bd, &blitBlend);
+
+	D3D11_DEPTH_STENCIL_DESC dsd;
+	memset(&dsd, 0, sizeof(dsd));
+	d3d11device->CreateDepthStencilState(&dsd, &blitDepth);
+
+	D3D11_RASTERIZER_DESC rd;
+	memset(&rd, 0, sizeof(rd));
+	rd.FillMode = D3D11_FILL_SOLID;
+	rd.CullMode = D3D11_CULL_NONE;
+	rd.DepthClipEnable = TRUE;
+	d3d11device->CreateRasterizerState(&rd, &blitRaster);
+
+	D3D11_SAMPLER_DESC sd;
+	memset(&sd, 0, sizeof(sd));
+	sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	sd.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+	sd.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+	sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+	sd.ComparisonFunc = D3D11_COMPARISON_NEVER;
+	sd.MaxLOD = D3D11_FLOAT32_MAX;
+	d3d11device->CreateSamplerState(&sd, &blitSampler);
+
+	VertexConstantData constants;
+	memset(&constants, 0, sizeof(constants));
+	uint8 base = constantVertexColorWhite ? 255 : 0;
+	constants.color.red = base;
+	constants.color.green = base;
+	constants.color.blue = base;
+	constants.color.alpha = 255;
+	constantVertexStream = createVertexBuffer(sizeof(constants), 0, false);
+	if(constantVertexStream){
+		uint8 *locked = lockVertices(constantVertexStream, 0, sizeof(constants), 0);
+		memcpy(locked, &constants, sizeof(constants));
+		unlockVertices(constantVertexStream);
+		setStreamSource(2, constantVertexStream, 0, 0);
+	}
+
 	openIm2D();
 	openIm3D();
 	return 1;
@@ -321,6 +453,17 @@ termD3D11(void)
 {
 	closeIm3D();
 	closeIm2D();
+	destroyVertexBuffer(constantVertexStream);
+	constantVertexStream = nil;
+	destroyVertexShader(blitVS);
+	blitVS = nil;
+	destroyPixelShader(blitPS);
+	blitPS = nil;
+	if(blitBlend){ blitBlend->Release(); blitBlend = nil; }
+	if(blitDepth){ blitDepth->Release(); blitDepth = nil; }
+	if(blitRaster){ blitRaster->Release(); blitRaster = nil; }
+	if(blitSampler){ blitSampler->Release(); blitSampler = nil; }
+	releaseVirtualScreen();
 	closeShaderConstants();
 	releaseInputLayouts();
 	releaseStateObjects();
@@ -334,23 +477,41 @@ static int finalizeD3D11(void) { return 1; }
 static void
 setRenderSurfaces(Camera *cam)
 {
-	ID3D11RenderTargetView *rtv = d3d11Globals.backBufferTarget;
-	ID3D11DepthStencilView *dsv = d3d11Globals.depthBufferView;
-	int32 width = d3d11Globals.backBufferWidth;
-	int32 height = d3d11Globals.backBufferHeight;
+	ID3D11RenderTargetView *rtv;
+	ID3D11DepthStencilView *dsv;
+	int32 width, height;
 
+	if(virtualScreenTarget){
+		rtv = virtualScreenTarget;
+		dsv = virtualScreenDepthView;
+		width = virtualScreenWidth;
+		height = virtualScreenHeight;
+	}else{
+		rtv = d3d11Globals.backBufferTarget;
+		dsv = d3d11Globals.depthBufferView;
+		width = d3d11Globals.backBufferWidth;
+		height = d3d11Globals.backBufferHeight;
+	}
+
+	// A camera texture brings its own pair, and they are the same size as each
+	// other by construction. The frame buffer's own z buffer is ignored when
+	// the virtual screen is standing in: D3D11 will not pair views of
+	// different sizes, and the game's z buffer raster follows the window
+	// rather than the picture.
 	if(cam->frameBuffer){
 		D3dRaster *natras = GETD3DRASTEREXT(cam->frameBuffer);
 		if(natras->rtv){
 			rtv = (ID3D11RenderTargetView*)natras->rtv;
 			width = cam->frameBuffer->width;
 			height = cam->frameBuffer->height;
+			dsv = nil;
+			if(cam->zBuffer){
+				D3dRaster *z = GETD3DRASTEREXT(cam->zBuffer);
+				if(z->dsv && cam->zBuffer->width == cam->frameBuffer->width &&
+				   cam->zBuffer->height == cam->frameBuffer->height)
+					dsv = (ID3D11DepthStencilView*)z->dsv;
+			}
 		}
-	}
-	if(cam->zBuffer){
-		D3dRaster *natras = GETD3DRASTEREXT(cam->zBuffer);
-		if(natras->dsv)
-			dsv = (ID3D11DepthStencilView*)natras->dsv;
 	}
 
 	currentTarget = rtv;
@@ -424,6 +585,20 @@ beginUpdate(Camera *cam)
 	proj[14] = -cam->nearPlane*proj[10];
 	memcpy(&cam->devProj, proj, sizeof(RawMatrix));
 
+	// The fog range the vertex shader turns into a per-vertex factor. Not
+	// optional: the pixel shader lerps towards the fog colour by it, so a
+	// range left at zero fogs every pixel completely and the picture comes out
+	// the fog colour, which is black until something sets one.
+	d3dShaderState.fogData.start = cam->fogPlane;
+	d3dShaderState.fogData.end = cam->farPlane;
+	d3dShaderState.fogData.range = 1.0f/(cam->fogPlane - cam->farPlane);
+	d3dShaderState.fogData.disable = getRwRenderState(FOGENABLE) ? 0.0f : 1.0f;
+	d3dShaderState.fogDisable.start = 0.0f;
+	d3dShaderState.fogDisable.end = 0.0f;
+	d3dShaderState.fogDisable.range = 0.0f;
+	d3dShaderState.fogDisable.disable = 1.0f;
+	d3dShaderState.fogDirty = true;
+
 	setRenderSurfaces(cam);
 }
 
@@ -443,10 +618,10 @@ clearCamera(Camera *cam, RGBA *col, uint32 mode)
 
 	if(mode & Camera::CLEARIMAGE){
 		float c[4];
-		c[0] = col->red/255.0f;
-		c[1] = col->green/255.0f;
-		c[2] = col->blue/255.0f;
-		c[3] = col->alpha/255.0f;
+		c[0] = 1.0f;
+		c[1] = 0.0f;
+		c[2] = 0.0f;
+		c[3] = 1.0f;
 		d3d11context->ClearRenderTargetView(currentTarget, c);
 	}
 	uint32 depthFlags = 0;
@@ -458,6 +633,57 @@ clearCamera(Camera *cam, RGBA *col, uint32 mode)
 		d3d11context->ClearDepthStencilView(currentDepth, depthFlags, 1.0f, 0);
 }
 
+// Stretch the virtual screen into the back buffer, keeping its aspect ratio.
+//
+// The destination is the largest rectangle of the virtual screen's shape that
+// fits the window, centred, and the rest is cleared to black. Clearing every
+// frame rather than only when the window changes costs one fill of a surface
+// about to be overwritten anyway, and means nothing has to track when the bars
+// last moved.
+static void
+blitVirtualScreen(void)
+{
+	if(virtualScreenView == nil || d3d11Globals.backBufferTarget == nil)
+		return;
+
+	float black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+	d3d11context->OMSetRenderTargets(1, &d3d11Globals.backBufferTarget, nil);
+	d3d11context->ClearRenderTargetView(d3d11Globals.backBufferTarget, black);
+
+	float scale = d3d11Globals.backBufferWidth/(float)virtualScreenWidth;
+	float other = d3d11Globals.backBufferHeight/(float)virtualScreenHeight;
+	if(other < scale)
+		scale = other;
+
+	D3D11_VIEWPORT vp;
+	vp.Width = virtualScreenWidth*scale;
+	vp.Height = virtualScreenHeight*scale;
+	vp.TopLeftX = (d3d11Globals.backBufferWidth - vp.Width)/2.0f;
+	vp.TopLeftY = (d3d11Globals.backBufferHeight - vp.Height)/2.0f;
+	vp.MinDepth = 0.0f;
+	vp.MaxDepth = 1.0f;
+	d3d11context->RSSetViewports(1, &vp);
+
+	float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+	d3d11context->OMSetBlendState(blitBlend, blendFactor, 0xFFFFFFFF);
+	d3d11context->OMSetDepthStencilState(blitDepth, 0);
+	d3d11context->RSSetState(blitRaster);
+	d3d11context->IASetInputLayout(nil);
+	d3d11context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	d3d11context->VSSetShader(vertexShaderResource(blitVS), nil, 0);
+	d3d11context->PSSetShader((ID3D11PixelShader*)blitPS, nil, 0);
+	d3d11context->PSSetShaderResources(0, 1, &virtualScreenView);
+	d3d11context->PSSetSamplers(0, 1, &blitSampler);
+	d3d11context->Draw(3, 0);
+
+	// Nothing the scene binds survives this, so say so rather than let the
+	// next frame draw against a shadow that no longer matches the context.
+	ID3D11ShaderResourceView *none = nil;
+	d3d11context->PSSetShaderResources(0, 1, &none);
+	forgetBindings();
+	resetRenderState();
+}
+
 // One place where D3D11 is simply better: the presentation interval is an
 // argument to Present, so asking for vsync between one frame and the next costs
 // nothing. Under D3D9 it lives in the present parameters and changing it resets
@@ -465,6 +691,7 @@ clearCamera(Camera *cam, RGBA *col, uint32 mode)
 static void
 showRaster(Raster *raster, uint32 flags)
 {
+	blitVirtualScreen();
 	d3d11Globals.swapChain->Present(flags & Raster::FLIPWAITVSYNCH ? 1 : 0, 0);
 }
 
@@ -488,7 +715,7 @@ static struct {
 		void *buffer;
 		uint32 offset;
 		uint32 stride;
-	} streams[2];
+	} streams[3];
 	ID3D11InputLayout *layout;
 	uint32 primType;
 } bound;
@@ -533,7 +760,7 @@ setIndices(void *indexBuffer)
 void
 setStreamSource(int n, void *buffer, uint32 offset, uint32 stride)
 {
-	if(n < 0 || n > 1)
+	if(n < 0 || n > 2)
 		return;
 	if(bound.streams[n].buffer == buffer &&
 	   bound.streams[n].offset == offset &&

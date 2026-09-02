@@ -1,3 +1,7 @@
+// The 2D transform: scale and offset from the frame buffer's pixels to clip
+// space. im2DSetXform uploads it at VSLOC_afterLights.
+#define VSTAIL float4 xform : packoffset(c41);
+
 #include "standardConstants.h"
 
 struct VS_in

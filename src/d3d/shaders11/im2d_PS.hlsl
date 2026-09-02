@@ -1,4 +1,4 @@
-#include "alphaTest.h"
+#include "pixelConstants.h"
 
 struct VS_out {
 	float4 Position		: SV_POSITION;

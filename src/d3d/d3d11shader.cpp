@@ -31,7 +31,9 @@ namespace d3d {
 // constant buffer when it has changed. The shaders declare their constants with
 // packoffset at the same register, which is how HLSL spells a c-register inside
 // a cbuffer.
-#define NUMVSCONST 96
+// Up to c238: skin_matfx_env_VS.hlsl puts 64 bone matrices at c41 and the
+// environment map constants after them.
+#define NUMVSCONST 256
 #define NUMPSCONST 32
 #define NUMVSINT 4
 
@@ -347,45 +349,6 @@ ID3D11VertexShader*
 vertexShaderResource(void *shader)
 {
 	return shader ? ((VertexShader*)shader)->shader : nil;
-}
-
-// --- the shaders the driver comes up with -----------------------------------
-
-// Only the immediate-mode pair so far. The object pipelines' shaders are still
-// vs_2_0 and ps_2_0 blobs that this backend cannot load, so their globals stay
-// nil and a draw that binds one draws nothing.
-void
-createDefaultShaders(void)
-{
-	{
-		static
-#include "shaders11/im2d_VS.h"
-		im2d_VS = createVertexShader((void*)g_main);
-		assert(im2d_VS);
-	}
-	{
-		static
-#include "shaders11/im2d_PS.h"
-		im2d_PS = createPixelShader((void*)g_main);
-		assert(im2d_PS);
-	}
-	{
-		static
-#include "shaders11/im2d_tex_PS.h"
-		im2d_tex_PS = createPixelShader((void*)g_main);
-		assert(im2d_tex_PS);
-	}
-}
-
-void
-destroyDefaultShaders(void)
-{
-	destroyVertexShader(im2d_VS);
-	im2d_VS = nil;
-	destroyPixelShader(im2d_PS);
-	im2d_PS = nil;
-	destroyPixelShader(im2d_tex_PS);
-	im2d_tex_PS = nil;
 }
 
 #endif

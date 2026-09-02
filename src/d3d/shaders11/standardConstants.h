@@ -1,9 +1,21 @@
 // The D3D9 constant register file, as a constant buffer.
 //
-// Every VSLOC_/PSLOC_ in the driver is a c-register number and the D3D11
-// backend keeps the register file for that reason -- see d3d11shader.cpp. HLSL
-// spells a c-register inside a cbuffer as packoffset, so these declarations sit
-// at exactly the registers rwd3d.h names and the upload path is a memcpy.
+// Every VSLOC_ in the driver is a c-register number and the D3D11 backend keeps
+// the register file for that reason -- see d3d11shader.cpp. HLSL spells a
+// c-register inside a cbuffer as packoffset, so these declarations sit at
+// exactly the registers rwd3d.h names and the upload path stays a memcpy.
+//
+// c41 upwards is each pipeline's own: the uv transform, the skin pipeline's
+// bone matrices and the matfx pipeline's texture matrix all live there, because
+// each uploads what it needs immediately before it draws. A cbuffer has to be
+// declared in one piece, so a shader that wants those registers defines VSTAIL
+// before including this and they land inside the same block.
+
+#include "lighting.h"
+
+#ifndef VSTAIL
+#define VSTAIL
+#endif
 
 cbuffer VSConstants : register(b0)
 {
@@ -15,19 +27,22 @@ cbuffer VSConstants : register(b0)
 	float4		fogData		: packoffset(c14);
 	float4		ambientLight	: packoffset(c15);
 	int4		firstLight	: packoffset(c16);
-	float4		lightData[24]	: packoffset(c17);
-	float4		xform		: packoffset(c41);
+	Light		lights[8]	: packoffset(c17);
+	VSTAIL
 };
 
+// The integer registers, which D3D9 kept in a file of their own.
 cbuffer VSIntConstants : register(b1)
 {
-	int4		numLights	: packoffset(c0);
+	int4		lightCounts	: packoffset(c0);
 };
 
-#define numDirLights (numLights.x)
-#define numPointLights (numLights.y)
-#define numSpotLights (numLights.z)
+#define numDirLights (lightCounts.x)
+#define numPointLights (lightCounts.y)
+#define numSpotLights (lightCounts.z)
 
+// normalMat is a 3x3 in the shaders that use it and four registers on the wire,
+// which is what the driver uploads.
 #define normalMat ((float3x3)normalMat4)
 
 #define surfAmbient (surfProps.x)
@@ -42,8 +57,3 @@ cbuffer VSIntConstants : register(b1)
 #define firstDirLight (firstLight.x)
 #define firstPointLight (firstLight.y)
 #define firstSpotLight (firstLight.z)
-
-// One light is three registers, laid out by LightVS in d3drender.cpp.
-#define lightColor(i) (lightData[(i)*3+0])
-#define lightPosition(i) (lightData[(i)*3+1])
-#define lightDirection(i) (lightData[(i)*3+2])
