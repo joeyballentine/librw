@@ -83,6 +83,7 @@ void unlockBuffer11(void *buffer);
 // The render state, in d3d11state.cpp. setRwRenderState and getRwRenderState
 // are the Device's; the rest is what the backend's own files need.
 void resetRenderState(void);
+void invalidateDeviceState(void);
 void setRwRenderState(int32 state, void *pvalue);
 void *getRwRenderState(int32 state);
 void setRasterStage(uint32 stage, Raster *raster);

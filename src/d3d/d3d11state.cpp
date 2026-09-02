@@ -659,6 +659,18 @@ getRwRenderState(int32 state)
 	return (void*)(uintptr)val;
 }
 
+// Say that nothing the context holds can be trusted any more, without touching
+// what the render states SAY. The two are different questions: the shadow is
+// the application's answer and survives, the bindings are the device's and do
+// not -- so a pass that sets its own state behind the cache's back ends by
+// calling this rather than resetRenderState, which would hand the game back its
+// defaults every frame.
+void
+invalidateDeviceState(void)
+{
+	stateDirty = 1;
+}
+
 // The state the device comes up in, which is also what the render states are
 // documented to start at.
 void

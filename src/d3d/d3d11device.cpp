@@ -659,10 +659,10 @@ clearCamera(Camera *cam, RGBA *col, uint32 mode)
 
 	if(mode & Camera::CLEARIMAGE){
 		float c[4];
-		c[0] = 1.0f;
-		c[1] = 0.0f;
-		c[2] = 0.0f;
-		c[3] = 1.0f;
+		c[0] = col->red/255.0f;
+		c[1] = col->green/255.0f;
+		c[2] = col->blue/255.0f;
+		c[3] = col->alpha/255.0f;
 		d3d11context->ClearRenderTargetView(currentTarget, c);
 	}
 	uint32 depthFlags = 0;
@@ -722,7 +722,7 @@ blitVirtualScreen(void)
 	ID3D11ShaderResourceView *none = nil;
 	d3d11context->PSSetShaderResources(0, 1, &none);
 	forgetBindings();
-	resetRenderState();
+	invalidateDeviceState();
 }
 
 // One place where D3D11 is simply better: the presentation interval is an
