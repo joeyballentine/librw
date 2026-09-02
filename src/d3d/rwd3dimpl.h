@@ -16,6 +16,17 @@ void im3DRenderPrimitive(PrimitiveType primType);
 void im3DRenderIndexedPrimitive(PrimitiveType primType, void *indices, int32 numIndices);
 void im3DEnd(void);
 
+// The virtual screen's size, or 0x0 when the game renders straight to the back
+// buffer. See setVirtualScreen in rwd3d.h. Read by raster creation, so that a
+// Z buffer is sized against the surface it will actually be paired with rather
+// than against the window.
+extern int32 virtualScreenWidth;
+extern int32 virtualScreenHeight;
+
+// The extent a full-screen surface should have: the virtual screen when there
+// is one, otherwise the window's client area.
+void getScreenExtent(int32 *width, int32 *height);
+
 #endif
 
 #ifdef RW_D3D9
@@ -55,17 +66,6 @@ struct D3d9Globals
 };
 
 extern D3d9Globals d3d9Globals;
-
-// The virtual screen's size, or 0x0 when the game renders straight to the back
-// buffer. See setVirtualScreen in rwd3d.h. Read here so that raster creation can
-// size a Z buffer against the surface it will actually be paired with rather
-// than against the window.
-extern int32 virtualScreenWidth;
-extern int32 virtualScreenHeight;
-
-// The extent a full-screen surface should have: the virtual screen when there is
-// one, otherwise the window's client area.
-void getScreenExtent(int32 *width, int32 *height);
 
 void addVidmemRaster(Raster *raster);
 void removeVidmemRaster(Raster *raster);

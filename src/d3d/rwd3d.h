@@ -75,6 +75,17 @@ bool32 getPerPixelLighting(void);
 // the samples are collapsed into it on the way out. nil when there is no
 // virtual screen, in which case the back buffer is what was drawn into.
 struct IDirect3DSurface9 *resolveVirtualScreen(void);
+// Copy what has been rendered so far into a camera texture, so a pass can
+// sample the frame it is about to draw over. The raster must be a
+// CAMERATEXTURE of the size getScreenExtent reports; the caller owns it.
+//
+// Called with no scene open. D3D9 cannot copy between surfaces while one is
+// open, and a multisampled target has to be resolved first either way.
+bool32 captureFrame(Raster *dst);
+// Whether there is a device to draw with at all. A pass that runs before the
+// engine has started, or after it has stopped, asks this rather than naming
+// one backend's device pointer.
+bool32 deviceOpen(void);
 
 extern Device renderdevice;
 

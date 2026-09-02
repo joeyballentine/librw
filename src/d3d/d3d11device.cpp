@@ -474,6 +474,47 @@ static int finalizeD3D11(void) { return 1; }
 
 // --- the camera -------------------------------------------------------------
 
+bool32
+deviceOpen(void)
+{
+	return d3d11device != nil;
+}
+
+// The frame so far, into a texture. Where D3D9 has to stretch between two
+// surfaces this is a straight resource copy: the virtual screen and a camera
+// texture the caller sized from getScreenExtent agree on both.
+bool32
+captureFrame(Raster *dst)
+{
+	if(d3d11device == nil || dst == nil)
+		return 0;
+
+	D3dRaster *natras = GETD3DRASTEREXT(dst);
+	ID3D11Texture2D *tex = (ID3D11Texture2D*)natras->tex11;
+	if(tex == nil)
+		return 0;
+
+	ID3D11Texture2D *src = virtualScreen;
+	bool32 borrowed = 0;
+	if(src == nil){
+		if(FAILED(d3d11Globals.swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&src)))
+			return 0;
+		borrowed = 1;
+	}
+
+	D3D11_TEXTURE2D_DESC sd, dd;
+	src->GetDesc(&sd);
+	tex->GetDesc(&dd);
+	bool32 ok = 0;
+	if(sd.Width == dd.Width && sd.Height == dd.Height && sd.Format == dd.Format){
+		d3d11context->CopyResource(tex, src);
+		ok = 1;
+	}
+	if(borrowed)
+		src->Release();
+	return ok;
+}
+
 static void
 setRenderSurfaces(Camera *cam)
 {

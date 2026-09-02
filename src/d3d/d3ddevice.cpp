@@ -1163,6 +1163,47 @@ destroyPixelShader(void *shader)
 
 // Camera
 
+bool32
+deviceOpen(void)
+{
+	return d3ddevice != nil;
+}
+
+// The frame so far, into a texture, so a screen pass can sample what it is
+// about to draw over. The three passes that want it each had a copy of this.
+bool32
+captureFrame(Raster *dst)
+{
+	if(d3ddevice == nil || dst == nil)
+		return 0;
+
+	// The RESOLVED frame, not defaultRenderTarget: with multisampling on, the
+	// surface the scene is drawn into holds several samples per pixel and
+	// nothing can stretch from it. resolveVirtualScreen collapses it and hands
+	// back the single-sampled copy; it answers nil only when there is no
+	// virtual screen, and then the back buffer is what was drawn.
+	IDirect3DSurface9 *src = resolveVirtualScreen();
+	if(src == nil)
+		src = d3d9Globals.defaultRenderTarget;
+	if(src == nil)
+		return 0;
+
+	D3dRaster *natras = GETD3DRASTEREXT(dst);
+	IDirect3DTexture9 *tex = (IDirect3DTexture9*)natras->texture;
+	if(tex == nil)
+		return 0;
+
+	IDirect3DSurface9 *surf = nil;
+	if(FAILED(tex->GetSurfaceLevel(0, &surf)) || surf == nil)
+		return 0;
+	// D3DTEXF_NONE because this is a copy and not a scale: the caller sized
+	// the raster from getScreenExtent. A filter here would be a lie about what
+	// the call does, and some drivers reject one outright for equal extents.
+	HRESULT hr = d3ddevice->StretchRect(src, nil, surf, nil, D3DTEXF_NONE);
+	surf->Release();
+	return SUCCEEDED(hr);
+}
+
 static void
 setRenderSurfaces(Camera *cam)
 {
@@ -1871,17 +1912,6 @@ blitVirtualScreen(void)
 static void
 showRaster(Raster *raster, uint32 flag)
 {
-	UINT interval = flag & Raster::FLIPWAITVSYNCH ? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
-	if(d3d9Globals.present.PresentationInterval != interval){
-		d3d9Globals.present.PresentationInterval = interval;
-		releaseVideoMemory();
-		d3d::d3ddevice->Reset(&d3d9Globals.present);
-		restoreVideoMemory();
-	}
-
-	// not used but we want cameras to have rasters
-	assert(raster);
-
 	blitVirtualScreen();
 
 	HRESULT res = d3ddevice->Present(nil, nil, 0, nil);
