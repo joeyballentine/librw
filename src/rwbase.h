@@ -31,6 +31,12 @@
 #define RWDEVICE d3d
 #endif
 
+// No RWHALFPIXEL: D3D10 and up put the pixel centre at 0.5 the way OpenGL
+// does, so screen-space coordinates need no shift.
+#ifdef RW_D3D11
+#define RWDEVICE d3d
+#endif
+
 #ifdef RW_PS2
 #define RWHALFPIXEL
 #define RWDEVICE ps2

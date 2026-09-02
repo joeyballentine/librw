@@ -84,6 +84,9 @@ workspace "librw"
 		end
 	filter { "platforms:*d3d9" }
 		defines { "RW_D3D9" }
+
+	filter "platforms:*d3d11*"
+		defines { "RW_D3D11" }
 	filter { "platforms:ps2" }
 		defines { "RW_PS2" }
 		toolset "gcc"

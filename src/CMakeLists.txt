@@ -50,11 +50,13 @@ add_library(librw
     d3d/d3d9skin.cpp
     d3d/d3d9skinmatfx.cpp
     d3d/d3d.cpp
+    d3d/d3d11device.cpp
     d3d/d3ddevice.cpp
     d3d/d3dimmed.cpp
     d3d/d3drender.cpp
     d3d/rwd3d8.h
     d3d/rwd3d9.h
+    d3d/rwd3d11.h
     d3d/rwd3d.h
     d3d/rwd3dimpl.h
     d3d/rwxbox.h
@@ -207,6 +209,14 @@ elseif(LIBRW_PLATFORM_D3D9)
             d3d9
             xinput
     )
+elseif(LIBRW_PLATFORM_D3D11)
+    target_link_libraries(librw
+        PRIVATE
+            d3d11
+            dxgi
+            dxguid
+            xinput
+    )
 endif()
 
 if(LIBRW_INSTALL)
@@ -238,6 +248,7 @@ if(LIBRW_INSTALL)
             d3d/rwd3d.h
             d3d/rwd3d8.h
             d3d/rwd3d9.h
+            d3d/rwd3d11.h
         DESTINATION "${LIBRW_INSTALL_INCLUDEDIR}/src/d3d"
     )
     install(

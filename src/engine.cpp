@@ -268,7 +268,7 @@ Engine::open(EngineOpenParams *p)
 	engine->device = ps2::renderdevice;
 #elif RW_GL3
 	engine->device = gl3::renderdevice;
-#elif RW_D3D9
+#elif defined(RW_D3D9) || defined(RW_D3D11)
 	engine->device = d3d::renderdevice;
 #else
 	engine->device = null::renderdevice;

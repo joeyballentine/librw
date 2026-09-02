@@ -1,12 +1,16 @@
-#ifdef RW_D3D9
 #ifdef WITH_D3D
+#ifdef RW_D3D9
 #include <d3d9.h>
+#endif
+#ifdef RW_D3D11
+#include <d3d11.h>
+#include <dxgi.h>
 #endif
 #endif
 
 namespace rw {
 
-#ifdef RW_D3D9
+#if defined(RW_D3D9) || defined(RW_D3D11)
 
 #ifdef _WINDOWS_
 struct EngineOpenParams
@@ -79,6 +83,9 @@ extern Device renderdevice;
 extern IDirect3DDevice9 *d3ddevice;
 void setD3dMaterial(D3DMATERIAL9 *mat9);
 #endif
+#endif
+
+#if defined(RW_D3D9) || defined(RW_D3D11)
 
 #define COLOR_ARGB(a, r, g, b) ((rw::uint32)((((a)&0xff)<<24)|(((r)&0xff)<<16)|(((g)&0xff)<<8)|((b)&0xff)))
 
@@ -144,7 +151,9 @@ struct Im2DVertex
 	float getV(void) { return this->v; }
 };
 
-#else
+#endif
+
+#ifndef RW_D3D9
 #ifndef MAKEFOURCC
 #define MAKEFOURCC(ch0, ch1, ch2, ch3)                              \
             ((uint32)(uint8)(ch0) | ((uint32)(uint8)(ch1) << 8) |       \
