@@ -53,13 +53,6 @@ void getVirtualScreen(int32 *width, int32 *height);
 void setVirtualScreenSamples(int32 samples);
 // What was actually granted -- 1 when multisampling is off or was refused.
 int32 getVirtualScreenSamples(void);
-// Ask for alpha to coverage. Refused silently when the device does not have it
-// or the virtual screen carries one sample -- there is nothing to spread
-// coverage across, which is an answer rather than a mistake.
-void setAlphaToCoverageEnabled(bool32 enable);
-// Whether it is actually in force: asked for, understood by the device, AND
-// with samples to spread across.
-bool32 getAlphaToCoverage(void);
 // Evaluate lighting per pixel rather than per vertex, in the default, uvxform
 // and skin pipelines.
 //

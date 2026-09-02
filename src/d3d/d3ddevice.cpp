@@ -498,8 +498,8 @@ setDepthWrite(bool32 enable)
 			setRenderState(D3DRS_ZFUNC, D3DCMP_ALWAYS);
 		}
 		setRenderState(D3DRS_ZWRITEENABLE, rwStateCache.zwrite);
-		// Whether depth is being written is half of whether coverage means
-		// anything -- see updateAlphaStates.
+		// Whether depth is being written is half of whether a keyed texture
+		// is cut or blended -- see updateAlphaStates.
 		updateAlphaStates();
 	}
 }
@@ -511,50 +511,9 @@ setDepthWrite(bool32 enable)
 // on. That is an OR and is written as one here, because a KEYED texture makes
 // the two sources mean different things: it asks to be cut where the
 // application's own request always asks for a blend.
-// D3D9 has no render state for alpha to coverage, so the two vendors that
-// implement it each took an unrelated state and a magic four-cc. Both are
-// asked about with CheckDeviceFormat and a usage of ZERO -- asking with a
-// render target usage is a different question, and it is answered no.
-#define FOURCC_ATOC ((D3DFORMAT)MAKEFOURCC('A','T','O','C'))
-#define FOURCC_A2M1 ((D3DFORMAT)MAKEFOURCC('A','2','M','1'))
-#define FOURCC_A2M0 ((D3DFORMAT)MAKEFOURCC('A','2','M','0'))
-
-enum {
-	A2C_NONE = 0,
-	A2C_NVIDIA,	// D3DRS_ADAPTIVETESS_Y carries the four-cc
-	A2C_AMD		// D3DRS_POINTSIZE carries it
-};
-// Which of the two the device understands, decided once at startup.
-static int32 alphaToCoverageKind;
-
-// Set while a 2D primitive is being drawn. Coverage is a statement about a
-// surface's place in the depth buffer, and a screen-space quad has none.
+// Set while a 2D primitive is being drawn. A screen-space quad has no place in
+// the depth buffer, so it is never a cutout.
 static bool32 im2DActive;
-
-// Whether the application wants coverage at all. On by default, so a caller
-// that never asks gets what the device and the sample count allow.
-static bool32 alphaToCoverageWanted = 1;
-
-// Coverage needs samples to spread itself across, so the virtual screen has to
-// be multisampled as well as the device willing.
-static bool32
-alphaToCoverageUsable(void)
-{
-	return alphaToCoverageWanted && alphaToCoverageKind != A2C_NONE &&
-	       virtualScreenMS != nil && !im2DActive;
-}
-
-// Ask for coverage, or ask for it not to be used. It is refused silently when
-// there is nothing to spread it across -- one sample per pixel is not a
-// mistake to report, it is just an answer of no.
-void
-setAlphaToCoverageEnabled(bool32 enable)
-{
-	if(alphaToCoverageWanted == enable)
-		return;
-	alphaToCoverageWanted = enable;
-	updateAlphaStates();
-}
 
 void
 setIm2DActive(bool32 active)
@@ -570,24 +529,11 @@ setIm2DActive(bool32 active)
 		// on a black bar or a fade to black, exactly where the artwork has a
 		// hard edge.
 		//
-		// FALSE gives every sample in the pixel the same coverage answer, which
-		// is what a single-sampled target would have done. The numbered sample
-		// types are maskable, so the device honours it.
+		// FALSE gives every sample in the pixel the same answer, which is what
+		// a single-sampled target would have done. The numbered sample types
+		// are maskable, so the device honours it.
 		setRenderState(D3DRS_MULTISAMPLEANTIALIAS, !active);
 		updateAlphaStates();
-	}
-}
-
-static void
-setAlphaToCoverage(bool32 enable)
-{
-	switch(alphaToCoverageKind){
-	case A2C_NVIDIA:
-		setRenderState(D3DRS_ADAPTIVETESS_Y, enable ? FOURCC_ATOC : D3DFMT_UNKNOWN);
-		break;
-	case A2C_AMD:
-		setRenderState(D3DRS_POINTSIZE, enable ? FOURCC_A2M1 : FOURCC_A2M0);
-		break;
 	}
 }
 
@@ -596,67 +542,30 @@ updateAlphaStates(void)
 {
 	// A texture's own transparency on a draw the application is NOT blending.
 	//
-	// The driver used to answer that with a blend, which is wrong twice over
-	// at any size above the one the art was drawn for. Magnifying a shape
-	// punched out of a texture leaves a band of filtered alpha around its
-	// edge; blending that band composites the surface over whatever happens to
-	// be in the frame buffer already, and because the band writes depth, the
-	// geometry that belonged behind it never draws at all. In a cave that
-	// reads as the level's own sky showing through the wall.
-	//
-	// Coverage answers it properly. The band becomes a fraction of the pixel's
-	// samples rather than a fraction of its colour, so the samples it does not
-	// cover keep their depth and the geometry behind draws into them. What the
-	// resolve produces is the surface composited over what is genuinely behind
-	// it, in whatever order the two were drawn.
-	// ...and only where the surface is taking part in the depth buffer. That is
-	// the whole of what coverage buys: samples the shape does not cover keep
-	// their depth, so what belongs behind draws into them. A draw that writes
-	// no depth -- the font, the interface, particles, shadows, the sorted alpha
-	// models -- is not in that argument and keeps the blend it asked for.
-	//
-	// ...and only where the ARTIST said the alpha is a cutout, which is what
-	// the reference says. xModelBucket.cpp puts the top byte of a bucket's
-	// pipeFlags in it: 128 for a shape punched out of a texture, 0 -- which
-	// arrives here as the console's own resting value of 1 -- for everything
-	// else. 43 buckets in the whole game ask for 128, and they are grass
-	// clumps, seaweed, netting, pilings and hanging lights.
-	//
-	// Without that condition coverage also lands on soft art with a graded
-	// alpha, and there it is simply wrong: a shadow decal's falloff becomes
-	// the four or eight steps the sample count can express, which reads as
-	// flat bands of grey where the texture had a gradient. Coverage quantises
-	// what a blend interpolates, so it may only have the shapes whose alpha
-	// was meant to be cut in the first place.
-	// Cutting the band leaves a hard, slightly eroded silhouette, so it is
-	// only worth doing when there is coverage to antialias it. Without that
-	// the surface keeps the blend it has always had -- and the x-ray with it.
-	// The two are one feature, not two.
-	bool32 cutout = alphaToCoverageUsable() && rwStateCache.textureAlpha &&
-	                rwStateCache.textureKeyed && !rwStateCache.vertexAlpha &&
-	                rwStateCache.zwrite;
-	bool32 coverage = cutout;
-	bool32 test = rwStateCache.vertexAlpha || rwStateCache.textureAlpha;
-	// The inference is dropped entirely for a surface in the depth buffer.
-	//
-	// Magnifying a shape punched out of a texture leaves a band of filtered
-	// alpha around its edge, and at 640x480 that band was a texel wide. At
-	// four times the width it is several pixels. Its alpha is 1..254, so it
-	// passes the console's resting test of 1, and blending it composites the
-	// surface over whatever was in the frame buffer already -- while still
-	// writing depth across the whole band, so the geometry that belonged
-	// behind never draws. What the band lands on is the skydome, drawn first
-	// at zScene.cpp:3068. That is the sky showing through a cave wall, and it
-	// gets worse the higher the render resolution goes.
+	// The driver used to answer that with a blend, which is wrong twice over at
+	// any size above the one the art was drawn for. Magnifying a shape punched
+	// out of a texture leaves a band of filtered alpha around its edge;
+	// blending that band composites the surface over whatever happens to be in
+	// the frame buffer already, and because the band still writes depth, the
+	// geometry that belonged behind it never draws. In a cave that reads as the
+	// level's own sky showing through the wall.
 	//
 	// GX does not blend there. rwRENDERSTATEVERTEXALPHAENABLE is off for this
 	// art -- zRenderState.cpp:52 -- and the console draws it opaque, cutting
 	// only what is fully transparent. Blending it was librw's own idea, taken
 	// from the raster having an alpha channel at all.
 	//
-	// A draw that writes no depth keeps the inference: particles, shadows,
-	// the sorted alpha models, the font and the interface are all ordered by
-	// the game itself and are not part of this argument.
+	// Three conditions narrow the cut to the art that meant it: the ARTIST said
+	// the alpha is a cutout, which is what a keyed raster is; the surface takes
+	// part in the depth buffer, so what it hides is a question at all -- the
+	// font, the interface, particles, shadows and the sorted alpha models write
+	// no depth and keep the blend they asked for; and it is not a screen-space
+	// quad, whose edges are placed in pixels rather than found by the
+	// rasterizer.
+	bool32 cutout = rwStateCache.textureAlpha && rwStateCache.textureKeyed &&
+	                !rwStateCache.vertexAlpha && rwStateCache.zwrite &&
+	                !im2DActive;
+	bool32 test = rwStateCache.vertexAlpha || rwStateCache.textureAlpha;
 	bool32 blend = rwStateCache.vertexAlpha ||
 	               (rwStateCache.textureAlpha && !cutout);
 
@@ -677,11 +586,7 @@ updateAlphaStates(void)
 
 	setRenderState(D3DRS_ALPHABLENDENABLE, blend);
 	setRenderState(D3DRS_ALPHATESTENABLE, test);
-	// The application's own reference throughout. Coverage does not replace the
-	// test, it reads the alpha that survives it, so moving the reference would
-	// cut the shape before the samples ever saw it.
 	setRenderState(D3DRS_ALPHAREF, alpharef);
-	setAlphaToCoverage(coverage);
 }
 
 static void
@@ -1563,12 +1468,6 @@ getVirtualScreenSamples(void)
 	return virtualScreenMSType == D3DMULTISAMPLE_NONE ? 1 : (int32)virtualScreenMSType;
 }
 
-bool32
-getAlphaToCoverage(void)
-{
-	return alphaToCoverageUsable();
-}
-
 // Give the back buffer back and drop the surfaces.
 //
 // Both are D3DPOOL_DEFAULT and so must not outlive a Reset. The default render
@@ -2265,24 +2164,6 @@ initD3D(void)
 	unlockVertices(constantVertexStream);
 	setStreamSource(2, constantVertexStream, 0, 0);
 
-	// Alpha to coverage, asked about once. A device that does not know the
-	// four-cc answers not-supported rather than failing.
-	alphaToCoverageKind = A2C_NONE;
-	{
-		// The ADAPTER's format, which is the display mode's, not the back
-		// buffer's. The two differ by the alpha byte and asking with the wrong
-		// one is answered not-supported, which reads exactly like a card that
-		// cannot do it.
-		D3DDISPLAYMODE adapterMode;
-		memset(&adapterMode, 0, sizeof(adapterMode));
-		d3d9Globals.d3d9->GetAdapterDisplayMode(d3d9Globals.adapter, &adapterMode);
-		if(SUCCEEDED(d3d9Globals.d3d9->CheckDeviceFormat(d3d9Globals.adapter,
-			D3DDEVTYPE_HAL, adapterMode.Format, 0, D3DRTYPE_SURFACE, FOURCC_ATOC)))
-			alphaToCoverageKind = A2C_NVIDIA;
-		else if(SUCCEEDED(d3d9Globals.d3d9->CheckDeviceFormat(d3d9Globals.adapter,
-			D3DDEVTYPE_HAL, adapterMode.Format, 0, D3DRTYPE_SURFACE, FOURCC_A2M1)))
-			alphaToCoverageKind = A2C_AMD;
-	}
 	d3ddevice->SetRenderState(D3DRS_ADAPTIVETESS_Y, D3DFMT_UNKNOWN);
 
 	d3ddevice->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATEREQUAL);

@@ -265,10 +265,6 @@ int32 getVirtualScreenSamples(void);
 // sees. Called for you by showRaster and by copyVirtualScreen.
 void resolveVirtualScreen(void);
 
-// Spread a texture's own transparency over a pixel's samples instead of
-// blending it. Refused silently at one sample per pixel.
-void setAlphaToCoverageEnabled(bool32 enable);
-bool32 getAlphaToCoverage(void);
 // Bracket a 2D primitive, which has no place in the depth buffer and whose
 // edges are placed rather than found. See setIm2DActive's own comment.
 void setIm2DActive(bool32 active);

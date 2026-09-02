@@ -290,7 +290,6 @@ enum
 	RWGL_STENCILWRITEMASK,
 	RWGL_COLORMASK,
 	RWGL_MULTISAMPLE,
-	RWGL_SAMPLEALPHATOCOVERAGE,
 
 	// uniforms
 	RWGL_ALPHAFUNC,
@@ -335,8 +334,6 @@ struct GlState {
 	// in a pixel the same answer. Off is what a single-sampled target does,
 	// and what a 2D primitive wants -- see setIm2DActive.
 	bool32 multisample;
-	// Whether a fragment's alpha becomes a coverage mask. See updateAlphaStates.
-	bool32 sampleAlphaToCoverage;
 };
 static GlState curGlState, oldGlState;
 
@@ -412,7 +409,6 @@ setGlRenderState(uint32 state, uint32 value)
 	case RWGL_STENCILWRITEMASK: curGlState.stencilWriteMask = value; break;
 	case RWGL_COLORMASK: curGlState.colorMask = value; break;
 	case RWGL_MULTISAMPLE: curGlState.multisample = value; break;
-	case RWGL_SAMPLEALPHATOCOVERAGE: curGlState.sampleAlphaToCoverage = value; break;
 	}
 }
 
@@ -472,11 +468,6 @@ flushGlRenderState(void)
 	if(oldGlState.multisample != curGlState.multisample){
 		oldGlState.multisample = curGlState.multisample;
 		(oldGlState.multisample ? glEnable : glDisable)(GL_MULTISAMPLE);
-	}
-
-	if(oldGlState.sampleAlphaToCoverage != curGlState.sampleAlphaToCoverage){
-		oldGlState.sampleAlphaToCoverage = curGlState.sampleAlphaToCoverage;
-		(oldGlState.sampleAlphaToCoverage ? glEnable : glDisable)(GL_SAMPLE_ALPHA_TO_COVERAGE);
 	}
 
 	if(oldGlState.colorMask != curGlState.colorMask){
@@ -584,40 +575,9 @@ setAlphaTestFunction(uint32 function)
 	}
 }
 
-// Set while a 2D primitive is being drawn. Coverage is a statement about a
-// surface's place in the depth buffer, and a screen-space quad has none.
+// Set while a 2D primitive is being drawn. A screen-space quad has no place in
+// the depth buffer, so it is never a cutout.
 static bool32 im2DActive;
-
-// Whether the application wants coverage at all. On by default, so a caller
-// that never asks gets what the device and the sample count allow.
-static bool32 alphaToCoverageWanted = 1;
-
-// Coverage needs samples to spread itself across, so the virtual screen has to
-// be multisampled. GL_SAMPLE_ALPHA_TO_COVERAGE is core, so unlike D3D9 there is
-// no vendor question to ask -- only whether there is more than one sample.
-static bool32
-alphaToCoverageUsable(void)
-{
-	return alphaToCoverageWanted && virtualScreenSamples > 1 && !im2DActive;
-}
-
-// Ask for coverage, or ask for it not to be used. It is refused silently when
-// there is nothing to spread it across -- one sample per pixel is not a
-// mistake to report, it is just an answer of no.
-void
-setAlphaToCoverageEnabled(bool32 enable)
-{
-	if(alphaToCoverageWanted == enable)
-		return;
-	alphaToCoverageWanted = enable;
-	updateAlphaStates();
-}
-
-bool32
-getAlphaToCoverage(void)
-{
-	return alphaToCoverageUsable();
-}
 
 void
 setIm2DActive(bool32 active)
@@ -651,68 +611,14 @@ setIm2DActive(bool32 active)
 static void
 updateAlphaStates(void)
 {
-	// A texture's own transparency on a draw the application is NOT blending.
-	//
-	// The driver used to answer that with a blend, which is wrong twice over
-	// at any size above the one the art was drawn for. Magnifying a shape
-	// punched out of a texture leaves a band of filtered alpha around its
-	// edge; blending that band composites the surface over whatever happens to
-	// be in the frame buffer already, and because the band writes depth, the
-	// geometry that belonged behind it never draws at all. In a cave that
-	// reads as the level's own sky showing through the wall.
-	//
-	// Coverage answers it properly. The band becomes a fraction of the pixel's
-	// samples rather than a fraction of its colour, so the samples it does not
-	// cover keep their depth and the geometry behind draws into them.
-	//
-	// ...and only where the surface is taking part in the depth buffer. That is
-	// the whole of what coverage buys: samples the shape does not cover keep
-	// their depth, so what belongs behind draws into them. A draw that writes
-	// no depth -- the font, the interface, particles, shadows, the sorted alpha
-	// models -- is not in that argument and keeps the blend it asked for.
-	//
-	// ...and only where the ARTIST said the alpha is a cutout, which is what
-	// the reference says. xModelBucket.cpp puts the top byte of a bucket's
-	// pipeFlags in it: 128 for a shape punched out of a texture, 0 -- which
-	// arrives here as the console's own resting value of 1 -- for everything
-	// else. 43 buckets in the whole game ask for 128, and they are grass
-	// clumps, seaweed, netting, pilings and hanging lights.
-	//
-	// Without that condition coverage also lands on soft art with a graded
-	// alpha, and there it is simply wrong: a shadow decal's falloff becomes
-	// the four or eight steps the sample count can express, which reads as
-	// flat bands of grey where the texture had a gradient. Coverage quantises
-	// what a blend interpolates, so it may only have the shapes whose alpha
-	// was meant to be cut in the first place.
-	// Cutting the band leaves a hard, slightly eroded silhouette, so it is
-	// only worth doing when there is coverage to antialias it. Without that
-	// the surface keeps the blend it has always had -- and the x-ray with it.
-	// The two are one feature, not two.
-	bool32 cutout = alphaToCoverageUsable() && rwStateCache.textureAlpha &&
-	                rwStateCache.textureKeyed && !rwStateCache.vertexAlpha &&
-	                rwStateCache.zwrite;
-	bool32 coverage = cutout;
+	// A texture's own transparency on a draw the application is NOT blending;
+	// the reasoning is in the D3D9 device. A keyed raster on a surface that
+	// takes part in the depth buffer, and is not a screen-space quad, is cut
+	// rather than blended, at the reference the artwork's silhouette sits on.
+	bool32 cutout = rwStateCache.textureAlpha && rwStateCache.textureKeyed &&
+	                !rwStateCache.vertexAlpha && rwStateCache.zwrite &&
+	                !im2DActive;
 	bool32 test = rwStateCache.vertexAlpha || rwStateCache.textureAlpha;
-	// The inference is dropped entirely for a surface in the depth buffer.
-	//
-	// Magnifying a shape punched out of a texture leaves a band of filtered
-	// alpha around its edge, and at 640x480 that band was a texel wide. At
-	// four times the width it is several pixels. Its alpha is 1..254, so it
-	// passes the console's resting test of 1, and blending it composites the
-	// surface over whatever was in the frame buffer already -- while still
-	// writing depth across the whole band, so the geometry that belonged
-	// behind never draws. What the band lands on is the skydome, drawn first
-	// at zScene.cpp:3068. That is the sky showing through a cave wall, and it
-	// gets worse the higher the render resolution goes.
-	//
-	// GX does not blend there. rwRENDERSTATEVERTEXALPHAENABLE is off for this
-	// art -- zRenderState.cpp:52 -- and the console draws it opaque, cutting
-	// only what is fully transparent. Blending it was librw's own idea, taken
-	// from the raster having an alpha channel at all.
-	//
-	// A draw that writes no depth keeps the inference: particles, shadows,
-	// the sorted alpha models, the font and the interface are all ordered by
-	// the game itself and are not part of this argument.
 	bool32 blend = rwStateCache.vertexAlpha ||
 	               (rwStateCache.textureAlpha && !cutout);
 
@@ -728,10 +634,6 @@ updateAlphaStates(void)
 
 	setAlphaBlend(blend);
 	setAlphaTest(test);
-	// The application's own reference throughout. Coverage does not replace the
-	// test, it reads the alpha that survives it, so moving the reference would
-	// cut the shape before the samples ever saw it.
-	setGlRenderState(RWGL_SAMPLEALPHATOCOVERAGE, coverage);
 }
 
 static void
@@ -1524,7 +1426,6 @@ resetRenderState(void)
 	rwStateCache.colorwritemask = COLORWRITEALL;
 	setGlRenderState(RWGL_COLORMASK, COLORWRITEALL);
 	setGlRenderState(RWGL_MULTISAMPLE, true);
-	setGlRenderState(RWGL_SAMPLEALPHATOCOVERAGE, false);
 
 	activeTexture = -1;
 	for(int i = 0; i < MAXNUMSTAGES; i++){
