@@ -26,20 +26,23 @@ cbuffer VSConstants : register(b0)
 	float4		surfProps	: packoffset(c13);
 	float4		fogData		: packoffset(c14);
 	float4		ambientLight	: packoffset(c15);
-	int4		firstLight	: packoffset(c16);
+	float4		firstLight	: packoffset(c16);
 	Light		lights[8]	: packoffset(c17);
 	VSTAIL
 };
 
-// The integer registers, which D3D9 kept in a file of their own.
+// The integer registers, which D3D9 kept in a file of their own. One count per
+// register, because that is how setNumLights uploads them.
 cbuffer VSIntConstants : register(b1)
 {
-	int4		lightCounts	: packoffset(c0);
+	int4		dirLightCount	: packoffset(c0);
+	int4		pointLightCount	: packoffset(c1);
+	int4		spotLightCount	: packoffset(c2);
 };
 
-#define numDirLights (lightCounts.x)
-#define numPointLights (lightCounts.y)
-#define numSpotLights (lightCounts.z)
+#define numDirLights (dirLightCount.x)
+#define numPointLights (pointLightCount.x)
+#define numSpotLights (spotLightCount.x)
 
 // normalMat is a 3x3 in the shaders that use it and four registers on the wire,
 // which is what the driver uploads.
@@ -54,6 +57,6 @@ cbuffer VSIntConstants : register(b1)
 #define fogRange (fogData.z)
 #define fogDisable (fogData.w)
 
-#define firstDirLight (firstLight.x)
-#define firstPointLight (firstLight.y)
-#define firstSpotLight (firstLight.z)
+#define firstDirLight ((int)firstLight.x)
+#define firstPointLight ((int)firstLight.y)
+#define firstSpotLight ((int)firstLight.z)

@@ -102,7 +102,7 @@ destroyVertexDeclaration(void *declaration)
 	// The input layouts made against it are keyed on this pointer, and the
 	// allocator will hand the address out again. Without this, the next
 	// declaration to land here inherits another geometry's attribute offsets.
-	forgetInputLayouts(declaration);
+	forgetVertexDeclaration(declaration);
 #endif
 	rwFree(declaration);
 #endif

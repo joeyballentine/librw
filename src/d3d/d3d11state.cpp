@@ -62,6 +62,12 @@ static struct {
 	// for: the two are ORed, and neither may erase the other.
 	bool32 appVertexAlpha;
 	bool32 pipelineVertexAlpha;
+	bool32 vertexAlpha;
+
+	// The stage-0 raster's own transparency, and whether the artist meant it
+	// as a cutout. Both feed updateAlphaStates.
+	bool32 textureAlpha;
+	bool32 textureKeyed;
 
 	// Alpha test. D3D11 has no such render state -- the pixel shader clips --
 	// so these are uploaded rather than bound.
@@ -158,6 +164,41 @@ struct StateCache
 	}
 };
 
+// What a stage with no raster samples. D3D9 binds a 1x1 white texture there so
+// that a shader multiplying by it is unchanged; a null view would sample zero
+// and turn the draw black.
+static ID3D11Texture2D *whiteTex;
+static ID3D11ShaderResourceView *whiteView;
+
+void
+createWhiteTexture(void)
+{
+	uint32 texel = 0xFFFFFFFF;
+	D3D11_TEXTURE2D_DESC desc;
+	memset(&desc, 0, sizeof(desc));
+	desc.Width = 1;
+	desc.Height = 1;
+	desc.MipLevels = 1;
+	desc.ArraySize = 1;
+	desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+	desc.SampleDesc.Count = 1;
+	desc.Usage = D3D11_USAGE_IMMUTABLE;
+	desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	D3D11_SUBRESOURCE_DATA init;
+	memset(&init, 0, sizeof(init));
+	init.pSysMem = &texel;
+	init.SysMemPitch = 4;
+	if(SUCCEEDED(d3d11device->CreateTexture2D(&desc, &init, &whiteTex)))
+		d3d11device->CreateShaderResourceView(whiteTex, nil, &whiteView);
+}
+
+void
+destroyWhiteTexture(void)
+{
+	if(whiteView){ whiteView->Release(); whiteView = nil; }
+	if(whiteTex){ whiteTex->Release(); whiteTex = nil; }
+}
+
 static StateCache<D3D11_BLEND_DESC, ID3D11BlendState> blendCache;
 static StateCache<D3D11_DEPTH_STENCIL_DESC, ID3D11DepthStencilState> depthCache;
 static StateCache<D3D11_RASTERIZER_DESC, ID3D11RasterizerState> rasterCache;
@@ -237,6 +278,16 @@ addressMode(uint32 rwaddr)
 	return D3D11_TEXTURE_ADDRESS_WRAP;
 }
 
+// Whether a filter mode looks at the mip chain at all. NEAREST and LINEAR do
+// not: the D3D9 backend gives them D3DTEXF_NONE, which is the base level and
+// nothing else, and a sampler that walks the chain instead makes a distant
+// surface a different colour.
+static bool
+filterUsesMipmaps(uint32 rwfilter)
+{
+	return rwfilter != Texture::NEAREST && rwfilter != Texture::LINEAR;
+}
+
 static D3D11_FILTER
 filterMode(uint32 rwfilter, uint32 maxAniso)
 {
@@ -298,9 +349,13 @@ bindDepthStencilState(void)
 	D3D11_DEPTH_STENCIL_DESC desc;
 	memset(&desc, 0, sizeof(desc));
 
-	desc.DepthEnable = rwStateCache.ztest != 0;
+	// D3D11 gates the write on DepthEnable as well as the test, where D3D9
+	// keeps them apart -- so a draw that writes depth without testing it needs
+	// the stage on and the comparison always true. The D3D9 backend says the
+	// same thing with ZENABLE plus ZFUNC.
+	desc.DepthEnable = (rwStateCache.ztest || rwStateCache.zwrite) != 0;
 	desc.DepthWriteMask = rwStateCache.zwrite ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
-	desc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+	desc.DepthFunc = rwStateCache.ztest ? D3D11_COMPARISON_LESS_EQUAL : D3D11_COMPARISON_ALWAYS;
 	desc.StencilEnable = rwStateCache.stencilenable != 0;
 	desc.StencilReadMask = (UINT8)rwStateCache.stencilmask;
 	desc.StencilWriteMask = (UINT8)rwStateCache.stencilwritemask;
@@ -369,7 +424,8 @@ bindSamplers(void)
 		desc.MaxAnisotropy = rwStateCache.texstage[i].maxAnisotropy;
 		desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 		desc.MinLOD = 0.0f;
-		desc.MaxLOD = D3D11_FLOAT32_MAX;
+		desc.MaxLOD = filterUsesMipmaps(rwStateCache.texstage[i].filter) ?
+			D3D11_FLOAT32_MAX : 0.0f;
 
 		ID3D11SamplerState *state = samplerCache.find(&desc);
 		if(state == nil){
@@ -389,7 +445,9 @@ bindTextures(void)
 	ID3D11ShaderResourceView *views[2];
 	for(int i = 0; i < 2; i++){
 		Raster *raster = rwStateCache.texstage[i].raster;
-		views[i] = raster ? (ID3D11ShaderResourceView*)rasterShaderResource(raster) : nil;
+		views[i] = raster ? (ID3D11ShaderResourceView*)rasterShaderResource(raster) : whiteView;
+		if(views[i] == nil)
+			views[i] = whiteView;
 	}
 	d3d11context->PSSetShaderResources(0, 2, views);
 }
@@ -415,17 +473,40 @@ flushCache(void)
 
 // --- what the driver calls --------------------------------------------------
 
+// What blends, what is tested, and where the test cuts. This is d3ddevice.cpp's
+// updateAlphaStates; the reasoning is written out there and applies unchanged.
+// What differs is only where the answers go: D3D11 has no alpha test state, so
+// the comparison and the reference are uploaded and every pixel shader clips.
+static void
+updateAlphaStates(void)
+{
+	bool32 cutout = rwStateCache.textureAlpha && rwStateCache.textureKeyed &&
+	                !rwStateCache.vertexAlpha && rwStateCache.zwrite &&
+	                !im2DActive;
+	bool32 test = rwStateCache.vertexAlpha || rwStateCache.textureAlpha;
+	bool32 blend = rwStateCache.vertexAlpha ||
+	               (rwStateCache.textureAlpha && !cutout);
+
+	uint32 alpharef = cutout && rwStateCache.alpharef <= 1 ?
+	                  ALPHACUTOUTREF : rwStateCache.alpharef;
+
+	if(rwStateCache.blendenable != blend){
+		rwStateCache.blendenable = blend;
+		stateDirty = 1;
+	}
+	// ALPHAALWAYS is how the shader is told not to clip at all.
+	setAlphaTestConstants(test ? rwStateCache.alphafunc : ALPHAALWAYS, alpharef);
+}
+
 // Blending follows alpha, the same rule the D3D9 backend applies: a draw blends
 // when the application asked for it or when the geometry the pipeline instanced
 // has alpha in it. Neither may erase the other, which is why they are separate.
 static void
-updateBlendEnable(void)
+updateVertexAlpha(void)
 {
-	bool32 want = rwStateCache.appVertexAlpha || rwStateCache.pipelineVertexAlpha;
-	if(rwStateCache.blendenable != want){
-		rwStateCache.blendenable = want;
-		stateDirty = 1;
-	}
+	rwStateCache.vertexAlpha = rwStateCache.appVertexAlpha ||
+	                           rwStateCache.pipelineVertexAlpha;
+	updateAlphaStates();
 }
 
 bool32
@@ -438,7 +519,7 @@ void
 setPipelineVertexAlpha(bool32 enable)
 {
 	rwStateCache.pipelineVertexAlpha = enable;
-	updateBlendEnable();
+	updateVertexAlpha();
 }
 
 // Bracket a 2D primitive. A screen-space quad's edges are placed in pixels
@@ -450,6 +531,7 @@ setIm2DActive(bool32 active)
 	if(im2DActive != active){
 		im2DActive = active;
 		stateDirty = 1;
+		updateAlphaStates();
 	}
 }
 
@@ -459,14 +541,40 @@ getIm2DActive(void)
 	return im2DActive;
 }
 
+// A raster on its way out. The stage keeps a pointer, and comparing it against
+// a reallocated one would say nothing changed.
+void
+forgetRaster(Raster *raster)
+{
+	for(int i = 0; i < 2; i++)
+		if(rwStateCache.texstage[i].raster == raster){
+			rwStateCache.texstage[i].raster = nil;
+			stateDirty = 1;
+		}
+}
+
 void
 setRasterStage(uint32 stage, Raster *raster)
 {
 	if(stage > 1)
 		return;
-	if(rwStateCache.texstage[stage].raster != raster){
-		rwStateCache.texstage[stage].raster = raster;
-		stateDirty = 1;
+	if(rwStateCache.texstage[stage].raster == raster)
+		return;
+	rwStateCache.texstage[stage].raster = raster;
+	stateDirty = 1;
+
+	if(stage != 0)
+		return;
+	bool32 alpha = 0, keyed = 0;
+	if(raster){
+		D3dRaster *natras = GETD3DRASTEREXT(raster);
+		alpha = natras->alphaKind != ALPHAOPAQUE;
+		keyed = natras->alphaKind == ALPHAKEYED;
+	}
+	if(rwStateCache.textureAlpha != alpha || rwStateCache.textureKeyed != keyed){
+		rwStateCache.textureAlpha = alpha;
+		rwStateCache.textureKeyed = keyed;
+		updateAlphaStates();
 	}
 }
 
@@ -521,7 +629,7 @@ setRwRenderState(int32 state, void *pvalue)
 		break;
 	case VERTEXALPHA:
 		rwStateCache.appVertexAlpha = bval;
-		updateBlendEnable();
+		updateVertexAlpha();
 		break;
 	case SRCBLEND:
 		rwStateCache.srcblend = value;
@@ -538,6 +646,9 @@ setRwRenderState(int32 state, void *pvalue)
 	case ZWRITEENABLE:
 		rwStateCache.zwrite = bval;
 		stateDirty = 1;
+		// A cutout is a statement about the depth buffer, so whether this
+		// draw writes one is part of the answer.
+		updateAlphaStates();
 		break;
 	case FOGENABLE:
 		rwStateCache.fogenable = bval;
@@ -596,11 +707,11 @@ setRwRenderState(int32 state, void *pvalue)
 	// shader, which clips, so they are uploaded rather than bound.
 	case ALPHATESTFUNC:
 		rwStateCache.alphafunc = value;
-		setAlphaTestConstants(rwStateCache.alphafunc, rwStateCache.alpharef);
+		updateAlphaStates();
 		break;
 	case ALPHATESTREF:
 		rwStateCache.alpharef = value;
-		setAlphaTestConstants(rwStateCache.alphafunc, rwStateCache.alpharef);
+		updateAlphaStates();
 		break;
 	case GSALPHATEST:
 		rwStateCache.gsalpha = value;
@@ -694,9 +805,9 @@ resetRenderState(void)
 		rwStateCache.texstage[i].filter = Texture::LINEAR;
 		rwStateCache.texstage[i].maxAnisotropy = 1;
 	}
-	setAlphaTestConstants(rwStateCache.alphafunc, rwStateCache.alpharef);
 	im2DActive = 0;
 	stateDirty = 1;
+	updateAlphaStates();
 }
 
 // The D3D9 interface the pipelines still call. D3DRS_ keys have no counterpart

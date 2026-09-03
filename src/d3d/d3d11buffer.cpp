@@ -136,6 +136,7 @@ void
 destroyVertexBuffer11(void *buffer)
 {
 	if(buffer){
+		forgetBuffer(buffer);
 		destroyBuffer(buffer);
 		d3d11Globals.numVertexBuffers--;
 	}
@@ -154,6 +155,7 @@ void
 destroyIndexBuffer11(void *buffer)
 {
 	if(buffer){
+		forgetBuffer(buffer);
 		destroyBuffer(buffer);
 		d3d11Globals.numIndexBuffers--;
 	}

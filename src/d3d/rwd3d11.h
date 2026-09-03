@@ -54,6 +54,9 @@ DXGI_FORMAT formatToDXGI(uint32 format);
 ID3D11Buffer *bufferResource(void *buffer);
 ID3D11VertexShader *vertexShaderResource(void *shader);
 ID3D11InputLayout *inputLayoutFor(void *declaration, void *vertexShader);
+// What the scene is drawn into: the virtual screen, or nil when there is none
+// and the back buffer is the picture.
+ID3D11Texture2D *virtualScreenTexture(void);
 
 #endif
 
@@ -84,11 +87,18 @@ void unlockBuffer11(void *buffer);
 // are the Device's; the rest is what the backend's own files need.
 void resetRenderState(void);
 void invalidateDeviceState(void);
+// Drop a destroyed object from the device shadow. Without it the next object
+// to be allocated at that address is taken for the one still bound.
+void forgetRaster(Raster *raster);
+void forgetVertexDeclaration(void *declaration);
+void forgetBuffer(void *buffer);
 void setRwRenderState(int32 state, void *pvalue);
 void *getRwRenderState(int32 state);
 void setRasterStage(uint32 stage, Raster *raster);
 bool32 getIm2DActive(void);
 void releaseStateObjects(void);
+void createWhiteTexture(void);
+void destroyWhiteTexture(void);
 
 // Shader constants, shaders and input layouts, in d3d11shader.cpp.
 void openShaderConstants(void);

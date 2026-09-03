@@ -63,6 +63,37 @@ static ID3D11SamplerState *blitSampler;
 
 static void forgetBindings(void);
 
+// D3D11 dropped the triangle fan, and the game draws them: an NPC's light cone
+// at zNPCSupport.cpp:598 and the robot's disco light at zNPCTypeRobot.cpp:2647.
+//
+// A fan of n vertices is the triangle list (0, i+1, i+2), and those indices
+// depend on nothing but the vertex count -- so one buffer built at start-up
+// covers every fan up to the largest the immediate-mode paths can hold.
+#define MAXFANVERTICES 10000
+static ID3D11Buffer *fanIndices;
+
+static void
+createFanIndices(void)
+{
+	uint16 *idx = rwNewT(uint16, (MAXFANVERTICES-2)*3, MEMDUR_FUNCTION | ID_DRIVER);
+	for(int32 i = 0; i < MAXFANVERTICES-2; i++){
+		idx[i*3+0] = 0;
+		idx[i*3+1] = (uint16)(i+1);
+		idx[i*3+2] = (uint16)(i+2);
+	}
+
+	D3D11_BUFFER_DESC desc;
+	memset(&desc, 0, sizeof(desc));
+	desc.ByteWidth = (MAXFANVERTICES-2)*3*sizeof(uint16);
+	desc.Usage = D3D11_USAGE_IMMUTABLE;
+	desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	D3D11_SUBRESOURCE_DATA init;
+	memset(&init, 0, sizeof(init));
+	init.pSysMem = idx;
+	d3d11device->CreateBuffer(&desc, &init, &fanIndices);
+	rwFree(idx);
+}
+
 // What OMSetRenderTargets was last given. Kept so a clear lands on the camera's
 // own surfaces rather than on the window's.
 static ID3D11RenderTargetView *currentTarget;
@@ -137,6 +168,12 @@ setVirtualScreen(int32 width, int32 height)
 	virtualScreenWidth = width;
 	virtualScreenHeight = height;
 	acquireVirtualScreen();
+}
+
+ID3D11Texture2D*
+virtualScreenTexture(void)
+{
+	return virtualScreen;
 }
 
 void
@@ -391,6 +428,8 @@ initD3D11(void)
 	resetRenderState();
 	openShaderConstants();
 	acquireVirtualScreen();
+	createFanIndices();
+	createWhiteTexture();
 
 	{
 		static
@@ -463,6 +502,8 @@ termD3D11(void)
 	if(blitDepth){ blitDepth->Release(); blitDepth = nil; }
 	if(blitRaster){ blitRaster->Release(); blitRaster = nil; }
 	if(blitSampler){ blitSampler->Release(); blitSampler = nil; }
+	if(fanIndices){ fanIndices->Release(); fanIndices = nil; }
+	destroyWhiteTexture();
 	releaseVirtualScreen();
 	closeShaderConstants();
 	releaseInputLayouts();
@@ -640,6 +681,11 @@ beginUpdate(Camera *cam)
 	d3dShaderState.fogDisable.disable = 1.0f;
 	d3dShaderState.fogDirty = true;
 
+	// The swap chain does not follow the window on its own, and the letterbox
+	// is measured against the back buffer -- so a resized window would be
+	// stretched from the old size until something else remade the chain.
+	resizeToWindow();
+
 	setRenderSurfaces(cam);
 }
 
@@ -762,6 +808,26 @@ static struct {
 } bound;
 
 void
+forgetVertexDeclaration(void *declaration)
+{
+	forgetInputLayouts(declaration);
+	if(bound.declaration == declaration){
+		bound.declaration = nil;
+		bound.layout = nil;
+	}
+}
+
+void
+forgetBuffer(void *buffer)
+{
+	if(bound.indexBuffer == buffer)
+		bound.indexBuffer = nil;
+	for(int i = 0; i < 3; i++)
+		if(bound.streams[i].buffer == buffer)
+			bound.streams[i].buffer = nil;
+}
+
+void
 setVertexShader(void *vs)
 {
 	if(bound.vertexShader != vs){
@@ -841,9 +907,8 @@ topology(uint32 primType)
 	case D3DPT_TRIANGLELIST:	return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	case D3DPT_TRIANGLESTRIP:	return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
 	}
-	// D3D11 dropped the triangle fan. Nothing in this driver emits one --
-	// im2DRenderPrimitive is the only caller that could, and the game's 2D
-	// passes are lists and strips.
+	// The fan has no topology here; drawPrimitive turns it into a list
+	// instead. Anything else is a primitive type this driver never emits.
 	return D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
 }
 
@@ -868,10 +933,30 @@ readyToDraw(uint32 primType)
 	return 1;
 }
 
+// A fan, as the triangle list D3D11 will take. The index buffer it borrows is
+// not the one the caller had bound, so that binding is put back.
+static void
+drawFan(uint32 numPrimitives)
+{
+	if(fanIndices == nil || numPrimitives > MAXFANVERTICES-2)
+		return;
+	if(!readyToDraw(D3DPT_TRIANGLELIST))
+		return;
+	d3d11context->IASetIndexBuffer(fanIndices, DXGI_FORMAT_R16_UINT, 0);
+	d3d11context->DrawIndexed(numPrimitives*3, 0, 0);
+	d3d11context->IASetIndexBuffer(bufferResource(bound.indexBuffer), DXGI_FORMAT_R16_UINT, 0);
+}
+
 void
 drawPrimitive(uint32 primType, uint32 startVertex, uint32 numPrimitives)
 {
-	if(numPrimitives == 0 || !readyToDraw(primType))
+	if(numPrimitives == 0)
+		return;
+	if(primType == D3DPT_TRIANGLEFAN){
+		drawFan(numPrimitives);
+		return;
+	}
+	if(!readyToDraw(primType))
 		return;
 	d3d11context->Draw(indexCount(primType, numPrimitives), startVertex);
 }

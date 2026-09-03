@@ -247,7 +247,13 @@ rasterLockTarget(Raster *raster, int32 level, int32 lockMode)
 
 	ID3D11Texture2D *src;
 	if(raster->type == Raster::CAMERA){
-		if(FAILED(d3d11Globals.swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&src)))
+		// The virtual screen is what the scene was drawn into; the back buffer
+		// holds the previous frame's letterboxed blit, in another channel
+		// order. Only with no virtual screen is the back buffer the picture.
+		src = virtualScreenTexture();
+		if(src)
+			src->AddRef();
+		else if(FAILED(d3d11Globals.swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&src)))
 			return nil;
 	}else{
 		src = (ID3D11Texture2D*)natras->tex11;
@@ -309,6 +315,7 @@ rasterUnlockTarget(Raster *raster)
 void
 rasterDestroy(Raster *raster, D3dRaster *natras)
 {
+	forgetRaster(raster);
 	if(natras->srv){
 		((ID3D11ShaderResourceView*)natras->srv)->Release();
 		natras->srv = nil;
