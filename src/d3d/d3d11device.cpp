@@ -46,12 +46,30 @@ bool32 constantVertexColorWhite;
 // size instead, and showRaster stretches it into the back buffer.
 int32 virtualScreenWidth;
 int32 virtualScreenHeight;
-static int32 virtualScreenSamples = 1;
+
+// What the scene is drawn into, and what anything that READS the frame gets.
+// With no multisampling they are the same texture. With it they are two: the
+// samples cannot be sampled, so they are collapsed into the single-sampled one
+// on the way out -- see resolveVirtualScreen.
 static ID3D11Texture2D *virtualScreen;
 static ID3D11RenderTargetView *virtualScreenTarget;
 static ID3D11ShaderResourceView *virtualScreenView;
+static ID3D11Texture2D *virtualScreenMS;
+static ID3D11RenderTargetView *virtualScreenMSTarget;
+// Samples asked for, and the count actually granted.
+static int32 virtualScreenSamples = 1;
+static int32 virtualScreenGranted = 1;
+// One depth buffer, at whichever sample count the scene target has: D3D11
+// refuses to pair a multisampled target with a single-sampled depth buffer.
 static ID3D11Texture2D *virtualScreenDepth;
 static ID3D11DepthStencilView *virtualScreenDepthView;
+
+// The target the scene lands on. The multisampled one when there is one.
+static ID3D11RenderTargetView*
+sceneTarget(void)
+{
+	return virtualScreenMSTarget ? virtualScreenMSTarget : virtualScreenTarget;
+}
 // The blit's own state: a fullscreen triangle needs no vertex buffer and no
 // input layout, and it must not inherit the scene's blending or depth test.
 static void *blitVS;
@@ -118,9 +136,12 @@ releaseVirtualScreen(void)
 {
 	if(virtualScreenDepthView){ virtualScreenDepthView->Release(); virtualScreenDepthView = nil; }
 	if(virtualScreenDepth){ virtualScreenDepth->Release(); virtualScreenDepth = nil; }
+	if(virtualScreenMSTarget){ virtualScreenMSTarget->Release(); virtualScreenMSTarget = nil; }
+	if(virtualScreenMS){ virtualScreenMS->Release(); virtualScreenMS = nil; }
 	if(virtualScreenView){ virtualScreenView->Release(); virtualScreenView = nil; }
 	if(virtualScreenTarget){ virtualScreenTarget->Release(); virtualScreenTarget = nil; }
 	if(virtualScreen){ virtualScreen->Release(); virtualScreen = nil; }
+	virtualScreenGranted = 1;
 }
 
 // Made when the device comes up, not when the size is set: the application
@@ -147,13 +168,43 @@ acquireVirtualScreen(void)
 	d3d11device->CreateRenderTargetView(virtualScreen, nil, &virtualScreenTarget);
 	d3d11device->CreateShaderResourceView(virtualScreen, nil, &virtualScreenView);
 
+	// The multisampled target the scene draws into, when it was asked for and
+	// the device will grant it. Falling back to one sample is not a failure:
+	// the picture is the same one, drawn without the extra samples.
+	//
+	// D3D11 grants a count or it does not -- there is no rounding down -- so
+	// the ask is walked down to the next power of two rather than refused
+	// outright, the way 8x on a card that only does 4x would be.
+	virtualScreenGranted = 1;
+	for(int32 want = virtualScreenSamples; want > 1; want /= 2){
+		UINT colorq, depthq;
+		if(FAILED(d3d11device->CheckMultisampleQualityLevels(DXGI_FORMAT_B8G8R8A8_UNORM, want, &colorq)) ||
+		   FAILED(d3d11device->CheckMultisampleQualityLevels(DXGI_FORMAT_D24_UNORM_S8_UINT, want, &depthq)) ||
+		   colorq == 0 || depthq == 0)
+			continue;
+
+		desc.SampleDesc.Count = want;
+		desc.SampleDesc.Quality = 0;
+		// Nothing samples this one; the resolve destination is what is read.
+		desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+		if(FAILED(d3d11device->CreateTexture2D(&desc, nil, &virtualScreenMS)))
+			continue;
+		if(FAILED(d3d11device->CreateRenderTargetView(virtualScreenMS, nil, &virtualScreenMSTarget))){
+			virtualScreenMS->Release();
+			virtualScreenMS = nil;
+			continue;
+		}
+		virtualScreenGranted = want;
+		break;
+	}
+
 	memset(&desc, 0, sizeof(desc));
 	desc.Width = virtualScreenWidth;
 	desc.Height = virtualScreenHeight;
 	desc.MipLevels = 1;
 	desc.ArraySize = 1;
 	desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-	desc.SampleDesc.Count = 1;
+	desc.SampleDesc.Count = virtualScreenGranted;
 	desc.Usage = D3D11_USAGE_DEFAULT;
 	desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
 	if(SUCCEEDED(d3d11device->CreateTexture2D(&desc, nil, &virtualScreenDepth)))
@@ -170,9 +221,26 @@ setVirtualScreen(int32 width, int32 height)
 	acquireVirtualScreen();
 }
 
+// The single-sampled picture, for anything that needs to READ what has been
+// drawn: the present-time blit, and the effects that take a copy of the frame
+// to sample it as a texture.
+//
+// Not cached. The effects read the frame and then keep drawing into it, so a
+// resolve held from earlier in the frame would hand back a stale picture.
 ID3D11Texture2D*
 virtualScreenTexture(void)
 {
+	if(virtualScreenMS && virtualScreen){
+		// The effects read the frame in the middle of drawing it, so the
+		// source of this resolve is the render target that is bound right
+		// now. Unbound for the length of the call and put back after: a
+		// resource that is an output and an input at once is a hazard the
+		// runtime is entitled to answer by doing nothing at all.
+		d3d11context->OMSetRenderTargets(0, nil, nil);
+		d3d11context->ResolveSubresource(virtualScreen, 0, virtualScreenMS, 0,
+			DXGI_FORMAT_B8G8R8A8_UNORM);
+		d3d11context->OMSetRenderTargets(1, &currentTarget, currentDepth);
+	}
 	return virtualScreen;
 }
 
@@ -184,7 +252,7 @@ getVirtualScreen(int32 *width, int32 *height)
 }
 
 void setVirtualScreenSamples(int32 samples) { virtualScreenSamples = samples < 1 ? 1 : samples; }
-int32 getVirtualScreenSamples(void) { return 1; }
+int32 getVirtualScreenSamples(void) { return virtualScreenGranted; }
 
 // --- the swap chain ---------------------------------------------------------
 
@@ -535,7 +603,7 @@ captureFrame(Raster *dst)
 	if(tex == nil)
 		return 0;
 
-	ID3D11Texture2D *src = virtualScreen;
+	ID3D11Texture2D *src = virtualScreenTexture();
 	bool32 borrowed = 0;
 	if(src == nil){
 		if(FAILED(d3d11Globals.swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&src)))
@@ -564,7 +632,7 @@ setRenderSurfaces(Camera *cam)
 	int32 width, height;
 
 	if(virtualScreenTarget){
-		rtv = virtualScreenTarget;
+		rtv = sceneTarget();
 		dsv = virtualScreenDepthView;
 		width = virtualScreenWidth;
 		height = virtualScreenHeight;
@@ -732,6 +800,11 @@ blitVirtualScreen(void)
 {
 	if(virtualScreenView == nil || d3d11Globals.backBufferTarget == nil)
 		return;
+
+	// The samples are collapsed BEFORE the render target changes: a resolve is
+	// a copy between resources and does not care what is bound, but reading the
+	// destination as a texture in the same call would.
+	virtualScreenTexture();
 
 	float black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 	d3d11context->OMSetRenderTargets(1, &d3d11Globals.backBufferTarget, nil);
