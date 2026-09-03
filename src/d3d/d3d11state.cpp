@@ -234,6 +234,25 @@ blendFactor(uint32 rwblend)
 	return D3D11_BLEND_ONE;
 }
 
+// The same factor, for the alpha channel.
+//
+// D3D11 keeps a separate blend for alpha and will not take a colour factor
+// there: SrcBlendAlpha or DestBlendAlpha set to one of the _COLOR values makes
+// CreateBlendState fail outright, and a draw with no blend state writes its
+// source unblended. D3D9 has one pair for both and takes the alpha component of
+// whatever colour factor was named, which is what these map to.
+static D3D11_BLEND
+blendFactorAlpha(uint32 rwblend)
+{
+	switch(rwblend){
+	case BLENDSRCCOLOR:	return D3D11_BLEND_SRC_ALPHA;
+	case BLENDINVSRCCOLOR:	return D3D11_BLEND_INV_SRC_ALPHA;
+	case BLENDDESTCOLOR:	return D3D11_BLEND_DEST_ALPHA;
+	case BLENDINVDESTCOLOR:	return D3D11_BLEND_INV_DEST_ALPHA;
+	}
+	return blendFactor(rwblend);
+}
+
 static D3D11_COMPARISON_FUNC
 comparison(uint32 rwfunc)
 {
@@ -326,8 +345,8 @@ bindBlendState(void)
 	rt->SrcBlend = blendFactor(rwStateCache.srcblend);
 	rt->DestBlend = blendFactor(rwStateCache.destblend);
 	rt->BlendOp = D3D11_BLEND_OP_ADD;
-	rt->SrcBlendAlpha = blendFactor(rwStateCache.srcblend);
-	rt->DestBlendAlpha = blendFactor(rwStateCache.destblend);
+	rt->SrcBlendAlpha = blendFactorAlpha(rwStateCache.srcblend);
+	rt->DestBlendAlpha = blendFactorAlpha(rwStateCache.destblend);
 	rt->BlendOpAlpha = D3D11_BLEND_OP_ADD;
 	// The librw mask bits are in the same order as D3D11's, so the value
 	// passes straight through.
@@ -335,9 +354,12 @@ bindBlendState(void)
 
 	ID3D11BlendState *state = blendCache.find(&desc);
 	if(state == nil){
+		// Refused rather than bound: leaving the previous state in place would
+		// make the next draw blend by whatever the last one asked for.
 		if(FAILED(d3d11device->CreateBlendState(&desc, &state)))
-			return;
-		blendCache.add(&desc, state);
+			state = nil;
+		else
+			blendCache.add(&desc, state);
 	}
 	float blendFactorRGBA[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 	d3d11context->OMSetBlendState(state, blendFactorRGBA, 0xFFFFFFFF);
