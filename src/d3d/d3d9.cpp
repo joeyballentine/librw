@@ -13,6 +13,7 @@
 #include "../rwrender.h"
 #include "rwd3d.h"
 #include "rwd3d9.h"
+#include "rwd3d11.h"
 
 #include "rwd3dimpl.h"
 
@@ -97,6 +98,12 @@ destroyVertexDeclaration(void *declaration)
 		d3d9Globals.numVertexDeclarations--;
 	}
 #else
+#ifdef RW_D3D11
+	// The input layouts made against it are keyed on this pointer, and the
+	// allocator will hand the address out again. Without this, the next
+	// declaration to land here inherits another geometry's attribute offsets.
+	forgetInputLayouts(declaration);
+#endif
 	rwFree(declaration);
 #endif
 }
