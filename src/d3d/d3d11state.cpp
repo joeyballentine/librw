@@ -124,7 +124,7 @@ setMaterial(const RGBA &color, const SurfaceProperties &surfaceprops, float extr
 
 // Small and linear on purpose. A frame of BFBB uses a few dozen distinct
 // pipeline states; a hash would cost more to maintain than the walk saves.
-#define MAXCACHED 64
+#define MAXCACHED 128
 
 template<typename Desc, typename State>
 struct StateCache
@@ -134,6 +134,7 @@ struct StateCache
 		State *state;
 	} entries[MAXCACHED];
 	int32 num;
+	int32 next;
 
 	State *find(const Desc *desc)
 	{
@@ -145,15 +146,20 @@ struct StateCache
 
 	void add(const Desc *desc, State *state)
 	{
-		if(num >= MAXCACHED){
-			// Not fatal: the state is still bound, it just has to be made
-			// again next time it comes round.
-			state->AddRef();
-			return;
+		int32 i;
+		if(num < MAXCACHED)
+			i = num++;
+		else{
+			// Round robin past the end, rather than hand the caller a state
+			// nothing owns. The context holds its own reference to whatever
+			// is bound, so releasing one here cannot pull a state out from
+			// under a draw that is still using it.
+			i = next;
+			next = (next+1) % MAXCACHED;
+			entries[i].state->Release();
 		}
-		entries[num].desc = *desc;
-		entries[num].state = state;
-		num++;
+		entries[i].desc = *desc;
+		entries[i].state = state;
 	}
 
 	void releaseAll(void)
@@ -161,6 +167,7 @@ struct StateCache
 		for(int32 i = 0; i < num; i++)
 			entries[i].state->Release();
 		num = 0;
+		next = 0;
 	}
 };
 
