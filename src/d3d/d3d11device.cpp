@@ -849,11 +849,38 @@ blitVirtualScreen(void)
 // argument to Present, so asking for vsync between one frame and the next costs
 // nothing. Under D3D9 it lives in the present parameters and changing it resets
 // the device.
+// A device that has gone away -- a driver reset, a driver update, a GPU pulled
+// out from under the process. Everything made from it is gone with it, and
+// D3D11 does not report that on the calls that would have used it: they return
+// success and draw nothing. So it is checked here, where Present does report
+// it, and said out loud once.
+//
+// Recovery is not implemented. It would mean a second device and every
+// resource made again from the system copies the driver already keeps, and a
+// hook for the application to hand back what it built. Reporting it is what
+// keeps a dead device from reading as a frozen picture.
+static bool32 deviceGone;
+
+static void
+checkDeviceGone(HRESULT hr)
+{
+	if(deviceGone || (hr != DXGI_ERROR_DEVICE_REMOVED && hr != DXGI_ERROR_DEVICE_RESET))
+		return;
+	deviceGone = 1;
+	HRESULT reason = d3d11device->GetDeviceRemovedReason();
+	fprintf(stderr, "librw: the D3D11 device is gone (0x%08lx, reason 0x%08lx); "
+		"nothing will be drawn from here on\n",
+		(unsigned long)hr, (unsigned long)reason);
+	fflush(stderr);
+}
+
 static void
 showRaster(Raster *raster, uint32 flags)
 {
+	if(deviceGone)
+		return;
 	blitVirtualScreen();
-	d3d11Globals.swapChain->Present(flags & Raster::FLIPWAITVSYNCH ? 1 : 0, 0);
+	checkDeviceGone(d3d11Globals.swapChain->Present(flags & Raster::FLIPWAITVSYNCH ? 1 : 0, 0));
 }
 
 // The frame into a camera texture at an offset, the one case the D3D9 backend
