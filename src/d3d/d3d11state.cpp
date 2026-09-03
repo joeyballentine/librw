@@ -489,6 +489,16 @@ flushCache(void)
 		setPixelShaderConstantF(PSLOC_fogColor, (float*)&d3dShaderState.fogColor, 1);
 		d3dShaderState.fogDirty = false;
 	}
+	// A raster whose texels were rewritten while it stayed bound changes no
+	// state, so nothing below would run and the GPU would keep the texels it
+	// was given the first time. rasterShaderResource is what pushes them, and
+	// bindTextures is the only thing that calls it.
+	for(int i = 0; i < 2 && !stateDirty; i++){
+		Raster *raster = rwStateCache.texstage[i].raster;
+		if(raster && GETD3DRASTEREXT(raster)->dirty)
+			stateDirty = 1;
+	}
+
 	uploadShaderConstants();
 	if(!stateDirty)
 		return;
