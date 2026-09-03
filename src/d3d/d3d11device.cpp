@@ -856,10 +856,45 @@ showRaster(Raster *raster, uint32 flags)
 	d3d11Globals.swapChain->Present(flags & Raster::FLIPWAITVSYNCH ? 1 : 0, 0);
 }
 
+// The frame into a camera texture at an offset, the one case the D3D9 backend
+// answers with StretchRect. Here it is a resource copy: the two agree on format
+// and neither is multisampled once the virtual screen has been resolved.
 static bool32
 rasterRenderFast(Raster *raster, int32 x, int32 y)
 {
-	return 0;
+	Raster *dst = Raster::getCurrentContext();
+	if(dst == nil || dst->type != Raster::CAMERATEXTURE ||
+	   raster->type != Raster::CAMERA)
+		return 0;
+
+	ID3D11Texture2D *dsttex = (ID3D11Texture2D*)GETD3DRASTEREXT(dst)->tex11;
+	ID3D11Texture2D *src = virtualScreenTexture();
+	if(dsttex == nil || src == nil)
+		return 0;
+
+	D3D11_TEXTURE2D_DESC sd, dd;
+	src->GetDesc(&sd);
+	dsttex->GetDesc(&dd);
+	if(sd.Format != dd.Format)
+		return 0;
+
+	// CopySubresourceRegion refuses a box that leaves the source, and both
+	// ends of the copy start at the same corner.
+	D3D11_BOX box;
+	box.left = x < 0 ? 0 : x;
+	box.top = y < 0 ? 0 : y;
+	box.right = sd.Width;
+	box.bottom = sd.Height;
+	box.front = 0;
+	box.back = 1;
+	if(box.right > dd.Width) box.right = dd.Width;
+	if(box.bottom > dd.Height) box.bottom = dd.Height;
+	if(box.left >= box.right || box.top >= box.bottom)
+		return 0;
+
+	d3d11context->CopySubresourceRegion(dsttex, 0, box.left, box.top, 0,
+		src, 0, &box);
+	return 1;
 }
 
 // --- what is bound to draw with ---------------------------------------------
