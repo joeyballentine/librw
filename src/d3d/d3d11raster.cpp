@@ -34,14 +34,14 @@ formatToDXGI(uint32 format)
 	case D3DFMT_X8R8G8B8:	return DXGI_FORMAT_B8G8R8X8_UNORM;
 	case D3DFMT_A8B8G8R8:	return DXGI_FORMAT_R8G8B8A8_UNORM;
 	case D3DFMT_R5G6B5:	return DXGI_FORMAT_B5G6R5_UNORM;
-	// D3D11 has no X1R5G5B5. The alpha bit is present either way and the
-	// pixel shader is what decides whether to read it, which is the same
-	// bargain the D3D9 backend makes for a 555 raster.
-	case D3DFMT_X1R5G5B5:	return DXGI_FORMAT_B5G5R5A1_UNORM;
 	case D3DFMT_A1R5G5B5:	return DXGI_FORMAT_B5G5R5A1_UNORM;
 	case D3DFMT_A4R4G4B4:	return DXGI_FORMAT_B4G4R4A4_UNORM;
 	case D3DFMT_A8:		return DXGI_FORMAT_A8_UNORM;
-	case D3DFMT_L8:		return DXGI_FORMAT_R8_UNORM;
+	// No luminance and no X1R5G5B5: widenLevel turns both into B8G8R8A8, and
+	// this is the format the widened texels are in.
+	case D3DFMT_L8:
+	case D3DFMT_A8L8:
+	case D3DFMT_X1R5G5B5:	return DXGI_FORMAT_B8G8R8A8_UNORM;
 	case D3DFMT_DXT1:	return DXGI_FORMAT_BC1_UNORM;
 	case D3DFMT_DXT2:
 	case D3DFMT_DXT3:	return DXGI_FORMAT_BC2_UNORM;
@@ -53,6 +53,87 @@ formatToDXGI(uint32 format)
 	case D3DFMT_D32:	return DXGI_FORMAT_D32_FLOAT;
 	}
 	return DXGI_FORMAT_UNKNOWN;
+}
+
+// Whether the device will make a texture in this format at all. B5G6R5 and
+// B4G4R4A4 arrived with Windows 8; before that, and on a driver that still
+// declines them, the widened path stands in.
+static bool32
+formatSupported(DXGI_FORMAT fmt)
+{
+	UINT support = 0;
+	if(FAILED(d3d11device->CheckFormatSupport(fmt, &support)))
+		return 0;
+	return (support & D3D11_FORMAT_SUPPORT_TEXTURE2D) != 0;
+}
+
+// Whether the raster's texels have to be widened to B8G8R8A8 on the way to the
+// GPU. Three reasons, and they are all D3D11 having dropped something:
+//
+//   - No luminance format. R8 would put the value in red alone and leave green
+//     and blue at zero, where D3D9 replicated it across all three.
+//   - No X1R5G5B5. B5G5R5A1 is not a stand-in, because the bit D3D9 ignored
+//     becomes alpha -- and a texture written with it clear is wholly
+//     transparent rather than opaque.
+//   - The two packed formats that need Windows 8, on a device without them.
+static bool32
+widensToBGRA(uint32 format)
+{
+	switch(format){
+	case D3DFMT_L8:
+	case D3DFMT_A8L8:
+	case D3DFMT_X1R5G5B5:
+		return 1;
+	case D3DFMT_R5G6B5:
+	case D3DFMT_A4R4G4B4:
+		return !formatSupported(formatToDXGI(format));
+	}
+	return 0;
+}
+
+// One level's texels, widened into B8G8R8A8 -- byte order blue, green, red,
+// alpha, which is the uint32 written here on a little-endian machine.
+static void
+widenLevel(uint32 format, const uint8 *src, uint32 srcPitch,
+	int32 width, int32 height, uint32 *dst)
+{
+	for(int32 y = 0; y < height; y++){
+		const uint8 *row = src + y*srcPitch;
+		for(int32 x = 0; x < width; x++){
+			uint32 r, g, b, a;
+			switch(format){
+			case D3DFMT_L8:
+				r = g = b = row[x];
+				a = 0xFF;
+				break;
+			case D3DFMT_A8L8:
+				r = g = b = row[x*2];
+				a = row[x*2+1];
+				break;
+			default: {
+				uint32 v = row[x*2] | (row[x*2+1] << 8);
+				if(format == D3DFMT_R5G6B5){
+					r = (v >> 11) & 0x1F; r = (r << 3) | (r >> 2);
+					g = (v >> 5) & 0x3F;  g = (g << 2) | (g >> 4);
+					b = v & 0x1F;         b = (b << 3) | (b >> 2);
+					a = 0xFF;
+				}else if(format == D3DFMT_A4R4G4B4){
+					a = ((v >> 12) & 0xF) * 0x11;
+					r = ((v >> 8) & 0xF) * 0x11;
+					g = ((v >> 4) & 0xF) * 0x11;
+					b = (v & 0xF) * 0x11;
+				}else{	// D3DFMT_X1R5G5B5
+					r = (v >> 10) & 0x1F; r = (r << 3) | (r >> 2);
+					g = (v >> 5) & 0x1F;  g = (g << 3) | (g >> 2);
+					b = v & 0x1F;         b = (b << 3) | (b >> 2);
+					a = 0xFF;
+				}
+				break;
+			}
+			}
+			dst[y*width + x] = (a << 24) | (r << 16) | (g << 8) | b;
+		}
+	}
 }
 
 static bool
@@ -84,7 +165,8 @@ static bool32
 createTextureResource(Raster *raster, D3dRaster *natras)
 {
 	RasterLevels *levels = (RasterLevels*)natras->texture;
-	DXGI_FORMAT fmt = formatToDXGI(natras->format);
+	DXGI_FORMAT fmt = widensToBGRA(natras->format) ?
+		DXGI_FORMAT_B8G8R8A8_UNORM : formatToDXGI(natras->format);
 	if(fmt == DXGI_FORMAT_UNKNOWN || levels == nil)
 		return 0;
 
@@ -127,10 +209,23 @@ rasterUpload(Raster *raster)
 		return;
 
 	RasterLevels *levels = (RasterLevels*)natras->texture;
-	for(int32 i = 0; i < levels->numlevels; i++)
+	bool32 widen = widensToBGRA(natras->format);
+	for(int32 i = 0; i < levels->numlevels; i++){
+		RasterLevels::Level *level = &levels->levels[i];
+		if(!widen){
+			d3d11context->UpdateSubresource((ID3D11Texture2D*)natras->tex11, i, nil,
+				level->data, levelRowPitch(natras->format, level), 0);
+			continue;
+		}
+		uint32 *wide = rwNewT(uint32, level->width*level->height,
+			MEMDUR_FUNCTION | ID_DRIVER);
+		widenLevel(natras->format, level->data,
+			levelRowPitch(natras->format, level),
+			level->width, level->height, wide);
 		d3d11context->UpdateSubresource((ID3D11Texture2D*)natras->tex11, i, nil,
-			levels->levels[i].data,
-			levelRowPitch(natras->format, &levels->levels[i]), 0);
+			wide, level->width*4, 0);
+		rwFree(wide);
+	}
 }
 
 void*
