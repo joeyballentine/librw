@@ -664,6 +664,7 @@ setRenderSurfaces(Camera *cam)
 		}
 	}
 
+	unbindTextures();
 	currentTarget = rtv;
 	currentDepth = dsv;
 	d3d11context->OMSetRenderTargets(1, &rtv, dsv);

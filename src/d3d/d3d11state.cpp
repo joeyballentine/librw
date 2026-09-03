@@ -821,6 +821,19 @@ invalidateDeviceState(void)
 	stateDirty = 1;
 }
 
+// Let go of the textures, because what is about to become a render target may
+// be one of them. A resource cannot be an output and an input at once: the
+// runtime answers that by silently forcing the shader resource to null, and a
+// draw that samples the slot afterwards reads black rather than the texture the
+// game thinks is there. Marking the state dirty is what puts them back.
+void
+unbindTextures(void)
+{
+	ID3D11ShaderResourceView *none[2] = { nil, nil };
+	d3d11context->PSSetShaderResources(0, 2, none);
+	stateDirty = 1;
+}
+
 // The state the device comes up in, which is also what the render states are
 // documented to start at.
 void

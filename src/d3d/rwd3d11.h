@@ -87,6 +87,7 @@ void unlockBuffer11(void *buffer);
 // are the Device's; the rest is what the backend's own files need.
 void resetRenderState(void);
 void invalidateDeviceState(void);
+void unbindTextures(void);
 // Drop a destroyed object from the device shadow. Without it the next object
 // to be allocated at that address is taken for the one still bound.
 void forgetRaster(Raster *raster);
