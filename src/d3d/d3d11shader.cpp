@@ -244,6 +244,7 @@ struct InputLayout
 #define MAXLAYOUTS 128
 static InputLayout layouts[MAXLAYOUTS];
 static int32 numLayouts;
+static int32 nextLayout;
 
 static const char*
 declUsageName(uint32 usage)
@@ -314,12 +315,20 @@ inputLayoutFor(void *declaration, void *vertexShader)
 	if(FAILED(d3d11device->CreateInputLayout(desc, n, vs->code, vs->codeSize, &layout)))
 		return nil;
 
-	if(numLayouts < MAXLAYOUTS){
-		layouts[numLayouts].declaration = declaration;
-		layouts[numLayouts].vertexShader = vertexShader;
-		layouts[numLayouts].layout = layout;
-		numLayouts++;
+	int32 i;
+	if(numLayouts < MAXLAYOUTS)
+		i = numLayouts++;
+	else{
+		// Round robin past the end, rather than leak the layout the caller is
+		// about to bind. The context references what it binds, so an evicted
+		// layout outlives the draw that is using it.
+		i = nextLayout;
+		nextLayout = (nextLayout+1) % MAXLAYOUTS;
+		layouts[i].layout->Release();
 	}
+	layouts[i].declaration = declaration;
+	layouts[i].vertexShader = vertexShader;
+	layouts[i].layout = layout;
 	return layout;
 }
 
@@ -332,6 +341,7 @@ forgetInputLayouts(void *declaration)
 		if(layouts[i].declaration == declaration){
 			layouts[i].layout->Release();
 			layouts[i] = layouts[--numLayouts];
+			nextLayout = 0;
 		}else
 			i++;
 	}
@@ -343,6 +353,7 @@ releaseInputLayouts(void)
 	for(int32 i = 0; i < numLayouts; i++)
 		layouts[i].layout->Release();
 	numLayouts = 0;
+	nextLayout = 0;
 }
 
 ID3D11VertexShader*
