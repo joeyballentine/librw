@@ -14,6 +14,27 @@
 namespace rw {
 namespace d3d {
 
+// Whether the fixed-function pipeline draws instead of the shaders. Read at
+// driverOpen to pick the render callbacks, and at every seam that would
+// otherwise name a shader.
+//
+// Outside the platform guard because d3d9.cpp -- which is the PLATFORM_D3D9
+// stream plugin and is built for every backend -- reads it when it makes its
+// pipelines.
+static bool32 fixedFunction;
+
+void
+setFixedFunctionEnabled(bool32 enable)
+{
+	fixedFunction = !!enable;
+}
+
+bool32
+getFixedFunction(void)
+{
+	return fixedFunction;
+}
+
 #if defined(RW_D3D9) || defined(RW_D3D11)
 
 #ifdef RW_D3D9
@@ -193,18 +214,13 @@ destroyDefaultShaders(void)
 
 #ifdef RW_D3D9
 
-void
-lightingCB_Fix(Atomic *atomic)
+// The lights the fixed-function stage will use, handed to the device. Split
+// out so that an atomic and a loose primitive can share it, as the shader
+// path's uploadLights is shared by lightingCB_Shader's two overloads.
+static void
+applyLights_Fix(WorldLights *lights)
 {
-	WorldLights lightData;
-	Light *directionals[8];
-	Light *locals[8];
-	lightData.directionals = directionals;
-	lightData.numDirectionals = 8;
-	lightData.locals = locals;
-	lightData.numLocals = 8;
-
-	((World*)engine->currentWorld)->enumerateLights(atomic, &lightData);
+	WorldLights &lightData = *lights;
 
 	int i, n;
 	RGBA amb;
@@ -299,6 +315,36 @@ lightingCB_Fix(Atomic *atomic)
 
 	for(; n < MAX_LIGHTS; n++)
 		d3ddevice->LightEnable(n, FALSE);
+}
+
+void
+lightingCB_Fix(Atomic *atomic)
+{
+	WorldLights lightData;
+	Light *directionals[8];
+	Light *locals[8];
+	lightData.directionals = directionals;
+	lightData.numDirectionals = 8;
+	lightData.locals = locals;
+	lightData.numLocals = 8;
+
+	((World*)engine->currentWorld)->enumerateLights(atomic, &lightData);
+	applyLights_Fix(&lightData);
+}
+
+void
+lightingCB_Fix(void)
+{
+	WorldLights lightData;
+	Light *directionals[8];
+	Light *locals[8];
+	lightData.directionals = directionals;
+	lightData.numDirectionals = 8;
+	lightData.locals = locals;
+	lightData.numLocals = 8;
+
+	((World*)engine->currentWorld)->enumerateLights(&lightData);
+	applyLights_Fix(&lightData);
 }
 
 #endif

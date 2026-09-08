@@ -67,11 +67,18 @@ openIm2D(void)
 	addDynamicVB(NUMVERTICES*sizeof(Im2DVertex), 0, (IDirect3DVertexBuffer9**)&im2dvertbuf);
 	addDynamicIB(NUMINDICES*sizeof(uint16), (IDirect3DIndexBuffer9**)&im2dindbuf);
 #endif
+
+	// The same buffers, drawn through a POSITIONT declaration instead. Only
+	// the declaration differs, so the fixed-function path shares the storage.
+	if(getFixedFunction())
+		ffOpenIm2D();
 }
 
 void
 closeIm2D(void)
 {
+	if(getFixedFunction())
+		ffCloseIm2D();
 #ifdef RW_D3D9
 	removeDynamicVB((IDirect3DVertexBuffer9**)&im2dvertbuf);
 	removeDynamicIB((IDirect3DIndexBuffer9**)&im2dindbuf);
@@ -129,21 +136,28 @@ im2DRenderPrimitive(PrimitiveType primType, void *vertices, int32 numVertices)
 		return;
 	}
 	uint8 *lockedvertices = lockVertices(im2dvertbuf, 0, numVertices*sizeof(Im2DVertex), D3DLOCK_DISCARD);
-	memcpy(lockedvertices, vertices, numVertices*sizeof(Im2DVertex));
+	if(getFixedFunction())
+		ffCopyIm2DVertices(lockedvertices, vertices, numVertices);
+	else
+		memcpy(lockedvertices, vertices, numVertices*sizeof(Im2DVertex));
 	unlockVertices(im2dvertbuf);
 
 	setStreamSource(0, im2dvertbuf, 0, sizeof(Im2DVertex));
-	setVertexDeclaration(im2ddecl);
 
-	im2DSetXform();
-
-	setVertexShader(im2d_VS);
-	if(im2dOverridePS)
-		setPixelShader(im2dOverridePS);
-	else if(engine->device.getRenderState(TEXTURERASTER))
-		setPixelShader(im2d_tex_PS);
-	else
-		setPixelShader(im2d_PS);
+	if(getFixedFunction()){
+		setVertexDeclaration(ffIm2DDeclaration());
+		ffSetupIm2D();
+	}else{
+		setVertexDeclaration(im2ddecl);
+		im2DSetXform();
+		setVertexShader(im2d_VS);
+		if(im2dOverridePS)
+			setPixelShader(im2dOverridePS);
+		else if(engine->device.getRenderState(TEXTURERASTER))
+			setPixelShader(im2d_tex_PS);
+		else
+			setPixelShader(im2d_PS);
+	}
 
 	// 2D for the length of the draw. Alpha to coverage is a statement about a
 	// surface's place in the depth buffer, and a screen-space quad has none:
@@ -194,22 +208,29 @@ im2DRenderIndexedPrimitive(PrimitiveType primType,
 	unlockIndices(im2dindbuf);
 
 	uint8 *lockedvertices = lockVertices(im2dvertbuf, 0, numVertices*sizeof(Im2DVertex), D3DLOCK_DISCARD);
-	memcpy(lockedvertices, vertices, numVertices*sizeof(Im2DVertex));
+	if(getFixedFunction())
+		ffCopyIm2DVertices(lockedvertices, vertices, numVertices);
+	else
+		memcpy(lockedvertices, vertices, numVertices*sizeof(Im2DVertex));
 	unlockVertices(im2dvertbuf);
 
 	setStreamSource(0, im2dvertbuf, 0, sizeof(Im2DVertex));
 	setIndices(im2dindbuf);
-	setVertexDeclaration(im2ddecl);
 
-	im2DSetXform();
-
-	setVertexShader(im2d_VS);
-	if(im2dOverridePS)
-		setPixelShader(im2dOverridePS);
-	else if(engine->device.getRenderState(TEXTURERASTER))
-		setPixelShader(im2d_tex_PS);
-	else
-		setPixelShader(im2d_PS);
+	if(getFixedFunction()){
+		setVertexDeclaration(ffIm2DDeclaration());
+		ffSetupIm2D();
+	}else{
+		setVertexDeclaration(im2ddecl);
+		im2DSetXform();
+		setVertexShader(im2d_VS);
+		if(im2dOverridePS)
+			setPixelShader(im2dOverridePS);
+		else if(engine->device.getRenderState(TEXTURERASTER))
+			setPixelShader(im2d_tex_PS);
+		else
+			setPixelShader(im2d_PS);
+	}
 
 	// 2D for the length of the draw. Alpha to coverage is a statement about a
 	// surface's place in the depth buffer, and a screen-space quad has none:
@@ -310,13 +331,32 @@ SurfaceProperties im3dSurfaceProps = { 1.0f, 1.0f, 1.0f };
 void
 im3DTransform(void *vertices, int32 numVertices, Matrix *world, uint32 flags)
 {
-	if(world == nil)
+	if(getFixedFunction()){
+		if(world == nil)
+			ffSetWorldTransform();
+		else
+			ffSetWorldTransform(world);
+	}else if(world == nil)
 		uploadMatrices();
 	else
 		uploadMatrices(world);
 
 	if((flags & im3d::VERTEXUV) == 0)
 		SetRenderStatePtr(TEXTURERASTER, nil);
+
+	if(getFixedFunction()){
+		ffSetupIm3D(flags);
+
+		uint8 *ffverts = lockVertices(im3dvertbuf, 0, numVertices*sizeof(Im3DVertex), D3DLOCK_DISCARD);
+		memcpy(ffverts, vertices, numVertices*sizeof(Im3DVertex));
+		unlockVertices(im3dvertbuf);
+
+		setStreamSource(0, im3dvertbuf, 0, sizeof(Im3DVertex));
+		setVertexDeclaration(im3ddecl);
+
+		num3DVertices = numVertices;
+		return;
+	}
 
 	void *shader = default_amb_VS;
 	if(flags & im3d::LIGHTING){
@@ -350,7 +390,9 @@ im3DTransform(void *vertices, int32 numVertices, Matrix *world, uint32 flags)
 void
 im3DRenderPrimitive(PrimitiveType primType)
 {
-	if(engine->device.getRenderState(TEXTURERASTER))
+	if(getFixedFunction())
+		ffSetupIm3DDraw();
+	else if(engine->device.getRenderState(TEXTURERASTER))
 		setPixelShader(default_tex_PS);
 	else
 		setPixelShader(default_PS);
@@ -394,7 +436,9 @@ im3DRenderIndexedPrimitive(PrimitiveType primType, void *indices, int32 numIndic
 
 	setIndices(im3dindbuf);
 
-	if(engine->device.getRenderState(TEXTURERASTER))
+	if(getFixedFunction())
+		ffSetupIm3DDraw();
+	else if(engine->device.getRenderState(TEXTURERASTER))
 		setPixelShader(default_tex_PS);
 	else
 		setPixelShader(default_PS);

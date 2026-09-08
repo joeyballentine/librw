@@ -219,7 +219,10 @@ makeSkinMatFXPipeline(void)
 	// both or the one that did not instance them reads bones that are not there.
 	pipe->instanceCB = skinInstanceCB;
 	pipe->uninstanceCB = nil;
-	pipe->renderCB = skinMatfxRenderCB;
+	// No environment map under fixed function: it needs a second texture stage
+	// with a camera-space reflection texgen, which the plain skin path does not
+	// set up. The base material draws, skinned; the shine does not.
+	pipe->renderCB = getFixedFunction() ? skinRenderCB_Fix : skinMatfxRenderCB;
 	// The plugin ID the pipeline is streamed out under. It is the skin plugin's
 	// because this is a skinning pipeline; pluginData is the same 1 the plain
 	// skinning pipeline writes, so a DFF written with an atomic on this reads

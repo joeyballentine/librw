@@ -71,6 +71,21 @@ int32 getVirtualScreenSamples(void);
 // shader stages whatever this says.
 void setPerPixelLightingEnabled(bool32 enable);
 bool32 getPerPixelLighting(void);
+// Draw with D3D9's fixed-function transform, lighting and texture stages
+// instead of vertex and pixel shaders. The bar it lowers the backend to is
+// DX7-class hardware T&L; what it costs is every effect that is a shader.
+//
+// Set BEFORE the engine is opened and not changed afterwards. driverOpen picks
+// the pipelines' render callbacks from it and createDefaultShaders is skipped
+// entirely, so a device that never had a shader compiled for it cannot be
+// asked for one later.
+//
+// This is a look-alike, not a match: fixed-function lighting has its own
+// normalisation and attenuation, and the transform of a normal under a scaled
+// matrix is D3DRS_NORMALIZENORMALS rather than the inverse transpose the
+// vertex shader is handed.
+void setFixedFunctionEnabled(bool32 enable);
+bool32 getFixedFunction(void);
 // The single-sampled picture, for anything that needs to read the frame back:
 // the samples are collapsed into it on the way out. nil when there is no
 // virtual screen, in which case the back buffer is what was drawn into.
@@ -411,6 +426,13 @@ bool32 getBlendEnabled(void);
 // place in the depth buffer, and a screen-space quad has none.
 void setIm2DActive(bool32 active);
 void setMaterial(const RGBA &color, const SurfaceProperties &surfaceprops, float extraSurfProp = 0.0f);
+// The same material, as a D3DMATERIAL9 for the fixed-function lighting stage.
+// The shader one uploads constants nothing reads when there is no shader.
+//
+// The fixed-function path hands this WHITE and applies the material colour in
+// a texture stage instead, because the shaders multiply by it after the
+// lighting has been clamped and a D3DMATERIAL9 cannot say that.
+void setMaterial_fix(const RGBA &color, const SurfaceProperties &surfProps);
 inline void setMaterial(uint32 flags, const RGBA &color, const SurfaceProperties &surfaceprops, float extraSurfProp = 0.0f)
 {
 	static RGBA white = { 255, 255, 255, 255 };
@@ -538,6 +560,8 @@ enum
 };
 
 void lightingCB_Fix(Atomic *atomic);
+// The same, for a primitive that has no atomic to enumerate lights against.
+void lightingCB_Fix(void);
 int32 lightingCB_Shader(Atomic *atomic);
 int32 lightingCB_Shader(void);
 // for VS
@@ -572,6 +596,54 @@ extern void *im2d_PS;
 extern void *im2d_tex_PS;
 void createDefaultShaders(void);
 void destroyDefaultShaders(void);
+
+// ---------------------------------------------------------------------------
+// The fixed-function pipeline
+//
+// Everything below is defined in d3d9ff.cpp and does nothing unless
+// getFixedFunction(). What it reproduces is default_VS.hlsl and
+// default_PS.hlsl: transform, vertex lighting, a UV transform, texture times
+// vertex colour times material colour, and linear fog.
+
+// D3DTS_WORLD, cached against the last matrix set. The overload with no
+// argument sets the identity, for a primitive already in world space.
+void ffSetWorldTransform(Matrix *worldMat);
+void ffSetWorldTransform(void);
+// D3DTS_VIEW, D3DTS_PROJECTION and the fog range, from the camera the scene
+// was begun with. The shader path uploads the same numbers as constants.
+void ffBeginUpdate(Camera *cam);
+
+// D3DRS_LIGHTING and the lights themselves, per atomic. Returns whether
+// lighting ended up on: an atomic that is not LIGHT-flagged, or that has no
+// normals, is drawn with its vertex colours untouched, which is what the
+// shaders do with it.
+bool32 ffSetLighting(Atomic *atomic);
+// Where the lighting stage takes each colour term from, per mesh. The prelight
+// goes into the emissive term, and the diffuse term follows the vertices only
+// when the mesh has vertex alpha to carry -- otherwise it is the material's
+// white, so that a dynamic light is not tinted by the baked one.
+void ffSetVertexColorSource(bool32 lighting, uint32 geoFlags, bool32 vertexAlpha);
+// Stage 0 modulates `texture` into the vertex colour, stage 1 modulates
+// `matColor` in through D3DRS_TEXTUREFACTOR. Stage 1 is disabled when that
+// colour is opaque white, which is most materials and which leaves a DX7 part
+// with both of its stages free.
+void ffSetColorStages(Texture *texture, const RGBA &matColor);
+// D3DTSS_TEXTURETRANSFORMFLAGS and D3DTS_TEXTURE0, from rw::uvTransform.
+void ffSetUVTransform(bool32 enable);
+
+// im2d. Pre-transformed vertices -- POSITIONT, and the camera-space z the
+// shader path carries in w becomes the RHW D3D wants -- so the 2D path needs
+// its own declaration and a copy loop rather than a memcpy.
+void ffOpenIm2D(void);
+void ffCloseIm2D(void);
+void *ffIm2DDeclaration(void);
+void ffCopyIm2DVertices(void *dst, const void *src, int32 numVertices);
+void ffSetupIm2D(void);
+
+// im3d. The declaration is already POSITION/NORMAL/COLOR/TEXCOORD and needs no
+// fixed-function counterpart; only the state does.
+void ffSetupIm3D(uint32 flags);
+void ffSetupIm3DDraw(void);
 
 
 }

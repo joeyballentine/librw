@@ -359,7 +359,9 @@ flushCache(void)
 	}
 	numDirtyTextureStageStates = 0;
 
-	if(d3dShaderState.fogDirty){
+	// Fixed function reads the fog out of render states, which the loop above
+	// has already flushed. There is no shader to upload a constant to.
+	if(d3dShaderState.fogDirty && !getFixedFunction()){
 		d3ddevice->SetVertexShaderConstantF(VSLOC_fogData, (float*)&d3dShaderState.fogData, 1);
 		d3ddevice->SetPixelShaderConstantF(PSLOC_fogColor, (float*)&d3dShaderState.fogColor, 1);
 		d3dShaderState.fogDirty = false;
@@ -741,11 +743,11 @@ setMaterial_fix(const RGBA &color, const SurfaceProperties &surfProps)
 	mat9.Ambient.r = color.red*ambmult;
 	mat9.Ambient.g = color.green*ambmult;
 	mat9.Ambient.b = color.blue*ambmult;
-	mat9.Ambient.a = color.alpha;
+	mat9.Ambient.a = color.alpha/255.0f;
 	mat9.Diffuse.r = color.red*diffmult;
 	mat9.Diffuse.g = color.green*diffmult;
 	mat9.Diffuse.b = color.blue*diffmult;
-	mat9.Diffuse.a = color.alpha;
+	mat9.Diffuse.a = color.alpha/255.0f;
 	mat9.Power = 0.0f;
 	mat9.Emissive = black;
 	mat9.Specular = black;
@@ -840,7 +842,10 @@ setRwRenderState(int32 state, void *pvalue)
 	case FOGENABLE:
 		if(rwStateCache.fogenable != bval){
 			rwStateCache.fogenable = bval;
-//			setRenderState(D3DRS_FOGENABLE, rwStateCache.fogenable);
+			// The shader path fogs in the pixel shader and leaves the device's
+			// own fog off; fixed function has nowhere else to do it.
+			if(getFixedFunction())
+				setRenderState(D3DRS_FOGENABLE, rwStateCache.fogenable);
 			d3dShaderState.fogData.disable = bval ? 0.0f : 1.0f;
 			d3dShaderState.fogDirty = true;
 		};
@@ -1762,6 +1767,11 @@ beginUpdate(Camera *cam)
 	proj[14] = -cam->nearPlane*proj[10];
 	memcpy(&cam->devProj, proj, sizeof(RawMatrix));
 //	d3ddevice->SetTransform(D3DTS_PROJECTION, (D3DMATRIX*)proj);
+
+	// The same two matrices, and the fog range, as device state rather than as
+	// shader constants.
+	if(getFixedFunction())
+		ffBeginUpdate(cam);
 
 	// TODO: figure out where this is really done
 //	setRenderState(D3DRS_FOGSTART, *(uint32*)&cam->fogPlane);

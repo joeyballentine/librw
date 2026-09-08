@@ -243,7 +243,8 @@ static void*
 matfxOpen(void *o, int32, int32)
 {
 #if defined(RW_D3D9) || defined(RW_D3D11)
-	createMatFXShaders();
+	if(!getFixedFunction())
+		createMatFXShaders();
 #endif
 
 	matFXGlobals.pipelines[PLATFORM_D3D9] = makeMatFXPipeline();
@@ -254,7 +255,8 @@ static void*
 matfxClose(void *o, int32, int32)
 {
 #if defined(RW_D3D9) || defined(RW_D3D11)
-	destroyMatFXShaders();
+	if(!getFixedFunction())
+		destroyMatFXShaders();
 #endif
 
 	((ObjPipeline*)matFXGlobals.pipelines[PLATFORM_D3D9])->destroy();
@@ -275,7 +277,10 @@ makeMatFXPipeline(void)
 	ObjPipeline *pipe = ObjPipeline::create();
 	pipe->instanceCB = defaultInstanceCB;
 	pipe->uninstanceCB = defaultUninstanceCB;
-	pipe->renderCB = matfxRenderCB_Shader;
+	// The default fixed-function render, which draws the base material and
+	// nothing else. The environment map needs a second texture stage with
+	// D3DTSS_TCI_CAMERASPACEREFLECTIONVECTOR; it is not written yet.
+	pipe->renderCB = getFixedFunction() ? defaultRenderCB_Fix : matfxRenderCB_Shader;
 	pipe->pluginID = ID_MATFX;
 	pipe->pluginData = 0;
 	return pipe;

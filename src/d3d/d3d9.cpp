@@ -29,7 +29,10 @@ static void*
 driverOpen(void *o, int32, int32)
 {
 #if defined(RW_D3D9) || defined(RW_D3D11)
-	createDefaultShaders();
+	// Not under fixed function: a device with no shader support cannot make
+	// one of these, and nothing that runs after this point asks for one.
+	if(!getFixedFunction())
+		createDefaultShaders();
 #endif
 	engine->driver[PLATFORM_D3D9]->defaultPipeline = makeDefaultPipeline();
 	uvTransformPipelines[PLATFORM_D3D9] = makeUVTransformPipeline();
@@ -49,7 +52,8 @@ static void*
 driverClose(void *o, int32, int32)
 {
 #if defined(RW_D3D9) || defined(RW_D3D11)
-	destroyDefaultShaders();
+	if(!getFixedFunction())
+		destroyDefaultShaders();
 #endif
 	if(uvTransformPipelines[PLATFORM_D3D9]){
 		uvTransformPipelines[PLATFORM_D3D9]->destroy();
@@ -714,7 +718,7 @@ makeDefaultPipeline(void)
 	ObjPipeline *pipe = ObjPipeline::create();
 	pipe->instanceCB = defaultInstanceCB;
 	pipe->uninstanceCB = defaultUninstanceCB;
-	pipe->renderCB = defaultRenderCB_Shader;
+	pipe->renderCB = getFixedFunction() ? defaultRenderCB_Fix : defaultRenderCB_Shader;
 	return pipe;
 }
 
@@ -728,7 +732,7 @@ makeUVTransformPipeline(void)
 	ObjPipeline *pipe = ObjPipeline::create();
 	pipe->instanceCB = defaultInstanceCB;
 	pipe->uninstanceCB = defaultUninstanceCB;
-	pipe->renderCB = uvTransformRenderCB_Shader;
+	pipe->renderCB = getFixedFunction() ? uvTransformRenderCB_Fix : uvTransformRenderCB_Shader;
 	return pipe;
 }
 

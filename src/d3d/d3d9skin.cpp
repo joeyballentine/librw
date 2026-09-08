@@ -247,56 +247,62 @@ enum
 
 static float skinMatrices[64*16];
 
+// The bone transforms, in the atomic's object space, as ordinary rw matrices.
+//
+// Split out of uploadSkinMatrices because the fixed-function path skins on the
+// CPU and needs the same matrices in a form it can multiply a vertex by --
+// the constants that go to the vertex shader are these, transposed.
+//
+// Returns how many were written, which is skin->numBones and never more than
+// MAXNUMSKINBONES.
+int32
+computeSkinMatrices(Atomic *a, Matrix *out)
+{
+	int i;
+	Skin *skin = Skin::get(a->geometry);
+	HAnimHierarchy *hier = Skin::getHierarchy(a);
+	int32 numBones = skin->numBones;
+	if(numBones > MAXNUMSKINBONES)
+		numBones = MAXNUMSKINBONES;
+
+	if(hier){
+		Matrix *invMats = (Matrix*)skin->inverseMatrices;
+		Matrix tmp;
+
+		assert(skin->numBones == hier->numNodes);
+		if(hier->flags & HAnimHierarchy::LOCALSPACEMATRICES){
+			for(i = 0; i < numBones; i++){
+				invMats[i].flags = 0;
+				Matrix::mult(&out[i], &invMats[i], &hier->matrices[i]);
+			}
+		}else{
+			Matrix invAtmMat;
+			Matrix::invert(&invAtmMat, a->getFrame()->getLTM());
+			for(i = 0; i < numBones; i++){
+				invMats[i].flags = 0;
+				Matrix::mult(&tmp, &hier->matrices[i], &invAtmMat);
+				Matrix::mult(&out[i], &invMats[i], &tmp);
+			}
+		}
+	}else{
+		for(i = 0; i < numBones; i++)
+			out[i].setIdentity();
+	}
+	return numBones;
+}
+
 void
 uploadSkinMatrices(Atomic *a)
 {
 	int i;
 	Skin *skin = Skin::get(a->geometry);
 	float *m = skinMatrices;
-	HAnimHierarchy *hier = Skin::getHierarchy(a);
+	Matrix bones[MAXNUMSKINBONES];
+	int32 numBones = computeSkinMatrices(a, bones);
 
-	if(hier){
-		Matrix *invMats = (Matrix*)skin->inverseMatrices;
-		Matrix tmp, tmp2;
-
-		assert(skin->numBones == hier->numNodes);
-		if(hier->flags & HAnimHierarchy::LOCALSPACEMATRICES){
-			for(i = 0; i < hier->numNodes; i++){
-				invMats[i].flags = 0;
-				Matrix::mult(&tmp, &invMats[i], &hier->matrices[i]);
-				RawMatrix::transpose((RawMatrix*)m, (RawMatrix*)&tmp);
-				m += 12;
-			}
-		}else{
-			Matrix invAtmMat;
-			Matrix::invert(&invAtmMat, a->getFrame()->getLTM());
-			for(i = 0; i < hier->numNodes; i++){
-				invMats[i].flags = 0;
-				Matrix::mult(&tmp, &hier->matrices[i], &invAtmMat);
-				Matrix::mult(&tmp2, &invMats[i], &tmp);
-				RawMatrix::transpose((RawMatrix*)m, (RawMatrix*)&tmp2);
-				m += 12;
-			}
-		}
-	}else{
-		for(i = 0; i < skin->numBones; i++){
-			m[0] = 1.0f;
-			m[1] = 0.0f;
-			m[2] = 0.0f;
-			m[3] = 0.0f;
-
-			m[4] = 0.0f;
-			m[5] = 1.0f;
-			m[6] = 0.0f;
-			m[7] = 0.0f;
-
-			m[8] = 0.0f;
-			m[9] = 0.0f;
-			m[10] = 1.0f;
-			m[11] = 0.0f;
-
-			m += 12;
-		}
+	for(i = 0; i < numBones; i++){
+		RawMatrix::transpose((RawMatrix*)m, (RawMatrix*)&bones[i]);
+		m += 12;
 	}
 	d3d::setVertexShaderConstantF(VSLOC_boneMatrices, skinMatrices, skin->numBones*3);
 }
@@ -407,8 +413,15 @@ static void*
 skinOpen(void *o, int32, int32)
 {
 #if defined(RW_D3D9) || defined(RW_D3D11)
-	createSkinShaders();
-	createSkinMatFXShaders();
+	// Not under fixed function: the CPU skinner needs a vertex declaration and
+	// a dynamic buffer, and the device it runs on may have no shader unit to
+	// compile these for.
+	if(getFixedFunction())
+		ffOpenSkin();
+	else{
+		createSkinShaders();
+		createSkinMatFXShaders();
+	}
 #endif
 
 	skinGlobals.pipelines[PLATFORM_D3D9] = makeSkinPipeline();
@@ -423,8 +436,12 @@ static void*
 skinClose(void *o, int32, int32)
 {
 #if defined(RW_D3D9) || defined(RW_D3D11)
-	destroySkinShaders();
-	destroySkinMatFXShaders();
+	if(getFixedFunction())
+		ffCloseSkin();
+	else{
+		destroySkinShaders();
+		destroySkinMatFXShaders();
+	}
 #endif
 
 	((ObjPipeline*)skinGlobals.pipelines[PLATFORM_D3D9])->destroy();
@@ -447,7 +464,7 @@ makeSkinPipeline(void)
 	ObjPipeline *pipe = ObjPipeline::create();
 	pipe->instanceCB = skinInstanceCB;
 	pipe->uninstanceCB = nil;
-	pipe->renderCB = skinRenderCB;
+	pipe->renderCB = getFixedFunction() ? skinRenderCB_Fix : skinRenderCB;
 	pipe->pluginID = ID_SKIN;
 	pipe->pluginData = 1;
 	return pipe;

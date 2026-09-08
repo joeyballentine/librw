@@ -110,6 +110,7 @@ ObjPipeline *makeDefaultPipeline(void);
 // about the vertex buffer changes, which is the whole reason the transform is
 // worth doing in the shader.
 void uvTransformRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header);
+void uvTransformRenderCB_Fix(Atomic *atomic, InstanceDataHeader *header);
 
 ObjPipeline *makeUVTransformPipeline(void);
 
@@ -117,9 +118,27 @@ ObjPipeline *makeUVTransformPipeline(void);
 // Skin plugin
 
 void initSkin(void);
+// The bone count skin_VS.hlsl declares, and the most computeSkinMatrices will
+// write. A skin with more bones than this was already drawn wrong by the
+// shader path; the fixed-function one stops at the same place rather than at a
+// different one.
+enum { MAXNUMSKINBONES = 64 };
+// The bone transforms in object space, as rw matrices. The shader path
+// transposes these into its constants; the fixed-function path multiplies
+// vertices by them. Writes at most MAXNUMSKINBONES and returns how many.
+int32 computeSkinMatrices(Atomic *atomic, Matrix *out);
 void uploadSkinMatrices(Atomic *atomic);
 void skinInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance);
 void skinRenderCB(Atomic *atomic, InstanceDataHeader *header);
+// The same, skinned on the CPU into a dynamic vertex buffer. Fixed-function
+// vertex blending is capped at four matrices per draw on the hardware this
+// mode exists for, and the characters have far more bones than that, so the
+// blend happens before the vertices reach the device.
+void skinRenderCB_Fix(Atomic *atomic, InstanceDataHeader *header);
+// The dynamic buffer and the declaration those draws use. Called from skinOpen
+// and skinClose, and only under getFixedFunction().
+void ffOpenSkin(void);
+void ffCloseSkin(void);
 ObjPipeline *makeSkinPipeline(void);
 extern void *skin_amb_VS;
 extern void *skin_amb_dir_VS;
