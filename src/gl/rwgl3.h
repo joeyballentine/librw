@@ -138,7 +138,12 @@ struct Im3DVertex
 {
 	V3d     position;
 	V3d     normal;		// librw extension
-	uint8   r, g, b, a;
+	// Blue first. D3D packs the colour as one D3DCOLOR word, which is ARGB and
+	// so BGRA from the low byte up, and the vertex declaration it builds from
+	// offsetof is what an application's own mirrored vertex has to match. One
+	// order for every backend means one struct on that side rather than a
+	// #ifdef per colour field; the attribute below reads it back as GL_BGRA.
+	uint8   b, g, r, a;
 	float32 u, v;
 
 	void setX(float32 x) { this->position.x = x; }
@@ -168,7 +173,12 @@ extern SurfaceProperties im3dSurfaceProps;
 struct Im2DVertex
 {
 	float32 x, y, z, w;
-	uint8   r, g, b, a;
+	// Blue first. D3D packs the colour as one D3DCOLOR word, which is ARGB and
+	// so BGRA from the low byte up, and the vertex declaration it builds from
+	// offsetof is what an application's own mirrored vertex has to match. One
+	// order for every backend means one struct on that side rather than a
+	// #ifdef per colour field; the attribute below reads it back as GL_BGRA.
+	uint8   b, g, r, a;
 	float32 u, v;
 
 	void setScreenX(float32 x) { this->x = x; }

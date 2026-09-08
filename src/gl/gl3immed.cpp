@@ -34,8 +34,8 @@ static Shader *im2dShader;
 static AttribDesc im2dattribDesc[3] = {
 	{ ATTRIB_POS,        GL_FLOAT,         GL_FALSE, 4,
 		sizeof(Im2DVertex), 0 },
-	{ ATTRIB_COLOR,      GL_UNSIGNED_BYTE, GL_TRUE,  4,
-		sizeof(Im2DVertex), offsetof(Im2DVertex, r) },
+	{ ATTRIB_COLOR,      GL_UNSIGNED_BYTE, GL_TRUE,  GL_BGRA,
+		sizeof(Im2DVertex), offsetof(Im2DVertex, b) },
 	{ ATTRIB_TEXCOORDS0, GL_FLOAT,         GL_FALSE, 2,
 		sizeof(Im2DVertex), offsetof(Im2DVertex, u) },
 };
@@ -214,8 +214,8 @@ static AttribDesc im3dattribDesc[4] = {
 		sizeof(Im3DVertex), 0 },
 	{ ATTRIB_NORMAL,     GL_FLOAT,         GL_FALSE, 3,
 		sizeof(Im3DVertex), offsetof(Im3DVertex, normal) },
-	{ ATTRIB_COLOR,      GL_UNSIGNED_BYTE, GL_TRUE,  4,
-		sizeof(Im3DVertex), offsetof(Im3DVertex, r) },
+	{ ATTRIB_COLOR,      GL_UNSIGNED_BYTE, GL_TRUE,  GL_BGRA,
+		sizeof(Im3DVertex), offsetof(Im3DVertex, b) },
 	{ ATTRIB_TEXCOORDS0, GL_FLOAT,         GL_FALSE, 2,
 		sizeof(Im3DVertex), offsetof(Im3DVertex, u) },
 };
