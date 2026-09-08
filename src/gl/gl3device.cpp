@@ -1662,11 +1662,14 @@ static void
 setFrameBuffer(Camera *cam)
 {
 	Raster *fbuf = cam->frameBuffer->parent;
-	Raster *zbuf = cam->zBuffer->parent;
+	// A camera is allowed no z buffer at all, and one that renders a
+	// full-screen pass into a texture has none: RwCameraSetZRaster is never
+	// called on it. The d3d9 device has always taken nil here; this one read
+	// through it before it looked.
+	Raster *zbuf = cam->zBuffer ? cam->zBuffer->parent : nil;
 	assert(fbuf);
 
 	Gl3Raster *natfb = PLUGINOFFSET(Gl3Raster, fbuf, nativeRasterOffset);
-	Gl3Raster *natzb = PLUGINOFFSET(Gl3Raster, zbuf, nativeRasterOffset);
 	assert(fbuf->type == Raster::CAMERA || fbuf->type == Raster::CAMERATEXTURE);
 
 	bindFramebuffer(natfb->fbo);
@@ -1682,6 +1685,7 @@ setFrameBuffer(Camera *cam)
 
 	// Have to make sure depth buffer is attached to FB's fbo
 	if(zbuf){
+		Gl3Raster *natzb = PLUGINOFFSET(Gl3Raster, zbuf, nativeRasterOffset);
 		if(natfb->fboMate == zbuf){
 			// all good
 			assert(natzb->fboMate == fbuf);

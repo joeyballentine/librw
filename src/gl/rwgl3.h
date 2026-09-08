@@ -272,6 +272,9 @@ void setIm2DActive(bool32 active);
 extern const char *shaderDecl;	// #version stuff
 extern const char *header_vert_src;
 extern const char *header_frag_src;
+// The im2d vertex stage. An application's own full-screen pass has to link
+// against this one; see the note above it in gl3immed.cpp.
+extern const char *im2d_vert_src;
 
 extern Shader *im2dOverrideShader;
 

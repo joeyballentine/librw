@@ -50,14 +50,20 @@ static int primTypeMap[] = {
 	GL_POINTS
 };
 
+// At file scope, not inside openIm2D, so that an application can build a shader
+// against the same vertex stage. A full-screen pass with a fragment shader of
+// its own is drawn through im2DRenderPrimitive and im2dOverrideShader, and its
+// vertex stage has to be this one: the quad's position and the xform uniform
+// only agree with each other here.
+#include "shaders/im2d_gl.inc"
+#include "shaders/simple_fs_gl.inc"
+
 void
 openIm2D(void)
 {
 	// must already be registered by device. we just need the value
 	u_xform = registerUniform("u_xform", UNIFORM_VEC4);
 
-#include "shaders/im2d_gl.inc"
-#include "shaders/simple_fs_gl.inc"
 	const char *vs[] = { shaderDecl, header_vert_src, im2d_vert_src, nil };
 	const char *fs[] = { shaderDecl, header_frag_src, simple_frag_src, nil };
 	im2dShader = Shader::create(vs, fs);
