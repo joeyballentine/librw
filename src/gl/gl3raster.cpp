@@ -425,6 +425,14 @@ rasterCreate(Raster *raster)
 	natras->alphaKind = ALPHAOPAQUE;
 	natras->numLevels = 1;
 
+	// A caller that named no format meant the obvious one. d3d/d3d.cpp does
+	// this in rasterSetFormat and this backend did not, so a texture created
+	// the way d3d accepts -- depth and type, no format bits -- was refused here
+	// with "invalid raster format" and the application got no texture at all.
+	if(raster->format == 0 &&
+	   ((raster->type&0xF) == Raster::NORMAL || (raster->type&0xF) == Raster::TEXTURE))
+		raster->format = Raster::C8888;
+
 	Raster *ret = raster;
 
 	if(raster->width == 0 || raster->height == 0){
