@@ -882,6 +882,15 @@ void evictRaster(Raster *raster);
 static void*
 destroyNativeRaster(void *object, int32 offset, int32)
 {
+	// Only the platform that is RUNNING. Every raster carries every linked
+	// platform's extension block, and this destructor runs for all of them --
+	// so in a build with several backends a D3D9 raster reaches this one too.
+	// createNativeRaster left the block zeroed and nothing has touched it, but
+	// the GL entry points below are function pointers glad never filled in,
+	// which is a null call rather than a harmless delete of texture 0.
+	if(rw::platform != PLATFORM_GL3)
+		return object;
+
 	Raster *raster = (Raster*)object;
 	Gl3Raster *natras = PLUGINOFFSET(Gl3Raster, object, offset);
 #ifdef RW_OPENGL

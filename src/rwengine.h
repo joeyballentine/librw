@@ -95,7 +95,14 @@ struct Driver
 	}
 };
 
-struct EngineOpenParams;
+// The base of every backend's open parameters. Engine::open forwards the
+// pointer straight to the device, which casts it back to its own kind, so the
+// real declaration is per device namespace -- rw::d3d::EngineOpenParams,
+// rw::gl3::EngineOpenParams -- and a build carrying several backends has one
+// of each. The caller picks the one matching rw::platform.
+struct EngineOpenParams
+{
+};
 
 enum MemHint
 {

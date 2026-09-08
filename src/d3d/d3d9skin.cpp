@@ -412,6 +412,14 @@ destroySkinShaders(void)
 static void*
 skinOpen(void *o, int32, int32)
 {
+	// Only the platform that is RUNNING. Engine::start constructs every
+	// platform's driver plugins, and a build may carry several backends -- so
+	// without this a D3D9 run would build GL3's pipelines and compile their
+	// shaders with no GL context, and a GL3 run would do the same to D3D's
+	// with no device. See gl3.cpp's driverOpen.
+	if(rw::platform != PLATFORM_D3D9)
+		return o;
+
 #if defined(RW_D3D9) || defined(RW_D3D11)
 	// Not under fixed function: the CPU skinner needs a vertex declaration and
 	// a dynamic buffer, and the device it runs on may have no shader unit to
@@ -435,6 +443,10 @@ skinOpen(void *o, int32, int32)
 static void*
 skinClose(void *o, int32, int32)
 {
+	// See this file's other half; the pipelines were never built.
+	if(rw::platform != PLATFORM_D3D9)
+		return o;
+
 #if defined(RW_D3D9) || defined(RW_D3D11)
 	if(getFixedFunction())
 		ffCloseSkin();

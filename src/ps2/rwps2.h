@@ -5,13 +5,13 @@
 
 namespace rw {
 
+namespace ps2 {
+
 #ifdef RW_PS2
-struct EngineOpenParams
+struct EngineOpenParams : rw::EngineOpenParams
 {
 };
 #endif
-
-namespace ps2 {
 
 void registerPlatformPlugins(void);
 

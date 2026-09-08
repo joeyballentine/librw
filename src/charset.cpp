@@ -18,11 +18,7 @@
 
 #ifndef RW_NULL
 
-#ifdef RWHALFPIXEL
-#define HALFPX (0.5f)
-#else
-#define HALFPX (0.0f)
-#endif
+#define HALFPX (rw::halfPixel)
 
 namespace rw {
 

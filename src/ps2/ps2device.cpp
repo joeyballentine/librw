@@ -1158,6 +1158,7 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 {       
 	switch(req){
 	case DEVICEOPEN:
+		rw::halfPixel = 0.5f;
 		// perhaps do this here?
 		rw::engine->filefuncs.rwfopen = ps2fopen;
 		rw::engine->filefuncs.rwfclose = ps2fclose;

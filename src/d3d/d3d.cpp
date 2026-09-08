@@ -1115,6 +1115,11 @@ createNativeRaster(void *object, int32 offset, int32)
 static void*
 destroyNativeRaster(void *object, int32 offset, int32)
 {
+	// Only the platform that is RUNNING; see gl3raster.cpp's own destructor.
+	// PLATFORM_D3D8 as well, because it shares this extension block.
+	if(rw::platform != PLATFORM_D3D9 && rw::platform != PLATFORM_D3D8)
+		return object;
+
 	Raster *raster = (Raster*)object;
 	D3dRaster *natras = PLUGINOFFSET(D3dRaster, raster, offset);
 #ifdef RW_D3D9

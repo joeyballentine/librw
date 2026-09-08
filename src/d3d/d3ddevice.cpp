@@ -2509,6 +2509,9 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 
 	switch(req){
 	case DEVICEOPEN:
+		// D3D9 samples a texture at the pixel's CORNER, so screen-space
+		// coordinates want shifting by half a pixel. Nothing else does.
+		rw::halfPixel = 0.5f;
 		return openD3D((EngineOpenParams*)arg);
 	case DEVICECLOSE:
 		return closeD3D();

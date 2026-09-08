@@ -25,20 +25,31 @@ namespace rw {
 
 int32 version = 0x36003;
 int32 build = 0xFFFF;
+// The platform the engine is running as, and -- before Engine::open -- the one
+// it will ASK for. A build can carry several backends, so this is what picks
+// between them: set it, then open. Engine::open puts it back to PLATFORM_NULL
+// if the build has no such device.
+//
+// D3D11 answers to PLATFORM_D3D9. It cannot be in the same build as D3D9 --
+// both define rw::d3d::renderdevice -- so nothing else claims the id, and the
+// pipelines and the native raster reader are registered against it either way.
 #ifdef RW_PS2
 	int32 platform = PLATFORM_PS2;
-#elif RW_WDGL
+#elif defined(RW_WDGL)
 	int32 platform = PLATFORM_WDGL;
-#elif RW_GL3
-	int32 platform = PLATFORM_GL3;
 #elif defined(RW_D3D9) || defined(RW_D3D11)
-	// D3D11 answers to PLATFORM_D3D9: backends are exclusive in a build, so
-	// nothing else claims it here, and the pipelines and the native raster
-	// reader are registered against it either way.
 	int32 platform = PLATFORM_D3D9;
+#elif defined(RW_GL3)
+	int32 platform = PLATFORM_GL3;
 #else
 	int32 platform = PLATFORM_NULL;
 #endif
+
+// Half a pixel on a device whose pixel centre sits at the pixel's corner, zero
+// on one that puts it in the middle. D3D9 and the PS2 are the first kind;
+// OpenGL and D3D10 and up are the second. The DEVICE sets this at open, because
+// rw::platform cannot tell D3D9 from D3D11 -- both answer to PLATFORM_D3D9.
+float32 halfPixel = 0.0f;
 bool32 streamAppendFrames = 0;
 char *debugFile = nil;
 

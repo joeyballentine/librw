@@ -15,8 +15,10 @@
 
 namespace rw {
 
+namespace gl3 {
+
 #ifdef RW_GL3
-struct EngineOpenParams
+struct EngineOpenParams : rw::EngineOpenParams
 {
 #ifdef LIBRW_SDL2
 	SDL_Window **window;
@@ -33,8 +35,6 @@ struct EngineOpenParams
 	const char *windowtitle;
 };
 #endif
-
-namespace gl3 {
 
 void registerPlatformPlugins(void);
 

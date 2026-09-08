@@ -28,6 +28,15 @@ using namespace d3d;
 static void*
 driverOpen(void *o, int32, int32)
 {
+	// Only the platform that is RUNNING. Engine::start constructs every
+	// platform's driver plugin, and a build may carry several backends -- so
+	// without this a D3D9 run would reach GL3's driverOpen and compile its
+	// shaders with no GL context, and a GL3 run would reach D3D's with no
+	// device. What is skipped is left as the null driver Engine::open
+	// installed, which asserts if anything asks a dead backend to do work.
+	if(rw::platform != PLATFORM_D3D9)
+		return o;
+
 #if defined(RW_D3D9) || defined(RW_D3D11)
 	// Not under fixed function: a device with no shader support cannot make
 	// one of these, and nothing that runs after this point asks for one.
@@ -51,6 +60,10 @@ driverOpen(void *o, int32, int32)
 static void*
 driverClose(void *o, int32, int32)
 {
+	// See driverOpen.
+	if(rw::platform != PLATFORM_D3D9)
+		return o;
+
 #if defined(RW_D3D9) || defined(RW_D3D11)
 	if(!getFixedFunction())
 		destroyDefaultShaders();

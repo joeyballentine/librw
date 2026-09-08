@@ -584,16 +584,20 @@ Texture::getMaxAnisotropy(void)
 int32
 getMaxSupportedMaxAnisotropy(void)
 {
+	// Whichever device is running, not whichever backends are linked.
 #ifdef RW_D3D9
-	return d3d::d3d9Globals.caps.MaxAnisotropy;
+	if(platform == PLATFORM_D3D9)
+		return d3d::d3d9Globals.caps.MaxAnisotropy;
 #endif
 #ifdef RW_D3D11
 	// Feature level 9_2 and up guarantee it, and every level this backend
 	// asks for is 10_0 or better.
-	return D3D11_REQ_MAXANISOTROPY;
+	if(platform == PLATFORM_D3D9)
+		return D3D11_REQ_MAXANISOTROPY;
 #endif
 #ifdef RW_GL3
-	return (int32)gl3::gl3Caps.maxAnisotropy;
+	if(platform == PLATFORM_GL3)
+		return (int32)gl3::gl3Caps.maxAnisotropy;
 #endif
 	return 1;
 }

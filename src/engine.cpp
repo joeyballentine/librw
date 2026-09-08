@@ -262,17 +262,35 @@ Engine::open(EngineOpenParams *p)
 	engine->filefuncs.rwfwrite = (size_t (*)(const void*, size_t, size_t, void*))fwrite;
 	engine->filefuncs.rwfeof = (int (*)(void*))feof;
 
-	// Initialize device
-	// Device and possibly OS specific!
+	// The render device, picked from rw::platform.
+	//
+	// A switch and not an #ifdef ladder, because a build may carry more than
+	// one backend: rw::d3d and rw::gl3 share no symbols, so both can be linked
+	// and the choice made here. Set rw::platform before calling this; it keeps
+	// whichever device it got, and falls back to the null one -- reporting
+	// PLATFORM_NULL rather than the platform that was asked for -- when the
+	// build has no such device to give.
+	switch(platform){
 #ifdef RW_PS2
-	engine->device = ps2::renderdevice;
-#elif RW_GL3
-	engine->device = gl3::renderdevice;
-#elif defined(RW_D3D9) || defined(RW_D3D11)
-	engine->device = d3d::renderdevice;
-#else
-	engine->device = null::renderdevice;
+	case PLATFORM_PS2:
+		engine->device = ps2::renderdevice;
+		break;
 #endif
+#if defined(RW_D3D9) || defined(RW_D3D11)
+	case PLATFORM_D3D9:
+		engine->device = d3d::renderdevice;
+		break;
+#endif
+#ifdef RW_GL3
+	case PLATFORM_GL3:
+		engine->device = gl3::renderdevice;
+		break;
+#endif
+	default:
+		engine->device = null::renderdevice;
+		platform = PLATFORM_NULL;
+		break;
+	}
 
 	engine->device.system(DEVICEOPEN, (void*)p, 0);
 

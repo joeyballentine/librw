@@ -121,12 +121,19 @@ target_include_directories(librw
         $<INSTALL_INTERFACE:${LIBRW_INSTALL_INCLUDEDIR}>
 )
 
+# One RW_<platform> per enabled backend, and PUBLIC because an application that
+# mirrors librw's types has to be built against the same set.
+set(LIBRW_PLATFORM_DEFINES)
+foreach(_p IN LISTS LIBRW_PLATFORM)
+    list(APPEND LIBRW_PLATFORM_DEFINES "RW_${_p}")
+endforeach()
+
 target_compile_definitions(librw
     PRIVATE
         LODEPNG_NO_COMPILE_CPP
         "$<IF:$<CONFIG:DEBUG>,DEBUG,NDEBUG>"
     PUBLIC
-        "RW_${LIBRW_PLATFORM}"
+        ${LIBRW_PLATFORM_DEFINES}
 )
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -217,13 +224,19 @@ if(LIBRW_PLATFORM_GL3)
     else()
         message(FATAL_ERROR "find_package(OpenGL) failed.")
     endif()
-elseif(LIBRW_PLATFORM_D3D9)
+endif()
+
+# Three independent ifs, not one chain: a build can enable GL3 and a D3D backend
+# together, and an elseif would have linked only the first of them.
+if(LIBRW_PLATFORM_D3D9)
     target_link_libraries(librw
         PRIVATE
             d3d9
             xinput
     )
-elseif(LIBRW_PLATFORM_D3D11)
+endif()
+
+if(LIBRW_PLATFORM_D3D11)
     target_link_libraries(librw
         PRIVATE
             d3d11

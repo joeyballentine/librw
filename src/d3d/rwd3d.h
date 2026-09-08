@@ -10,26 +10,27 @@
 
 namespace rw {
 
-#if defined(RW_D3D9) || defined(RW_D3D11)
-
-#ifdef _WINDOWS_
-struct EngineOpenParams
-{
-	HWND window;
-};
-#else
-struct EngineOpenParams
-{
-	uint32 please_include_windows_h;
-};
-#endif
-#else
+#if !defined(RW_D3D9) && !defined(RW_D3D11)
 #ifdef _D3D9_H_
 #error "please don't include d3d9.h for non-d3d9 platforms"
 #endif
 #endif
 
 namespace d3d {
+
+#if defined(RW_D3D9) || defined(RW_D3D11)
+#ifdef _WINDOWS_
+struct EngineOpenParams : rw::EngineOpenParams
+{
+	HWND window;
+};
+#else
+struct EngineOpenParams : rw::EngineOpenParams
+{
+	uint32 please_include_windows_h;
+};
+#endif
+#endif
 
 extern bool32 isP8supported;
 
@@ -193,7 +194,12 @@ struct Im2DVertex
 
 #endif
 
-#ifndef RW_D3D9
+// D3DFORMAT, for a unit that did not include d3d9.h -- which is most of them:
+// only the D3D translation units define WITH_D3D. Keyed on the HEADER and not
+// on RW_D3D9, because raster.cpp reads DXT format codes off a D3D raster while
+// converting it for GL3, and a build that carries both backends compiles that
+// with RW_D3D9 defined and d3d9.h nowhere in sight.
+#ifndef _D3D9_H_
 #ifndef MAKEFOURCC
 #define MAKEFOURCC(ch0, ch1, ch2, ch3)                              \
             ((uint32)(uint8)(ch0) | ((uint32)(uint8)(ch1) << 8) |       \

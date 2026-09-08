@@ -306,6 +306,14 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 static void*
 skinOpen(void *o, int32, int32)
 {
+	// Only the platform that is RUNNING. Engine::start constructs every
+	// platform's driver plugins, and a build may carry several backends -- so
+	// without this a D3D9 run would build GL3's pipelines and compile their
+	// shaders with no GL context, and a GL3 run would do the same to D3D's
+	// with no device. See gl3.cpp's driverOpen.
+	if(rw::platform != PLATFORM_GL3)
+		return o;
+
 	skinGlobals.pipelines[PLATFORM_GL3] = makeSkinPipeline();
 	skinGlobals.matfxPipelines[PLATFORM_GL3] = makeSkinMatFXPipeline();
 
@@ -346,6 +354,10 @@ skinOpen(void *o, int32, int32)
 static void*
 skinClose(void *o, int32, int32)
 {
+	// See this file's other half; the pipelines were never built.
+	if(rw::platform != PLATFORM_GL3)
+		return o;
+
 	((ObjPipeline*)skinGlobals.pipelines[PLATFORM_GL3])->destroy();
 	skinGlobals.pipelines[PLATFORM_GL3] = nil;
 

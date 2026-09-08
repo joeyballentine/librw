@@ -10,7 +10,6 @@
 //       and figure out what we even want here...
 #ifdef RW_GL3
 #define RW_OPENGL
-#define RWDEVICE gl3
 // doesn't help
 //#define RW_GL_USE_VAOS
 #endif
@@ -22,24 +21,23 @@
 #define RW_GLES
 #endif
 
-#ifdef RW_D3D9
-#define RWDEVICE d3d
-#define RWHALFPIXEL
-#endif
-
-#ifdef RW_D3D8
-#define RWDEVICE d3d
-#endif
-
-// No RWHALFPIXEL: D3D10 and up put the pixel centre at 0.5 the way OpenGL
-// does, so screen-space coordinates need no shift.
-#ifdef RW_D3D11
-#define RWDEVICE d3d
-#endif
-
-#ifdef RW_PS2
-#define RWHALFPIXEL
+// RWDEVICE names a device namespace to reach the immediate-mode vertex structs
+// through, and a build may now carry SEVERAL backends -- so it is one name
+// picked in a fixed order rather than one per platform. Which one it lands on
+// does not change the bytes: rw::d3d::Im2DVertex and rw::gl3::Im2DVertex have
+// the same layout on purpose, so that an application mirroring the type needs
+// one struct rather than one per backend.
+//
+// Anything that has to follow the RUNNING device instead reads rw::platform,
+// which Engine::open sets. The half-pixel shift D3D9 needs is rw::halfPixel
+// for the same reason; it used to be an RWHALFPIXEL define, which cannot say
+// anything useful in a build that carries D3D9 and GL3 at once.
+#if defined(RW_PS2)
 #define RWDEVICE ps2
+#elif defined(RW_D3D9) || defined(RW_D3D8) || defined(RW_D3D11)
+#define RWDEVICE d3d
+#elif defined(RW_GL3)
+#define RWDEVICE gl3
 #endif
 
 #ifdef RW_WDGL
@@ -731,6 +729,9 @@ enum Errors
 extern int32 version;
 extern int32 build;
 extern int32 platform;
+// Half a pixel where the device wants screen-space coordinates shifted by one,
+// zero where it does not. Set by the device at open; see base.cpp.
+extern float32 halfPixel;
 extern bool32 streamAppendFrames;
 extern char *debugFile;
 

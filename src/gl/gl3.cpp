@@ -24,6 +24,15 @@ namespace gl3 {
 static void*
 driverOpen(void *o, int32, int32)
 {
+	// Only the platform that is RUNNING. Engine::start constructs every
+	// platform's driver plugin, and a build may carry several backends -- so
+	// without this a D3D9 run would reach GL3's driverOpen and compile its
+	// shaders with no GL context, and a GL3 run would reach D3D's with no
+	// device. What is skipped is left as the null driver Engine::open
+	// installed, which asserts if anything asks a dead backend to do work.
+	if(rw::platform != PLATFORM_GL3)
+		return o;
+
 #ifdef RW_OPENGL
 	engine->driver[PLATFORM_GL3]->defaultPipeline = makeDefaultPipeline();
 	uvTransformPipelines[PLATFORM_GL3] = makeUVTransformPipeline();
@@ -43,6 +52,10 @@ driverOpen(void *o, int32, int32)
 static void*
 driverClose(void *o, int32, int32)
 {
+	// See driverOpen.
+	if(rw::platform != PLATFORM_GL3)
+		return o;
+
 #ifdef RW_OPENGL
 	if(uvTransformPipelines[PLATFORM_GL3]){
 		uvTransformPipelines[PLATFORM_GL3]->destroy();
