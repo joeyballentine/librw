@@ -3,6 +3,10 @@ namespace d3d {
 
 #ifdef RW_D3D11
 
+// D3D11's own half, declared where it is DEFINED. rw::d3d is the interface
+// both Direct3D backends implement; see d3ddispatch.cpp.
+namespace impl11 {
+
 #ifdef __d3d11_h__
 
 extern ID3D11Device *d3d11device;
@@ -108,6 +112,15 @@ void uploadShaderConstants(void);
 void setAlphaTestConstants(uint32 func, uint32 ref);
 void releaseInputLayouts(void);
 void forgetInputLayouts(void *declaration);
+}
+
+// Named into the interface, for the parts an application asks about: whether
+// the device came up, and what it reports about itself.
+#ifdef __d3d11_h__
+using impl11::d3d11device;
+using impl11::d3d11context;
+using impl11::d3d11Globals;
+#endif
 
 #endif
 

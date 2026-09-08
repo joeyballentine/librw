@@ -89,12 +89,16 @@ void*
 createVertexDeclaration(VertexElement *elements)
 {
 #ifdef RW_D3D9
-	IDirect3DVertexDeclaration9 *decl = 0;
-	d3ddevice->CreateVertexDeclaration((D3DVERTEXELEMENT9*)elements, &decl);
-	if(decl)
-		d3d9Globals.numVertexDeclarations++;
-	return decl;
-#else
+	if(RWD3D_IS9){
+		IDirect3DVertexDeclaration9 *decl = 0;
+		d3ddevice->CreateVertexDeclaration((D3DVERTEXELEMENT9*)elements, &decl);
+		if(decl)
+			d3d9Globals.numVertexDeclarations++;
+		return decl;
+	}
+#endif
+	// D3D11 and a build with no device keep the element list itself. D3D11
+	// makes the input layout from it when it knows the shader too.
 	int n = 0;
 	VertexElement *e = (VertexElement*)elements;
 	while(e[n++].stream != 0xFF)
@@ -102,38 +106,42 @@ createVertexDeclaration(VertexElement *elements)
 	e = rwNewT(VertexElement, n, MEMDUR_EVENT | ID_DRIVER);
 	memcpy(e, elements, n*sizeof(VertexElement));
 	return e;
-#endif
 }
 
 void
 destroyVertexDeclaration(void *declaration)
 {
 #ifdef RW_D3D9
-	if(declaration){
-		if(((IUnknown*)declaration)->Release() != 0)
-			printf("declaration wasn't destroyed\n");
-		d3d9Globals.numVertexDeclarations--;
+	if(RWD3D_IS9){
+		if(declaration){
+			if(((IUnknown*)declaration)->Release() != 0)
+				printf("declaration wasn't destroyed\n");
+			d3d9Globals.numVertexDeclarations--;
+		}
+		return;
 	}
-#else
+#endif
 #ifdef RW_D3D11
 	// The input layouts made against it are keyed on this pointer, and the
 	// allocator will hand the address out again. Without this, the next
 	// declaration to land here inherits another geometry's attribute offsets.
-	forgetVertexDeclaration(declaration);
+	if(RWD3D_IS11)
+		impl11::forgetVertexDeclaration(declaration);
 #endif
 	rwFree(declaration);
-#endif
 }
 
 uint32
 getDeclaration(void *declaration, VertexElement *elements)
 {
 #ifdef RW_D3D9
-	IDirect3DVertexDeclaration9 *decl = (IDirect3DVertexDeclaration9*)declaration;
-	UINT numElt;
-	decl->GetDeclaration((D3DVERTEXELEMENT9*)elements, &numElt);
-	return numElt;
-#else
+	if(RWD3D_IS9){
+		IDirect3DVertexDeclaration9 *decl = (IDirect3DVertexDeclaration9*)declaration;
+		UINT numElt;
+		decl->GetDeclaration((D3DVERTEXELEMENT9*)elements, &numElt);
+		return numElt;
+	}
+#endif
 	int n = 0;
 	VertexElement *e = (VertexElement*)declaration;
 	while(e[n++].stream != 0xFF)
@@ -141,7 +149,6 @@ getDeclaration(void *declaration, VertexElement *elements)
 	if(elements)
 		memcpy(elements, declaration, n*sizeof(VertexElement));
 	return n;
-#endif
 }
 
 void

@@ -32,10 +32,9 @@ endif()
 # LIBRW_PLATFORM is a LIST. One entry is the old behaviour; several put several
 # backends in one library, and rw::platform picks between them at Engine::open.
 #
-# Two pairs cannot share a build. D3D9 and D3D11 both define
-# rw::d3d::renderdevice and both compile the shared d3d translation units, so
-# linking them together is a duplicate symbol per function. PS2 is its own
-# toolchain. Everything else composes.
+# PS2 is its own toolchain and cannot be combined with anything. Everything else
+# composes, D3D9 and D3D11 included: they are two implementations of one rw::d3d
+# and d3ddispatch.cpp is what picks between them.
 list(GET LIBRW_PLATFORMS 0 LIBRW_PLATFORM_DEFAULT)
 set(LIBRW_PLATFORM "${LIBRW_PLATFORM_DEFAULT}" CACHE STRING "Platforms, semicolon-separated (choices=${LIBRW_PLATFORMS})")
 set_property(CACHE LIBRW_PLATFORM PROPERTY STRINGS ${LIBRW_PLATFORMS})
@@ -46,11 +45,6 @@ foreach(_p IN LISTS LIBRW_PLATFORM)
     endif()
     set("LIBRW_PLATFORM_${_p}" ON)
 endforeach()
-if(LIBRW_PLATFORM_D3D9 AND LIBRW_PLATFORM_D3D11)
-    message(FATAL_ERROR
-        "LIBRW_PLATFORM cannot hold both D3D9 and D3D11: they are two "
-        "implementations of rw::d3d and would collide at link.")
-endif()
 if(LIBRW_PLATFORM_PS2 AND NOT LIBRW_PLATFORM STREQUAL "PS2")
     message(FATAL_ERROR "LIBRW_PLATFORM=PS2 cannot be combined with another backend")
 endif()

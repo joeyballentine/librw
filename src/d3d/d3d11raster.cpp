@@ -20,6 +20,18 @@
 namespace rw {
 namespace d3d {
 
+// The two device implementations live one namespace deeper than the interface
+// they implement, so that a build can carry both. rw::d3d is the interface --
+// the raster layer, the immediate mode and the pipelines are written against it
+// and are built once -- and d3ddispatch.cpp forwards each of its entry points
+// to whichever of these is running.
+//
+// A call in here that passes one of rw::d3d's enumerators has to name this
+// namespace: the enumerator's own namespace is rw::d3d, so argument-dependent
+// lookup adds the forwarder to the candidates beside the function meant, and
+// the two have the same signature.
+namespace impl11 {
+
 #ifdef RW_D3D11
 
 // D3DFMT_ is what the whole d3d driver speaks -- the native texture reader
@@ -431,5 +443,6 @@ rasterDestroy(Raster *raster, D3dRaster *natras)
 }
 
 #endif
+}
 }
 }

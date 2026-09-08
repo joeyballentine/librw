@@ -21,6 +21,18 @@
 namespace rw {
 namespace d3d {
 
+// The two device implementations live one namespace deeper than the interface
+// they implement, so that a build can carry both. rw::d3d is the interface --
+// the raster layer, the immediate mode and the pipelines are written against it
+// and are built once -- and d3ddispatch.cpp forwards each of its entry points
+// to whichever of these is running.
+//
+// A call in here that passes one of rw::d3d's enumerators has to name this
+// namespace: the enumerator's own namespace is rw::d3d, so argument-dependent
+// lookup adds the forwarder to the candidates beside the function meant, and
+// the two have the same signature.
+namespace impl11 {
+
 #ifdef RW_D3D11
 
 // The device's state, and how a D3D9-shaped driver reaches it.
@@ -86,7 +98,6 @@ static bool32 im2DActive;
 // The shader-visible state the lighting and matrix uploads in d3drender.cpp
 // keep. Its D3D9 twin lives in d3ddevice.cpp for the same reason: it belongs to
 // whichever file owns the device.
-D3dShaderState d3dShaderState;
 
 // The material's colour and surface properties, to both shader stages. The
 // pixel stage gets them for the per-pixel lighting path, which applies the
@@ -99,8 +110,8 @@ setMaterial(const RGBA &color, const SurfaceProperties &surfaceprops, float extr
 	if(!equal(d3dShaderState.matColor, color)){
 		rw::RGBAf col;
 		convColor(&col, &color);
-		setVertexShaderConstantF(VSLOC_matColor, (float*)&col, 1);
-		setPixelShaderConstantF(PSLOC_ppMatColor, (float*)&col, 1);
+		impl11::setVertexShaderConstantF(VSLOC_matColor, (float*)&col, 1);
+		impl11::setPixelShaderConstantF(PSLOC_ppMatColor, (float*)&col, 1);
 		d3dShaderState.matColor = color;
 	}
 
@@ -113,8 +124,8 @@ setMaterial(const RGBA &color, const SurfaceProperties &surfaceprops, float extr
 		surfProps[1] = surfaceprops.specular;
 		surfProps[2] = surfaceprops.diffuse;
 		surfProps[3] = extraSurfProp;
-		setVertexShaderConstantF(VSLOC_surfProps, surfProps, 1);
-		setPixelShaderConstantF(PSLOC_ppSurfProps, surfProps, 1);
+		impl11::setVertexShaderConstantF(VSLOC_surfProps, surfProps, 1);
+		impl11::setPixelShaderConstantF(PSLOC_ppSurfProps, surfProps, 1);
 		d3dShaderState.surfProps = surfaceprops;
 		d3dShaderState.extraSurfProp = extraSurfProp;
 	}
@@ -485,8 +496,8 @@ void
 flushCache(void)
 {
 	if(d3dShaderState.fogDirty){
-		setVertexShaderConstantF(VSLOC_fogData, (float*)&d3dShaderState.fogData, 1);
-		setPixelShaderConstantF(PSLOC_fogColor, (float*)&d3dShaderState.fogColor, 1);
+		impl11::setVertexShaderConstantF(VSLOC_fogData, (float*)&d3dShaderState.fogData, 1);
+		impl11::setPixelShaderConstantF(PSLOC_fogColor, (float*)&d3dShaderState.fogColor, 1);
 		d3dShaderState.fogDirty = false;
 	}
 	// A raster whose texels were rewritten while it stayed bound changes no
@@ -873,5 +884,6 @@ void setSamplerState(uint32 stage, uint32 type, uint32 value) { (void)stage; (vo
 void getSamplerState(uint32 stage, uint32 type, uint32 *value) { (void)stage; (void)type; *value = 0; }
 
 #endif
+}
 }
 }

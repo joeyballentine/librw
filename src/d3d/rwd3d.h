@@ -90,7 +90,11 @@ bool32 getFixedFunction(void);
 // The single-sampled picture, for anything that needs to read the frame back:
 // the samples are collapsed into it on the way out. nil when there is no
 // virtual screen, in which case the back buffer is what was drawn into.
+// D3D9's own; see the note in rwd3dimpl.h on why it is declared this way.
+namespace impl9 {
 struct IDirect3DSurface9 *resolveVirtualScreen(void);
+}
+using impl9::resolveVirtualScreen;
 // Copy what has been rendered so far into a camera texture, so a pass can
 // sample the frame it is about to draw over. The raster must be a
 // CAMERATEXTURE of the size getScreenExtent reports; the caller owns it.
@@ -103,7 +107,6 @@ bool32 captureFrame(Raster *dst);
 // one backend's device pointer.
 bool32 deviceOpen(void);
 
-extern Device renderdevice;
 
 #ifdef RW_D3D9
 #ifdef _D3D9_H_
@@ -438,7 +441,10 @@ void setMaterial(const RGBA &color, const SurfaceProperties &surfaceprops, float
 // The fixed-function path hands this WHITE and applies the material colour in
 // a texture stage instead, because the shaders multiply by it after the
 // lighting has been clamped and a D3DMATERIAL9 cannot say that.
+namespace impl9 {
 void setMaterial_fix(const RGBA &color, const SurfaceProperties &surfProps);
+}
+using impl9::setMaterial_fix;
 inline void setMaterial(uint32 flags, const RGBA &color, const SurfaceProperties &surfaceprops, float extraSurfProp = 0.0f)
 {
 	static RGBA white = { 255, 255, 255, 255 };
@@ -651,6 +657,121 @@ void ffSetupIm2D(void);
 void ffSetupIm3D(uint32 flags);
 void ffSetupIm3DDraw(void);
 
+
+
+// The same interface again, one namespace deeper, once per implementation.
+//
+// The comments are on the interface above; these are the same functions.
+// d3ddispatch.cpp defines the interface by forwarding each one to whichever
+// implementation is running, which is what lets a build carry both.
+#ifdef RW_D3D9
+namespace impl9 {
+bool32 captureFrame(Raster *dst);
+void *createPixelShader(void *csosrc);
+void *createVertexShader(void *csosrc);
+void destroyPixelShader(void *shader);
+void destroyVertexShader(void *shader);
+bool32 deviceOpen(void);
+void drawIndexedPrimitive(uint32 primType, int32 baseVertex, uint32 minVertex,
+	uint32 numVertices, uint32 startIndex, uint32 numPrimitives);
+void drawPrimitive(uint32 primType, uint32 startVertex, uint32 numPrimitives);
+void flushCache(void);
+bool32 getBlendEnabled(void);
+void getRenderState(uint32 state, uint32 *value);
+void getSamplerState(uint32 stage, uint32 type, uint32 *value);
+void getScreenExtent(int32 *width, int32 *height);
+void getTextureStageState(uint32 stage, uint32 type, uint32 *value);
+void getVirtualScreen(int32 *width, int32 *height);
+int32 getVirtualScreenSamples(void);
+void setIm2DActive(bool32 active);
+void setIndices(void *indexBuffer);
+void setMaterial(const RGBA &color, const SurfaceProperties &surfaceprops, float extraSurfProp);
+void setPipelineVertexAlpha(bool32 enable);
+void setPixelShader(void *ps);
+void setPixelShaderConstantF(uint32 reg, const float32 *data, int32 numRegs);
+void setRasterStage(uint32 stage, Raster *raster);
+void setRenderState(uint32 state, uint32 value);
+void setSamplerState(uint32 stage, uint32 type, uint32 value);
+void setStreamSource(int n, void *buffer, uint32 offset, uint32 stride);
+void setTexture(uint32 stage, Texture *tex);
+void setTextureStageState(uint32 stage, uint32 type, uint32 value);
+void setVertexDeclaration(void *declaration);
+void setVertexShader(void *vs);
+void setVertexShaderConstantF(uint32 reg, const float32 *data, int32 numRegs);
+void setVertexShaderConstantI(uint32 reg, const int32 *data, int32 numRegs);
+void setVirtualScreen(int32 width, int32 height);
+void setVirtualScreenSamples(int32 samples);
+extern Device renderdevice;
+}
+#endif
+#ifdef RW_D3D11
+namespace impl11 {
+bool32 captureFrame(Raster *dst);
+void *createPixelShader(void *csosrc);
+void *createVertexShader(void *csosrc);
+void destroyPixelShader(void *shader);
+void destroyVertexShader(void *shader);
+bool32 deviceOpen(void);
+void drawIndexedPrimitive(uint32 primType, int32 baseVertex, uint32 minVertex,
+	uint32 numVertices, uint32 startIndex, uint32 numPrimitives);
+void drawPrimitive(uint32 primType, uint32 startVertex, uint32 numPrimitives);
+void flushCache(void);
+bool32 getBlendEnabled(void);
+void getRenderState(uint32 state, uint32 *value);
+void getSamplerState(uint32 stage, uint32 type, uint32 *value);
+void getScreenExtent(int32 *width, int32 *height);
+void getTextureStageState(uint32 stage, uint32 type, uint32 *value);
+void getVirtualScreen(int32 *width, int32 *height);
+int32 getVirtualScreenSamples(void);
+void setIm2DActive(bool32 active);
+void setIndices(void *indexBuffer);
+void setMaterial(const RGBA &color, const SurfaceProperties &surfaceprops, float extraSurfProp);
+void setPipelineVertexAlpha(bool32 enable);
+void setPixelShader(void *ps);
+void setPixelShaderConstantF(uint32 reg, const float32 *data, int32 numRegs);
+void setRasterStage(uint32 stage, Raster *raster);
+void setRenderState(uint32 state, uint32 value);
+void setSamplerState(uint32 stage, uint32 type, uint32 value);
+void setStreamSource(int n, void *buffer, uint32 offset, uint32 stride);
+void setTexture(uint32 stage, Texture *tex);
+void setTextureStageState(uint32 stage, uint32 type, uint32 value);
+void setVertexDeclaration(void *declaration);
+void setVertexShader(void *vs);
+void setVertexShaderConstantF(uint32 reg, const float32 *data, int32 numRegs);
+void setVertexShaderConstantI(uint32 reg, const int32 *data, int32 numRegs);
+void setVirtualScreen(int32 width, int32 height);
+void setVirtualScreenSamples(int32 samples);
+extern Device renderdevice;
+}
+#endif
+
+// Which implementation Engine::open should take, and the flag the forwarders
+// read. Set it before Engine::open; nothing changes it afterwards.
+#if defined(RW_D3D9) && defined(RW_D3D11)
+extern bool32 useD3D11;
+#endif
+Device &renderDevice(void);
+
+// The same question for code that is compiled ONCE for both backends -- the
+// raster layer, the immediate mode, the pipelines. Constants in a build that
+// carries only one, so the arm that cannot apply costs nothing and the arm that
+// always applies is not a branch.
+//
+// The #ifdef around such an arm is still needed: only one of these has d3d9.h
+// in scope, and only the other has d3d11.h.
+#if defined(RW_D3D9) && defined(RW_D3D11)
+#define RWD3D_IS9 (!rw::d3d::useD3D11)
+#define RWD3D_IS11 (rw::d3d::useD3D11)
+#elif defined(RW_D3D9)
+#define RWD3D_IS9 1
+#define RWD3D_IS11 0
+#elif defined(RW_D3D11)
+#define RWD3D_IS9 0
+#define RWD3D_IS11 1
+#else
+#define RWD3D_IS9 0
+#define RWD3D_IS11 0
+#endif
 
 }
 }

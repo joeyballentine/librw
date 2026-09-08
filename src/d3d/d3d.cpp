@@ -21,6 +21,19 @@ namespace d3d {
 
 bool32 isP8supported = 1;	// set to 0 when actual d3d device is used
 
+// Which device implementation is running, when the build carries both. Set
+// before Engine::open -- renderDevice() below reads it, and that is the first
+// thing Engine::open asks for.
+#if defined(RW_D3D9) && defined(RW_D3D11)
+bool32 useD3D11;
+#endif
+
+// Shared by both device implementations, because code built once for both
+// reads them: d3drender.cpp reads the shader state and d3d9ff.cpp reads the
+// constant vertex colour.
+D3dShaderState d3dShaderState;
+bool32 constantVertexColorWhite;
+
 // stolen from d3d8to9
 static uint32
 calculateTextureSize(uint32 width, uint32 height, uint32 depth, uint32 format)
@@ -89,36 +102,47 @@ int vertFormatMap[] = {
 void*
 createIndexBuffer(uint32 length, bool dynamic)
 {
-#ifdef RW_D3D9
-	IDirect3DIndexBuffer9 *ibuf;
-	if(dynamic)
-		d3ddevice->CreateIndexBuffer(length, D3DUSAGE_WRITEONLY|D3DUSAGE_DYNAMIC, D3DFMT_INDEX16, D3DPOOL_DEFAULT, &ibuf, 0);
-	else
-		d3ddevice->CreateIndexBuffer(length, D3DUSAGE_WRITEONLY, D3DFMT_INDEX16, D3DPOOL_MANAGED, &ibuf, 0);
-	if(ibuf)
-		d3d9Globals.numIndexBuffers++;
-	return ibuf;
-#elif defined(RW_D3D11)
-	return createIndexBuffer11(length, dynamic);
-#else
-	return rwNewT(uint8, length, MEMDUR_EVENT | ID_DRIVER);
+#ifdef RW_D3D11
+	if(RWD3D_IS11){
+		return impl11::createIndexBuffer11(length, dynamic);
+	}
 #endif
+#ifdef RW_D3D9
+	if(RWD3D_IS9){
+		IDirect3DIndexBuffer9 *ibuf;
+		if(dynamic)
+			d3ddevice->CreateIndexBuffer(length, D3DUSAGE_WRITEONLY|D3DUSAGE_DYNAMIC, D3DFMT_INDEX16, D3DPOOL_DEFAULT, &ibuf, 0);
+		else
+			d3ddevice->CreateIndexBuffer(length, D3DUSAGE_WRITEONLY, D3DFMT_INDEX16, D3DPOOL_MANAGED, &ibuf, 0);
+		if(ibuf)
+			d3d9Globals.numIndexBuffers++;
+		return ibuf;
+	}
+#endif
+	return rwNewT(uint8, length, MEMDUR_EVENT | ID_DRIVER);
 }
 
 void
 destroyIndexBuffer(void *indexBuffer)
 {
-#ifdef RW_D3D9
-	if(indexBuffer){
-		if(((IUnknown*)indexBuffer)->Release() != 0)
-			printf("indexBuffer wasn't destroyed\n");
-		d3d9Globals.numIndexBuffers--;
+#ifdef RW_D3D11
+	if(RWD3D_IS11){
+		impl11::destroyIndexBuffer11(indexBuffer);
+		return;
 	}
-#elif defined(RW_D3D11)
-	destroyIndexBuffer11(indexBuffer);
-#else
-	rwFree(indexBuffer);
 #endif
+#ifdef RW_D3D9
+	if(RWD3D_IS9){
+		if(indexBuffer){
+			if(((IUnknown*)indexBuffer)->Release() != 0)
+				printf("indexBuffer wasn't destroyed\n");
+			d3d9Globals.numIndexBuffers--;
+		}
+		return;
+	}
+#endif
+	// No device: createIndexBuffer handed out plain memory.
+	rwFree(indexBuffer);
 }
 
 uint16*
@@ -126,20 +150,24 @@ lockIndices(void *indexBuffer, uint32 offset, uint32 size, uint32 flags)
 {
 	if(indexBuffer == nil)
 		return nil;
+#ifdef RW_D3D11
+	if(RWD3D_IS11){
+		(void)flags;
+		return (uint16*)impl11::lockBuffer11(indexBuffer, offset, size);
+	}
+#endif
 #ifdef RW_D3D9
-	uint16 *indices;
-	IDirect3DIndexBuffer9 *ibuf = (IDirect3DIndexBuffer9*)indexBuffer;
-	ibuf->Lock(offset, size, (void**)&indices, flags);
-	return indices;
-#elif defined(RW_D3D11)
-	(void)flags;
-	return (uint16*)lockBuffer11(indexBuffer, offset, size);
-#else
+	if(RWD3D_IS9){
+		uint16 *indices;
+		IDirect3DIndexBuffer9 *ibuf = (IDirect3DIndexBuffer9*)indexBuffer;
+		ibuf->Lock(offset, size, (void**)&indices, flags);
+		return indices;
+	}
+#endif
 	(void)offset;
 	(void)size;
 	(void)flags;
 	return (uint16*)indexBuffer;
-#endif
 }
 
 void
@@ -147,49 +175,65 @@ unlockIndices(void *indexBuffer)
 {
 	if(indexBuffer == nil)
 		return;
+#ifdef RW_D3D11
+	if(RWD3D_IS11){
+		impl11::unlockBuffer11(indexBuffer);
+	}
+#endif
 #ifdef RW_D3D9
-	IDirect3DIndexBuffer9 *ibuf = (IDirect3DIndexBuffer9*)indexBuffer;
-	ibuf->Unlock();
-#elif defined(RW_D3D11)
-	unlockBuffer11(indexBuffer);
+	if(RWD3D_IS9){
+		IDirect3DIndexBuffer9 *ibuf = (IDirect3DIndexBuffer9*)indexBuffer;
+		ibuf->Unlock();
+	}
 #endif
 }
 
 void*
 createVertexBuffer(uint32 length, uint32 fvf, bool dynamic)
 {
+#ifdef RW_D3D11
+	if(RWD3D_IS11){
+		(void)fvf;
+		return impl11::createVertexBuffer11(length, dynamic);
+	}
+#endif
 #ifdef RW_D3D9
-	IDirect3DVertexBuffer9 *vbuf;
-	if(dynamic)
-		d3ddevice->CreateVertexBuffer(length, D3DUSAGE_WRITEONLY|D3DUSAGE_DYNAMIC, fvf, D3DPOOL_DEFAULT, &vbuf, 0);
-	else
-		d3ddevice->CreateVertexBuffer(length, D3DUSAGE_WRITEONLY, fvf, D3DPOOL_MANAGED, &vbuf, 0);
-	if(vbuf)
-		d3d9Globals.numVertexBuffers++;
-	return vbuf;
-#elif defined(RW_D3D11)
-	(void)fvf;
-	return createVertexBuffer11(length, dynamic);
-#else
+	if(RWD3D_IS9){
+		IDirect3DVertexBuffer9 *vbuf;
+		if(dynamic)
+			d3ddevice->CreateVertexBuffer(length, D3DUSAGE_WRITEONLY|D3DUSAGE_DYNAMIC, fvf, D3DPOOL_DEFAULT, &vbuf, 0);
+		else
+			d3ddevice->CreateVertexBuffer(length, D3DUSAGE_WRITEONLY, fvf, D3DPOOL_MANAGED, &vbuf, 0);
+		if(vbuf)
+			d3d9Globals.numVertexBuffers++;
+		return vbuf;
+	}
+#endif
 	(void)fvf;
 	return rwNewT(uint8, length, MEMDUR_EVENT | ID_DRIVER);
-#endif
 }
 
 void
 destroyVertexBuffer(void *vertexBuffer)
 {
-#ifdef RW_D3D9
-	if(vertexBuffer){
-		if(((IUnknown*)vertexBuffer)->Release() != 0)
-			printf("vertexBuffer wasn't destroyed\n");
-		d3d9Globals.numVertexBuffers--;
+#ifdef RW_D3D11
+	if(RWD3D_IS11){
+		impl11::destroyVertexBuffer11(vertexBuffer);
+		return;
 	}
-#elif defined(RW_D3D11)
-	destroyVertexBuffer11(vertexBuffer);
-#else
-	rwFree(vertexBuffer);
 #endif
+#ifdef RW_D3D9
+	if(RWD3D_IS9){
+		if(vertexBuffer){
+			if(((IUnknown*)vertexBuffer)->Release() != 0)
+				printf("vertexBuffer wasn't destroyed\n");
+			d3d9Globals.numVertexBuffers--;
+		}
+		return;
+	}
+#endif
+	// No device: createVertexBuffer handed out plain memory.
+	rwFree(vertexBuffer);
 }
 
 uint8*
@@ -197,20 +241,24 @@ lockVertices(void *vertexBuffer, uint32 offset, uint32 size, uint32 flags)
 {
 	if(vertexBuffer == nil)
 		return nil;
+#ifdef RW_D3D11
+	if(RWD3D_IS11){
+		(void)flags;
+		return impl11::lockBuffer11(vertexBuffer, offset, size);
+	}
+#endif
 #ifdef RW_D3D9
-	uint8 *verts;
-	IDirect3DVertexBuffer9 *vertbuf = (IDirect3DVertexBuffer9*)vertexBuffer;
-	vertbuf->Lock(offset, size, (void**)&verts, flags);
-	return verts;
-#elif defined(RW_D3D11)
-	(void)flags;
-	return lockBuffer11(vertexBuffer, offset, size);
-#else
+	if(RWD3D_IS9){
+		uint8 *verts;
+		IDirect3DVertexBuffer9 *vertbuf = (IDirect3DVertexBuffer9*)vertexBuffer;
+		vertbuf->Lock(offset, size, (void**)&verts, flags);
+		return verts;
+	}
+#endif
 	(void)offset;
 	(void)size;
 	(void)flags;
 	return (uint8*)vertexBuffer;
-#endif
 }
 
 void
@@ -218,11 +266,16 @@ unlockVertices(void *vertexBuffer)
 {
 	if(vertexBuffer == nil)
 		return;
+#ifdef RW_D3D11
+	if(RWD3D_IS11){
+		impl11::unlockBuffer11(vertexBuffer);
+	}
+#endif
 #ifdef RW_D3D9
-	IDirect3DVertexBuffer9 *vertbuf = (IDirect3DVertexBuffer9*)vertexBuffer;
-	vertbuf->Unlock();
-#elif defined(RW_D3D11)
-	unlockBuffer11(vertexBuffer);
+	if(RWD3D_IS9){
+		IDirect3DVertexBuffer9 *vertbuf = (IDirect3DVertexBuffer9*)vertexBuffer;
+		vertbuf->Unlock();
+	}
 #endif
 }
 
@@ -230,13 +283,17 @@ void*
 createTexture(int32 width, int32 height, int32 numlevels, uint32 usage, uint32 format)
 {
 #ifdef RW_D3D9
-	IDirect3DTexture9 *tex;
-	d3ddevice->CreateTexture(width, height, numlevels, usage,
-	                      (D3DFORMAT)format, D3DPOOL_MANAGED, &tex, nil);
-	if(tex)
-		d3d9Globals.numTextures++;
-	return tex;
-#else
+	if(RWD3D_IS9){
+		IDirect3DTexture9 *tex;
+		d3ddevice->CreateTexture(width, height, numlevels, usage,
+		                      (D3DFORMAT)format, D3DPOOL_MANAGED, &tex, nil);
+		if(tex)
+			d3d9Globals.numTextures++;
+		return tex;
+	}
+#endif
+	// The system-memory copy, which is what D3D11 uploads from and what a
+	// build with no device keeps instead of a texture.
 	int32 w = width;
 	int32 h = height;
 	int32 size = 0;
@@ -267,26 +324,41 @@ createTexture(int32 width, int32 height, int32 numlevels, uint32 usage, uint32 f
 		if(h == 0) h = 1;
 	}
 	return levels;
-#endif
 }
 
 void
 destroyTexture(void *texture)
 {
 #ifdef RW_D3D9
-	if(texture){
-		if(((IUnknown*)texture)->Release() != 0)
-			printf("texture wasn't destroyed\n");
-		d3d9Globals.numTextures--;
+	if(RWD3D_IS9){
+		if(texture){
+			if(((IUnknown*)texture)->Release() != 0)
+				printf("texture wasn't destroyed\n");
+			d3d9Globals.numTextures--;
+		}
+		return;
 	}
-#else
-	rwFree(texture);
 #endif
+	rwFree(texture);
 }
 
 // Native Raster
 
 int32 nativeRasterOffset;
+
+// D3D9's raster creators are the file-scope ones below; D3D11's are in
+// d3d11raster.cpp, inside impl11. Macros rather than calls because only the
+// backends the build carries have one at all.
+#ifdef RW_D3D9
+#define RWD3D_CREATE9(f, r) f(r)
+#else
+#define RWD3D_CREATE9(f, r) nil
+#endif
+#ifdef RW_D3D11
+#define RWD3D_CREATE11(f, r) impl11::f(r)
+#else
+#define RWD3D_CREATE11(f, r) nil
+#endif
 
 struct RasterFormatInfo
 {
@@ -385,40 +457,50 @@ rasterSetFormat(Raster *raster)
 			raster->format = Raster::C8888;
 			break;
 
-#ifdef RW_D3D9
+#if defined(RW_D3D9) || defined(RW_D3D11)
+		// One set of cases whichever backend is running: two would be two
+		// labels for the same value in a build that carries both. D3D11's
+		// answers are fixed rather than asked of the device, because its swap
+		// chain is created 8888 and its depth buffer D24S8.
 		case Raster::ZBUFFER:
-			// TODO: allow other formats
-			raster->format = findFormatInfoD3D(d3d9Globals.present.AutoDepthStencilFormat)->rwFormat;
-			// can this even happen? just do something...
-			if(raster->format == 0)
-				raster->format = Raster::D32;
+#ifdef RW_D3D9
+			if(RWD3D_IS9){
+				// TODO: allow other formats
+				raster->format = findFormatInfoD3D(d3d9Globals.present.AutoDepthStencilFormat)->rwFormat;
+				// can this even happen? just do something...
+				if(raster->format == 0)
+					raster->format = Raster::D32;
+				break;
+			}
+#endif
+			raster->format = Raster::D32;
 			break;
 
 		case Raster::CAMERATEXTURE:
+#ifdef RW_D3D9
+			if(RWD3D_IS9){
 // let's not use this because we apparently don't want alpha
-//			raster->format = findFormatInfoD3D(d3d9Globals.present.BackBufferFormat)->rwFormat;
-			raster->format = findFormatInfoD3D(d3d9Globals.startMode.mode.Format)->rwFormat;
-			// can this even happen? just do something...
-			if(raster->format == 0)
-				raster->format = Raster::C888;
-			break;
-		case Raster::CAMERA:
-			raster->format = findFormatInfoD3D(d3d9Globals.present.BackBufferFormat)->rwFormat;
-			// can this even happen? just do something...
-			if(raster->format == 0)
-				raster->format = Raster::C8888;
-			break;
+//				raster->format = findFormatInfoD3D(d3d9Globals.present.BackBufferFormat)->rwFormat;
+				raster->format = findFormatInfoD3D(d3d9Globals.startMode.mode.Format)->rwFormat;
+				// can this even happen? just do something...
+				if(raster->format == 0)
+					raster->format = Raster::C888;
+				break;
+			}
 #endif
-#ifdef RW_D3D11
-		// Fixed rather than asked of the device. The swap chain is created
-		// 8888 and the depth buffer D24S8, so there is nothing to query.
-		case Raster::ZBUFFER:
-			raster->format = Raster::D32;
-			break;
-		case Raster::CAMERATEXTURE:
 			raster->format = Raster::C888;
 			break;
+
 		case Raster::CAMERA:
+#ifdef RW_D3D9
+			if(RWD3D_IS9){
+				raster->format = findFormatInfoD3D(d3d9Globals.present.BackBufferFormat)->rwFormat;
+				// can this even happen? just do something...
+				if(raster->format == 0)
+					raster->format = Raster::C8888;
+				break;
+			}
+#endif
 			raster->format = Raster::C8888;
 			break;
 #endif
@@ -577,14 +659,19 @@ rasterCreate(Raster *raster)
 		break;
 
 #if defined(RW_D3D9) || defined(RW_D3D11)
+	// The three that need a device. D3D9's are the file-scope ones below;
+	// D3D11's are in d3d11raster.cpp, one namespace deeper.
 	case Raster::CAMERATEXTURE:
-		ret = rasterCreateCameraTexture(raster);
+		ret = RWD3D_IS11 ? RWD3D_CREATE11(rasterCreateCameraTexture, raster)
+		                 : RWD3D_CREATE9(rasterCreateCameraTexture, raster);
 		break;
 	case Raster::ZBUFFER:
-		ret = rasterCreateZbuffer(raster);
+		ret = RWD3D_IS11 ? RWD3D_CREATE11(rasterCreateZbuffer, raster)
+		                 : RWD3D_CREATE9(rasterCreateZbuffer, raster);
 		break;
 	case Raster::CAMERA:
-		ret = rasterCreateCamera(raster);
+		ret = RWD3D_IS11 ? RWD3D_CREATE11(rasterCreateCamera, raster)
+		                 : RWD3D_CREATE9(rasterCreateCamera, raster);
 		break;
 #endif
 
@@ -611,6 +698,7 @@ rasterLock(Raster *raster, int32 level, int32 lockMode)
 		return nil;
 
 #ifdef RW_D3D9
+	if(RWD3D_IS9){
 	DWORD flags = D3DLOCK_NOSYSLOCK;
 	if(lockMode & Raster::LOCKREAD)
 		flags |= D3DLOCK_READONLY | D3DLOCK_NO_DIRTY_UPDATE;
@@ -658,22 +746,27 @@ rasterLock(Raster *raster, int32 level, int32 lockMode)
 	raster->stride = lr.Pitch;
 	if(raster->width == 0) raster->width = 1;
 	if(raster->height == 0) raster->height = 1;
-#else
+	if(lockMode & Raster::LOCKREAD) raster->privateFlags |= Raster::PRIVATELOCK_READ;
+	if(lockMode & Raster::LOCKWRITE) raster->privateFlags |= Raster::PRIVATELOCK_WRITE;
+	return raster->pixels;
+	}
+#endif
 #ifdef RW_D3D11
-	if(raster->type == Raster::CAMERA || raster->type == Raster::CAMERATEXTURE){
-		if(rasterLockTarget(raster, level, lockMode) == nil)
+	if(RWD3D_IS11 && (raster->type == Raster::CAMERA || raster->type == Raster::CAMERATEXTURE)){
+		if(impl11::rasterLockTarget(raster, level, lockMode) == nil)
 			return nil;
 		if(lockMode & Raster::LOCKREAD) raster->privateFlags |= Raster::PRIVATELOCK_READ;
 		if(lockMode & Raster::LOCKWRITE) raster->privateFlags |= Raster::PRIVATELOCK_WRITE;
 		return raster->pixels;
 	}
 #endif
+	// The system-memory copy, which is what D3D11 locks for everything but a
+	// render target and what a build with no device locks for everything.
 	RasterLevels *levels = (RasterLevels*)natras->texture;
 	raster->pixels = levels->levels[level].data;
 	raster->width = levels->levels[level].width;
 	raster->height = levels->levels[level].height;
 	raster->stride = raster->width*natras->bpp;
-#endif
 	if(lockMode & Raster::LOCKREAD) raster->privateFlags |= Raster::PRIVATELOCK_READ;
 	if(lockMode & Raster::LOCKWRITE) raster->privateFlags |= Raster::PRIVATELOCK_WRITE;
 
@@ -683,19 +776,24 @@ rasterLock(Raster *raster, int32 level, int32 lockMode)
 void
 rasterUnlock(Raster *raster, int32 level)
 {
-#if RW_D3D9
+#if defined(RW_D3D9) || defined(RW_D3D11)
 	D3dRaster *natras = GETD3DRASTEREXT(raster);
-	IDirect3DSurface9 *surf = (IDirect3DSurface9*)natras->lockedSurf;
-	surf->UnlockRect();
-	surf->Release();
-	natras->lockedSurf = nil;
+#endif
+#ifdef RW_D3D9
+	if(RWD3D_IS9){
+		IDirect3DSurface9 *surf = (IDirect3DSurface9*)natras->lockedSurf;
+		surf->UnlockRect();
+		surf->Release();
+		natras->lockedSurf = nil;
+	}
 #endif
 #ifdef RW_D3D11
-	D3dRaster *natras = GETD3DRASTEREXT(raster);
-	if(raster->type == Raster::CAMERA || raster->type == Raster::CAMERATEXTURE)
-		rasterUnlockTarget(raster);
-	else if(raster->privateFlags & Raster::PRIVATELOCK_WRITE)
-		natras->dirty = 1;
+	if(RWD3D_IS11){
+		if(raster->type == Raster::CAMERA || raster->type == Raster::CAMERATEXTURE)
+			impl11::rasterUnlockTarget(raster);
+		else if(raster->privateFlags & Raster::PRIVATELOCK_WRITE)
+			natras->dirty = 1;
+	}
 #endif
 	raster->width = raster->originalWidth;
 	raster->height = raster->originalHeight;
@@ -710,12 +808,13 @@ rasterNumLevels(Raster *raster)
 {
 	D3dRaster *natras = GETD3DRASTEREXT(raster);
 #ifdef RW_D3D9
-	IDirect3DTexture9 *tex = (IDirect3DTexture9*)natras->texture;
-	return tex->GetLevelCount();
-#else
+	if(RWD3D_IS9){
+		IDirect3DTexture9 *tex = (IDirect3DTexture9*)natras->texture;
+		return tex->GetLevelCount();
+	}
+#endif
 	RasterLevels *levels = (RasterLevels*)natras->texture;
 	return levels->numlevels;
-#endif
 }
 
 // Almost the same as ps2 and gl3 function
@@ -1025,14 +1124,15 @@ getLevelSize(Raster *raster, int32 level)
 {
 	D3dRaster *ras = GETD3DRASTEREXT(raster);
 #ifdef RW_D3D9
-	IDirect3DTexture9 *tex = (IDirect3DTexture9*)ras->texture;
-	D3DSURFACE_DESC desc;
-	tex->GetLevelDesc(level, &desc);
-	return calculateTextureSize(desc.Width, desc.Height, 1, desc.Format);
-#else
+	if(RWD3D_IS9){
+		IDirect3DTexture9 *tex = (IDirect3DTexture9*)ras->texture;
+		D3DSURFACE_DESC desc;
+		tex->GetLevelDesc(level, &desc);
+		return calculateTextureSize(desc.Width, desc.Height, 1, desc.Format);
+	}
+#endif
 	RasterLevels *levels = (RasterLevels*)ras->texture;
 	return levels->levels[level].size;
-#endif
 }
 
 void
@@ -1123,11 +1223,14 @@ destroyNativeRaster(void *object, int32 offset, int32)
 	Raster *raster = (Raster*)object;
 	D3dRaster *natras = PLUGINOFFSET(D3dRaster, raster, offset);
 #ifdef RW_D3D9
-	removeVidmemRaster(raster);
-	evictD3D9Raster(raster);
+	if(RWD3D_IS9){
+		removeVidmemRaster(raster);
+		evictD3D9Raster(raster);
+	}
 #endif
 #ifdef RW_D3D11
-	rasterDestroy(raster, natras);
+	if(RWD3D_IS11)
+		impl11::rasterDestroy(raster, natras);
 #endif
 	switch(raster->type){
 	case Raster::NORMAL:
@@ -1138,11 +1241,13 @@ destroyNativeRaster(void *object, int32 offset, int32)
 
 	case Raster::ZBUFFER:
 #ifdef RW_D3D9
-		if(raster->flags & Raster::DONTALLOCATE)
-			break;
-		if(natras->texture != d3d9Globals.defaultDepthSurf)
-			((IDirect3DSurface9*)natras->texture)->Release();
-		natras->texture = nil;
+		if(RWD3D_IS9){
+			if(raster->flags & Raster::DONTALLOCATE)
+				break;
+			if(natras->texture != d3d9Globals.defaultDepthSurf)
+				((IDirect3DSurface9*)natras->texture)->Release();
+			natras->texture = nil;
+		}
 #endif
 		break;
 	case Raster::CAMERA:

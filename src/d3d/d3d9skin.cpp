@@ -360,31 +360,75 @@ void
 createSkinShaders(void)
 {
 	{
-		static
-#include "skin_amb_VS.h"
-		skin_amb_VS = createVertexShader((void*)VS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/skin_amb_VS.h"
+			skin_amb_VS = createVertexShader((void*)g_vs20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/skin_amb_VS.h"
+			skin_amb_VS = createVertexShader((void*)g_main);
+		}
+#endif
 		assert(skin_amb_VS);
 	}
 	{
-		static
-#include "skin_amb_dir_VS.h"
-		skin_amb_dir_VS = createVertexShader((void*)VS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/skin_amb_dir_VS.h"
+			skin_amb_dir_VS = createVertexShader((void*)g_vs20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/skin_amb_dir_VS.h"
+			skin_amb_dir_VS = createVertexShader((void*)g_main);
+		}
+#endif
 		assert(skin_amb_dir_VS);
 	}
 	// Skinning takes a lot of instructions....lighting may be not possible
 	// TODO: should do something about this
 	{
-		static
-#include "skin_all_VS.h"
-		skin_all_VS = createVertexShader((void*)VS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/skin_all_VS.h"
+			skin_all_VS = createVertexShader((void*)g_vs20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/skin_all_VS.h"
+			skin_all_VS = createVertexShader((void*)g_main);
+		}
+#endif
 //		assert(skin_all_VS);
 	}
 	// This one has room the note above worries about: it does no lighting at
 	// all, only carrying the skinned normal out to the pixel shader.
 	{
-		static
-#include "skin_pp_VS.h"
-		skin_pp_VS = createVertexShader((void*)VS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/skin_pp_VS.h"
+			skin_pp_VS = createVertexShader((void*)g_vs20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/skin_pp_VS.h"
+			skin_pp_VS = createVertexShader((void*)g_main);
+		}
+#endif
 		assert(skin_pp_VS);
 	}
 }

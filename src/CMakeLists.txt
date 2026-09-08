@@ -57,6 +57,7 @@ add_library(librw
     d3d/d3d11shader.cpp
     d3d/d3d11state.cpp
     d3d/d3ddevice.cpp
+    d3d/d3ddispatch.cpp
     d3d/d3dimmed.cpp
     d3d/d3drender.cpp
     d3d/rwd3d8.h
@@ -106,14 +107,9 @@ add_library(librw
 )
 add_library(librw::librw ALIAS librw)
 
-# The compiled shader blobs. Both trees carry the same file names -- the SM2
-# ones for D3D9, the SM4 ones for D3D11 -- so which is on the include path is
-# what decides the model a build loads.
-if(LIBRW_PLATFORM_D3D11)
-    target_include_directories(librw PRIVATE d3d/shaders11)
-elseif(LIBRW_PLATFORM_D3D9 OR LIBRW_PLATFORM_D3D8)
-    target_include_directories(librw PRIVATE d3d/shaders)
-endif()
+# The compiled shader blobs are included by PATH -- shaders/ for the SM2 ones,
+# shaders11/ for the SM4 ones -- because a build can carry both backends and the
+# two trees use the same file names. Nothing to put on the include path.
 
 target_include_directories(librw
     INTERFACE

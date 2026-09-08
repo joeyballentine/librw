@@ -65,6 +65,11 @@ struct D3d9Globals
 	int numVertexDeclarations;
 };
 
+// D3D9's own, with no D3D11 counterpart. Declared where they are DEFINED --
+// inside the implementation -- and then named into the interface, which is what
+// keeps every call site reading rw::d3d::x. The types above stay in the
+// interface because both halves of the file need them.
+namespace impl9 {
 extern D3d9Globals d3d9Globals;
 
 void addVidmemRaster(Raster *raster);
@@ -79,6 +84,17 @@ void removeDynamicIB(IDirect3DIndexBuffer9 **buf);
 
 int findFormatDepth(uint32 format);
 void evictD3D9Raster(Raster *raster);
+}
+
+using impl9::d3d9Globals;
+using impl9::addVidmemRaster;
+using impl9::removeVidmemRaster;
+using impl9::addDynamicVB;
+using impl9::removeDynamicVB;
+using impl9::addDynamicIB;
+using impl9::removeDynamicIB;
+using impl9::findFormatDepth;
+using impl9::evictD3D9Raster;
 
 #endif
 

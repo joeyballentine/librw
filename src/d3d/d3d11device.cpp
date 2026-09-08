@@ -20,6 +20,18 @@
 namespace rw {
 namespace d3d {
 
+// The two device implementations live one namespace deeper than the interface
+// they implement, so that a build can carry both. rw::d3d is the interface --
+// the raster layer, the immediate mode and the pipelines are written against it
+// and are built once -- and d3ddispatch.cpp forwards each of its entry points
+// to whichever of these is running.
+//
+// A call in here that passes one of rw::d3d's enumerators has to name this
+// namespace: the enumerator's own namespace is rw::d3d, so argument-dependent
+// lookup adds the forwarder to the candidates beside the function meant, and
+// the two have the same signature.
+namespace impl11 {
+
 #ifdef RW_D3D11
 
 D3d11Globals d3d11Globals;
@@ -32,7 +44,6 @@ ID3D11DeviceContext *d3d11context;
 // the same one -- which is what the pipelines' declarations point at when a
 // geometry has no prelight, no texture coordinates or no normals.
 void *constantVertexStream;
-bool32 constantVertexColorWhite;
 
 // The fixed-size screen. Its contract is in rwd3d.h.
 //
@@ -501,12 +512,12 @@ initD3D11(void)
 
 	{
 		static
-#include "blit_VS.h"
+#include "shaders11/blit_VS.h"
 		blitVS = createVertexShader((void*)g_main);
 	}
 	{
 		static
-#include "blit_PS.h"
+#include "shaders11/blit_PS.h"
 		blitPS = createPixelShader((void*)g_main);
 	}
 
@@ -1197,24 +1208,25 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 
 Device renderdevice = {
 	0.0f, 1.0f,
-	d3d::beginUpdate,
-	d3d::endUpdate,
-	d3d::clearCamera,
-	d3d::showRaster,
-	d3d::rasterRenderFast,
-	d3d::setRwRenderState,
-	d3d::getRwRenderState,
-	d3d::im2DRenderLine,
-	d3d::im2DRenderTriangle,
-	d3d::im2DRenderPrimitive,
-	d3d::im2DRenderIndexedPrimitive,
-	d3d::im3DTransform,
-	d3d::im3DRenderPrimitive,
-	d3d::im3DRenderIndexedPrimitive,
-	d3d::im3DEnd,
-	d3d::deviceSystem,
+	beginUpdate,
+	endUpdate,
+	clearCamera,
+	showRaster,
+	rasterRenderFast,
+	setRwRenderState,
+	getRwRenderState,
+	im2DRenderLine,
+	im2DRenderTriangle,
+	im2DRenderPrimitive,
+	im2DRenderIndexedPrimitive,
+	im3DTransform,
+	im3DRenderPrimitive,
+	im3DRenderIndexedPrimitive,
+	im3DEnd,
+	deviceSystem,
 };
 
 #endif
+}
 }
 }

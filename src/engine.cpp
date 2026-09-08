@@ -278,7 +278,7 @@ Engine::open(EngineOpenParams *p)
 #endif
 #if defined(RW_D3D9) || defined(RW_D3D11)
 	case PLATFORM_D3D9:
-		engine->device = d3d::renderdevice;
+		engine->device = d3d::renderDevice();
 		break;
 #endif
 #ifdef RW_GL3

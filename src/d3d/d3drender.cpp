@@ -79,97 +79,262 @@ void
 createDefaultShaders(void)
 {
 	{
-		static
-#include "default_amb_VS.h"
-		default_amb_VS = createVertexShader((void*)VS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/default_amb_VS.h"
+			default_amb_VS = createVertexShader((void*)g_vs20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/default_amb_VS.h"
+			default_amb_VS = createVertexShader((void*)g_main);
+		}
+#endif
 		assert(default_amb_VS);
 	}
 	{
-		static
-#include "default_amb_dir_VS.h"
-		default_amb_dir_VS = createVertexShader((void*)VS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/default_amb_dir_VS.h"
+			default_amb_dir_VS = createVertexShader((void*)g_vs20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/default_amb_dir_VS.h"
+			default_amb_dir_VS = createVertexShader((void*)g_main);
+		}
+#endif
 		assert(default_amb_dir_VS);
 	}
 	{
-		static
-#include "default_all_VS.h"
-		default_all_VS = createVertexShader((void*)VS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/default_all_VS.h"
+			default_all_VS = createVertexShader((void*)g_vs20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/default_all_VS.h"
+			default_all_VS = createVertexShader((void*)g_main);
+		}
+#endif
 		assert(default_all_VS);
 	}
 
 	{
-		static
-#include "uvxform_amb_VS.h"
-		uvxform_amb_VS = createVertexShader((void*)VS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/uvxform_amb_VS.h"
+			uvxform_amb_VS = createVertexShader((void*)g_vs20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/uvxform_amb_VS.h"
+			uvxform_amb_VS = createVertexShader((void*)g_main);
+		}
+#endif
 		assert(uvxform_amb_VS);
 	}
 	{
-		static
-#include "uvxform_amb_dir_VS.h"
-		uvxform_amb_dir_VS = createVertexShader((void*)VS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/uvxform_amb_dir_VS.h"
+			uvxform_amb_dir_VS = createVertexShader((void*)g_vs20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/uvxform_amb_dir_VS.h"
+			uvxform_amb_dir_VS = createVertexShader((void*)g_main);
+		}
+#endif
 		assert(uvxform_amb_dir_VS);
 	}
 	{
-		static
-#include "uvxform_all_VS.h"
-		uvxform_all_VS = createVertexShader((void*)VS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/uvxform_all_VS.h"
+			uvxform_all_VS = createVertexShader((void*)g_vs20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/uvxform_all_VS.h"
+			uvxform_all_VS = createVertexShader((void*)g_main);
+		}
+#endif
 		assert(uvxform_all_VS);
 	}
 
 	{
-		static
-#include "default_pp_VS.h"
-		default_pp_VS = createVertexShader((void*)VS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/default_pp_VS.h"
+			default_pp_VS = createVertexShader((void*)g_vs20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/default_pp_VS.h"
+			default_pp_VS = createVertexShader((void*)g_main);
+		}
+#endif
 		assert(default_pp_VS);
 	}
 	{
-		static
-#include "uvxform_pp_VS.h"
-		uvxform_pp_VS = createVertexShader((void*)VS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/uvxform_pp_VS.h"
+			uvxform_pp_VS = createVertexShader((void*)g_vs20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/uvxform_pp_VS.h"
+			uvxform_pp_VS = createVertexShader((void*)g_main);
+		}
+#endif
 		assert(uvxform_pp_VS);
 	}
 
 	{
-		static
-#include "default_PS.h"
-		default_PS = createPixelShader((void*)PS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/default_PS.h"
+			default_PS = createPixelShader((void*)g_ps20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/default_PS.h"
+			default_PS = createPixelShader((void*)g_main);
+		}
+#endif
 		assert(default_PS);
 	}
 	{
-		static
-#include "default_tex_PS.h"
-		default_tex_PS = createPixelShader((void*)PS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/default_tex_PS.h"
+			default_tex_PS = createPixelShader((void*)g_ps20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/default_tex_PS.h"
+			default_tex_PS = createPixelShader((void*)g_main);
+		}
+#endif
 		assert(default_tex_PS);
 	}
 	{
-		static
-#include "default_pp_PS.h"
-		default_pp_PS = createPixelShader((void*)PS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/default_pp_PS.h"
+			default_pp_PS = createPixelShader((void*)g_ps20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/default_pp_PS.h"
+			default_pp_PS = createPixelShader((void*)g_main);
+		}
+#endif
 		assert(default_pp_PS);
 	}
 	{
-		static
-#include "default_tex_pp_PS.h"
-		default_tex_pp_PS = createPixelShader((void*)PS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/default_tex_pp_PS.h"
+			default_tex_pp_PS = createPixelShader((void*)g_ps20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/default_tex_pp_PS.h"
+			default_tex_pp_PS = createPixelShader((void*)g_main);
+		}
+#endif
 		assert(default_tex_pp_PS);
 	}
 
 	{
-		static
-#include "im2d_VS.h"
-		im2d_VS = createVertexShader((void*)VS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/im2d_VS.h"
+			im2d_VS = createVertexShader((void*)g_vs20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/im2d_VS.h"
+			im2d_VS = createVertexShader((void*)g_main);
+		}
+#endif
 		assert(im2d_VS);
 	}
 	{
-		static
-#include "im2d_PS.h"
-		im2d_PS = createPixelShader((void*)PS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/im2d_PS.h"
+			im2d_PS = createPixelShader((void*)g_ps20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/im2d_PS.h"
+			im2d_PS = createPixelShader((void*)g_main);
+		}
+#endif
 		assert(im2d_PS);
 	}
 	{
-		static
-#include "im2d_tex_PS.h"
-		im2d_tex_PS = createPixelShader((void*)PS_NAME);
+#ifdef RW_D3D9
+		if(RWD3D_IS9){
+			static
+#include "shaders/im2d_tex_PS.h"
+			im2d_tex_PS = createPixelShader((void*)g_ps20_main);
+		}
+#endif
+#ifdef RW_D3D11
+		if(RWD3D_IS11){
+			static
+#include "shaders11/im2d_tex_PS.h"
+			im2d_tex_PS = createPixelShader((void*)g_main);
+		}
+#endif
 		assert(im2d_tex_PS);
 	}
 }

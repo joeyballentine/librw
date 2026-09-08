@@ -19,6 +19,18 @@
 namespace rw {
 namespace d3d {
 
+// The two device implementations live one namespace deeper than the interface
+// they implement, so that a build can carry both. rw::d3d is the interface --
+// the raster layer, the immediate mode and the pipelines are written against it
+// and are built once -- and d3ddispatch.cpp forwards each of its entry points
+// to whichever of these is running.
+//
+// A call in here that passes one of rw::d3d's enumerators has to name this
+// namespace: the enumerator's own namespace is rw::d3d, so argument-dependent
+// lookup adds the forwarder to the candidates beside the function meant, and
+// the two have the same signature.
+namespace impl9 {
+
 #ifdef RW_D3D9
 
 D3d9Globals d3d9Globals;
@@ -152,10 +164,7 @@ struct RwStateCache {
 static RwStateCache rwStateCache;
 
 void *constantVertexStream;
-bool32 constantVertexColorWhite;
 static IDirect3DTexture9 *whiteTex;
-
-D3dShaderState d3dShaderState;
 
 #define MAXNUMSTATES (D3DRS_BLENDOPALPHA+1)
 #define MAXNUMTEXSTATES (D3DTSS_CONSTANT+1)
@@ -1797,7 +1806,7 @@ beginUpdate(Camera *cam)
 		d3d9Globals.present.BackBufferHeight = r.bottom;
 
 		releaseVideoMemory();
-		d3d::d3ddevice->Reset(&d3d9Globals.present);
+		d3ddevice->Reset(&d3d9Globals.present);
 		restoreVideoMemory();
 	}
 
@@ -1931,7 +1940,7 @@ showRaster(Raster *raster, uint32 flag)
 		// lost while being minimized, not reset once we're back
 		if(res == D3DERR_DEVICENOTRESET){
 			releaseVideoMemory();
-			d3d::d3ddevice->Reset(&d3d9Globals.present);
+			d3ddevice->Reset(&d3d9Globals.present);
 			restoreVideoMemory();
 		}
 	}
@@ -2184,9 +2193,9 @@ startD3D(void)
 //	d3d9Globals.present.PresentationInterval       = D3DPRESENT_INTERVAL_ONE;
 	d3d9Globals.present.PresentationInterval       = D3DPRESENT_INTERVAL_IMMEDIATE;
 
-	rw::d3d::isP8supported = 0;
+	isP8supported = 0;
 
-	assert(d3d::d3ddevice == nil);
+	assert(d3ddevice == nil);
 
 	BOOL icon = IsIconic(d3d9Globals.window);
 	IDirect3DDevice9 *dev;
@@ -2196,7 +2205,7 @@ startD3D(void)
 		RWERROR((ERR_GENERAL, "CreateDevice() failed"));
 		return 0;
 	}
-	d3d::d3ddevice = dev;
+	d3ddevice = dev;
 	return 1;
 }
 
@@ -2488,10 +2497,10 @@ termD3D(void)
 
 	releaseVideoMemory();
 
-	ULONG ref = d3d::d3ddevice->Release();
+	ULONG ref = d3ddevice->Release();
 	if(ref != 0)
 		printf("IDirect3D9Device_Release did not destroy\n");
-	d3d::d3ddevice = nil;
+	d3ddevice = nil;
 	return 1;
 }
 
@@ -2594,24 +2603,25 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 
 Device renderdevice = {
 	0.0f, 1.0f,
-	d3d::beginUpdate,
-	d3d::endUpdate,
-	d3d::clearCamera,
-	d3d::showRaster,
-	d3d::rasterRenderFast,
-	d3d::setRwRenderState,
-	d3d::getRwRenderState,
-	d3d::im2DRenderLine,
-	d3d::im2DRenderTriangle,
-	d3d::im2DRenderPrimitive,
-	d3d::im2DRenderIndexedPrimitive,
-	d3d::im3DTransform,
-	d3d::im3DRenderPrimitive,
-	d3d::im3DRenderIndexedPrimitive,
-	d3d::im3DEnd,
-	d3d::deviceSystem,
+	beginUpdate,
+	endUpdate,
+	clearCamera,
+	showRaster,
+	rasterRenderFast,
+	setRwRenderState,
+	getRwRenderState,
+	im2DRenderLine,
+	im2DRenderTriangle,
+	im2DRenderPrimitive,
+	im2DRenderIndexedPrimitive,
+	im3DTransform,
+	im3DRenderPrimitive,
+	im3DRenderIndexedPrimitive,
+	im3DEnd,
+	deviceSystem,
 };
 
 #endif
+}
 }
 }
