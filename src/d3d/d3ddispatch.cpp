@@ -10,6 +10,8 @@
 // being a setting rather than a build, and these are state setters that already
 // end in a driver call.
 
+#include <stddef.h>
+
 #define WITH_D3D
 #include "../rwbase.h"
 #include "../rwerror.h"
