@@ -889,6 +889,110 @@ copyVirtualScreen(Raster *dst)
 	return 1;
 }
 
+// --- the depth buffer, for looking at -----------------------------------
+//
+// A copy, for two reasons. The depth buffer is attached to the framebuffer
+// being drawn into, and sampling a texture attached to the current framebuffer
+// is undefined; and a multisampled depth buffer is a renderbuffer, which cannot
+// be sampled at all. One blit answers both.
+//
+// Kept here rather than handed out as a Raster because librw has no raster kind
+// for a sampleable depth texture, and inventing one for a debug view would be
+// the wrong way round.
+static uint32 depthCopyTex, depthCopyFbo;
+
+static bool32
+acquireDepthCopy(void)
+{
+	if(depthCopyFbo)
+		return 1;
+	// glDrawBuffer is desktop GL. GLES needs glDrawBuffers, and this is a
+	// debug path -- it says no rather than growing an arm for it.
+	if(gl3Caps.gles)
+		return 0;
+	if(virtualScreenWidth <= 0 || virtualScreenHeight <= 0)
+		return 0;
+
+	glGenTextures(1, &depthCopyTex);
+	uint32 prev = bindTexture(depthCopyTex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8,
+	             virtualScreenWidth, virtualScreenHeight, 0,
+	             GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nil);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	// Read as a value, not compared against one. A depth texture left in
+	// compare mode reads as zero through a plain sampler2D.
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+	bindTexture(prev);
+
+	glGenFramebuffers(1, &depthCopyFbo);
+	uint32 prevFbo = currentFramebuffer;
+	bindFramebuffer(depthCopyFbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+	                       GL_TEXTURE_2D, depthCopyTex, 0);
+	// No colour attachment, so say so; a framebuffer expecting one it has not
+	// got is incomplete.
+	glDrawBuffer(GL_NONE);
+	glReadBuffer(GL_NONE);
+	bool32 ok = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+	bindFramebuffer(prevFbo);
+
+	if(!ok){
+		glDeleteFramebuffers(1, &depthCopyFbo);
+		glDeleteTextures(1, &depthCopyTex);
+		depthCopyFbo = 0;
+		depthCopyTex = 0;
+		return 0;
+	}
+
+	return 1;
+}
+
+bool32
+bindVirtualScreenDepth(int32 stage)
+{
+	uint32 src = virtualScreenFramebuffer();
+	if(src == 0)
+		return 0;
+	if(!acquireDepthCopy())
+		return 0;
+
+	// Multisampled or not: a NEAREST depth blit from a multisampled read
+	// framebuffer resolves to one sample per pixel, which is the picture a
+	// debug view wants.
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, src);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, depthCopyFbo);
+	glDisable(GL_SCISSOR_TEST);
+	glBlitFramebuffer(0, 0, virtualScreenWidth, virtualScreenHeight,
+	                  0, 0, virtualScreenWidth, virtualScreenHeight,
+	                  GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+	glBindFramebuffer(GL_FRAMEBUFFER, currentFramebuffer);
+
+	// Round the raster cache, which tracks Rasters and has none for this. The
+	// stage is cleared first so the cache reads nil while the depth texture is
+	// bound, and unbindVirtualScreenDepth puts the white texture back -- a
+	// later setTexture(stage, nil) would be skipped as already-nil and would
+	// leave this bound.
+	setTexture(stage, nil);
+	setActiveTexture(stage);
+	bindTexture(depthCopyTex);
+	setActiveTexture(0);
+	return 1;
+}
+
+void
+unbindVirtualScreenDepth(int32 stage)
+{
+	if(depthCopyTex == 0)
+		return;
+
+	setActiveTexture(stage);
+	bindTexture(whitetex);
+	setActiveTexture(0);
+}
+
 void
 destroyVirtualScreen(void)
 {

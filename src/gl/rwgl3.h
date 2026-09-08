@@ -249,6 +249,13 @@ extern int32 virtualScreenWidth, virtualScreenHeight;
 // false has no picture and must fall back, not draw whatever was there before.
 bool32 copyVirtualScreen(Raster *dst);
 
+// The virtual screen's depth, copied into a texture and bound to a texture
+// stage so a shader can read it. For looking at what the depth test did;
+// nothing in a game needs it. False when there is no virtual screen, or on
+// GLES. Every call re-copies, so it is one blit per use.
+bool32 bindVirtualScreenDepth(int32 stage);
+void unbindVirtualScreenDepth(int32 stage);
+
 uint32 virtualScreenFramebuffer(void);
 uint32 virtualScreenTexture(void);
 // Where to read the frame, as against virtualScreenFramebuffer, which is where
