@@ -125,6 +125,167 @@ extern Shader *uvXformShader_fullLight, *uvXformShader_fullLight_noAT;
 // simple.frag with PERPIXEL, which needs lighting.frag ahead of it.
 extern Shader *defaultShader_pp, *defaultShader_pp_noAT;
 extern Shader *uvXformShader_pp, *uvXformShader_pp_noAT;
+// The caster pass: depth packed into an ordinary colour target. Paired with the
+// plain vertex shader, and with skin.vert's in gl3skin.cpp.
+extern Shader *depthShader, *depthShader_tex;
+// The inverted hull, drawn around a model before the model itself.
+extern Shader *outlineShader, *skinOutlineShader;
+
+// Draw atomics as depth rather than as a picture, for the shadow map's caster
+// pass. While this is on, the default and skin pipelines ignore lighting,
+// material colour and texture and write packed depth instead.
+//
+// Turn it off again before rendering anything the player sees.
+void setDepthPassEnabled(bool32 enable);
+bool32 getDepthPass(void);
+
+// What a receiver is tested with, all of it already in the map's own units so
+// the shader never has to know how deep the light volume is.
+//
+// `bias` is subtracted from the receiver's own depth before comparing, in the
+// 0..1 the map stores. `slopeBias` is added to it once per unit of tan of the
+// angle between the surface and the light, which is what one texel of the map
+// costs in depth as a surface tilts away. `texel` is one texel of the map in
+// texture coordinates, the spacing the filter taps at. `strength` is what a
+// fully shadowed pixel is multiplied by: 1 is no shadow, 0 is black.
+struct ShadowMapParams
+{
+	float32 bias;
+	float32 slopeBias;
+	float32 texel;
+	float32 strength;
+};
+
+// Hand the receivers a shadow map to test against, and the transform that puts
+// a world position into it. Set once a frame, after the caster pass; the
+// uniform registry replays it onto every shader that reads it.
+//
+// `matrix` is the light camera's projection times its view, in the same layout
+// the shaders take u_proj and u_view in -- so the receiver's lookup is built
+// from exactly what rasterised the casters.
+//
+// `lightDir` is where the light travels, from it towards what it lights. It is
+// what lets a receiver with a normal skip the test on a surface facing away
+// from the light -- which is not an optimisation but the cure for the acne that
+// storing back faces leaves behind -- and what the slope bias is measured
+// against.
+//
+// nil clears the map, as does clearShadowMap.
+void setShadowMap(Texture *tex, float32 *matrix, float32 *lightDir,
+                  const ShadowMapParams *params);
+void clearShadowMap(void);
+
+extern int32 u_shadowMatrix;
+extern int32 u_shadowParams;
+extern int32 u_shadowParams2;
+extern int32 u_shadowLightDir;
+extern int32 u_toonParams;
+extern int32 u_outlineColor;
+extern int32 u_outlineColor2;
+extern int32 u_toonLightDir;
+extern int32 u_outlineFlags;
+extern int32 u_toonRoomTint;
+extern int32 u_toonExtra;
+
+enum OutlineMode
+{
+	// No hull. The default, and what everything the application does not
+	// speak up about gets.
+	OUTLINE_NONE = 0,
+	// One ink over the whole model.
+	OUTLINE_PLAIN,
+	// Two, split by height -- see setOutlineLower.
+	OUTLINE_TWOTONE
+};
+
+// Light what is drawn next from a fixed direction of the application's
+// choosing rather than from the scene's lights, keeping their colour. For
+// characters, whose shading in a cartoon describes their shape and not the room
+// -- see u_toonLightDir in header.vert.
+// How many shades a character's colours are cut down to, keeping their hue. 0
+// leaves them alone.
+//
+// A character in the show is drawn flat and bounded; the world is not touched,
+// because a painted background does not want its colours rounded.
+void setToonFlatten(float32 colors);
+
+// The rest of the look, none of which is lighting.
+//
+//   wrap       how far the light term is carried round the far side, 0 for the
+//              plain lambert that collapses all of it into one value.
+//   rim        how bright an edge of light runs along the silhouette.
+//   rimEdge    how far round the silhouette that edge starts.
+//   occlusion  how far the colour baked into a model darkens its own shading.
+//   hardness   how far the shading normal is pulled back towards the face's
+//              own, undoing what welding the outline normals softened.
+//
+// Characters only, all of it, apart from the wrap.
+void setToonLook(float32 wrap, float32 rim, float32 rimEdge, float32 occlusion,
+                 float32 hardness);
+
+// Which of the stacked ramps the next draw is shaded with. Skin does not band
+// like sheet metal, and the strip holds a row for each.
+void setToonRampRow(int32 row);
+
+// Paint what is drawn next in the colour of the room, rather than in the
+// colour of the lights that happen to reach it. A level lights its world and
+// its objects with different rigs; a cartoon does not.
+//
+// This also says the next draw IS a character -- nothing else is ever given a
+// room -- which is what gates the flattening, the rim and the rest.
+void setToonRoomTint(float32 r, float32 g, float32 b);
+void clearToonRoomTint(void);
+
+void setToonLightDir(float32 x, float32 y, float32 z);
+void clearToonLightDir(void);
+
+// Whether what is drawn next gets an inverted hull around it, and with how many
+// inks. Set per draw by the application and cleared after; there is no way to
+// tell a character from a prop by looking at its geometry.
+void setOutlineMode(int32 mode);
+int32 getOutlineMode(void);
+
+// The ink and how far out the hull is pushed, in world units. Thickness 0 turns
+// the whole thing off whatever the mode says.
+void setOutline(float32 r, float32 g, float32 b, float32 thickness);
+
+// A second ink for the lower part of a model, and the object-space height
+// where the two meet. The renderer sets the height per atomic, because it
+// belongs to the model rather than to the setting; a height below every vertex
+// means one ink everywhere, which is the default.
+void setOutlineLower(float32 r, float32 g, float32 b);
+
+// Whether each ink is a colour in its own right or a scale applied to the
+// surface it surrounds. Scaled suits a character whose ink is a darker version
+// of himself, which is most of them; flat suits one whose is not.
+void setOutlineFlat(bool32 upper, bool32 lower);
+void setOutlineSplit(float32 y);
+
+// A floor under the hull's width, in world units per unit of view depth, so a
+// distant character keeps a line instead of losing it below a pixel. The
+// application works the number out; it needs the camera and the render size.
+void setOutlineMinWidth(float32 perDepth);
+
+// The strip of colour the light term looks up in place of being multiplied in
+// directly -- band count, widths and colours all live in the texture. nil
+// leaves the stage as it was.
+void setToonRamp(Texture *tex);
+
+// How much brighter than authored every light from a light kit burns. 1 is as
+// the level says. Applied on the way to the uniform, so nothing the
+// application owns is modified. Safe before the device exists.
+void setLightIntensity(float32 scale);
+float32 getLightIntensity(void);
+
+// Draw in the stylised look: the light cut into `bands` steps instead of a
+// smooth ramp, and colour pushed away from grey by `saturation` -- 1 leaves it
+// alone, above 1 pushes outward. Off until this is called.
+//
+// The banding is applied to the LIGHT and the saturation to the final colour,
+// which is the difference between a drawing and a posterised photograph.
+// `strength` dials the whole stylised shading against the plain lighting: 0 is
+// the game as it was, 1 is the full cartoon.
+void setToonShading(bool32 enable, float32 bands, float32 saturation, float32 strength);
 
 // Evaluate lighting per fragment rather than per vertex, in the default,
 // uvxform and skin pipelines. Directional lights only: an atomic reached by a
@@ -339,12 +500,24 @@ public:
 	void (*instanceCB)(Geometry *geo, InstanceDataHeader *header, bool32 reinstance);
 	void (*uninstanceCB)(Geometry *geo, InstanceDataHeader *header);
 	void (*renderCB)(Atomic *atomic, InstanceDataHeader *header);
+	// What to draw with instead while setDepthPassEnabled is on.
+	//
+	// A separate callback and not a branch inside renderCB, because the answer
+	// belongs to the pipeline: a skinned one has to move its vertices first, an
+	// env-mapped one has nothing to add to a depth value and uses the plain
+	// one. nil means this pipeline does not cast, which is a safe default -- a
+	// pipeline added later is left out of the shadow map rather than
+	// dereferencing a world the caster camera does not have.
+	void (*depthRenderCB)(Atomic *atomic, InstanceDataHeader *header);
 };
 
 void defaultInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance);
 void defaultUninstanceCB(Geometry *geo, InstanceDataHeader *header);
 void defaultRenderCB(Atomic *atomic, InstanceDataHeader *header);
 void uvTransformRenderCB(Atomic *atomic, InstanceDataHeader *header);
+// The caster pass for anything whose vertices are already where they belong.
+// The skin pipeline has its own; everything else uses this, matfx included.
+void defaultRenderDepthCB(Atomic *atomic, InstanceDataHeader *header);
 int32 lightingCB(Atomic *atomic);
 int32 lightingCB(void);
 
@@ -388,6 +561,10 @@ struct Gl3Raster
 
 	uint32 fbo;		// used for camera texture only!
 	Raster *fboMate;	// color or zbuffer raster mate of this one
+	// Whether the fbo above has been checked for completeness. Once is enough
+	// and once is all it can afford -- see setFrameBuffer, which explains why
+	// the check exists at all.
+	uint8 fboChecked;
 	RasterLevels *backingStore;	// if we can't read back GPU memory but have to
 };
 

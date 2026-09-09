@@ -49,6 +49,15 @@ uniform vec4 u_surfProps;
 // The same equation as DoDynamicLight's directional arm in header.vert. The two
 // have to stay identical or the setting changes more than where the maths
 // happens.
+// **The key direction and the room colour are not worked out here any more.**
+//
+// Both are per-draw quantities and neither depends on the normal, so looping
+// over eight lights in every pixel to find them was eight comparisons per
+// fragment for two numbers that do not change across the model. gl3device.cpp
+// resolves them in setLights, where the lights are already in hand, and the
+// shader reads u_toonLightDir and u_toonRoomTint. The D3D9 backend has always
+// done it that way because ps_2_0 has no loops; this is GL3 catching up.
+
 vec3 DoDynamicLightPP(vec3 N)
 {
 	vec3 color = vec3(0.0, 0.0, 0.0);
@@ -56,6 +65,9 @@ vec3 DoDynamicLightPP(vec3 N)
 		if(u_lightParams[i].x == 0.0)
 			break;
 		if(u_lightParams[i].x == 1.0){
+			// Plain, always. simple.frag builds the stylised shading on top
+			// of what this returns, and a ramp applied here as well would be
+			// a ramp applied twice.
 			float l = max(0.0, dot(N, -u_lightDirection[i].xyz));
 			color += l*u_lightColor[i].rgb;
 		}

@@ -1,4 +1,9 @@
-all: header_vs.inc header_fs.inc lighting_fs.inc im2d_gl.inc im3d_gl.inc default_vs_gl.inc simple_fs_gl.inc matfx_gl.inc skin_gl.inc skinmatfx_gl.inc
+all: header_vs.inc header_fs.inc lighting_fs.inc depth_fs.inc im2d_gl.inc im3d_gl.inc default_vs_gl.inc simple_fs_gl.inc matfx_gl.inc skin_gl.inc skinmatfx_gl.inc
+
+depth_fs.inc: depth.frag
+	(echo 'const char *depth_frag_src =';\
+	 sed 's/..*/"&\\n"/' depth.frag;\
+	 echo ';') >depth_fs.inc
 
 lighting_fs.inc: lighting.frag
 	(echo 'const char *lighting_frag_src =';\

@@ -172,6 +172,18 @@ renderCB_Shader(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 	bool32 perPixel = getPerPixelLighting() &&
 	                  (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT;
 
+	// The cel look stands where the per-pixel path does and needs the same
+	// vertex shader -- that is the one carrying a normal across. Unlike
+	// per-pixel it does not care how many lights there are, because it uses
+	// none of them: the direction and the room colour were resolved on the way
+	// to the uniform.
+	bool32 toon = getToonShading() && (vsBits & VSLIGHT_MASK) != 0;
+
+	if(toon)
+		perPixel = 1;
+
+	uploadToonConstants();
+
 	if((vsBits & VSLIGHT_MASK) == 0)
 		setVertexShader(uvXform ? uvxform_amb_VS : default_amb_VS);
 	else if(perPixel)
@@ -191,9 +203,11 @@ renderCB_Shader(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 
 		if(m->texture){
 			d3d::setTexture(0, m->texture);
-			setPixelShader(perPixel ? default_tex_pp_PS : default_tex_PS);
+			setPixelShader(toon ? default_tex_toon_PS :
+			               perPixel ? default_tex_pp_PS : default_tex_PS);
 		}else
-			setPixelShader(perPixel ? default_pp_PS : default_PS);
+			setPixelShader(toon ? default_toon_PS :
+			               perPixel ? default_pp_PS : default_PS);
 
 		drawInst(header, inst);
 		inst++;

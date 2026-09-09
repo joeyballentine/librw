@@ -34,6 +34,7 @@ void *skin_amb_VS;
 void *skin_amb_dir_VS;
 void *skin_all_VS;
 void *skin_pp_VS;
+void *skin_outline_VS;
 
 #define NUMDECLELT 14
 
@@ -327,6 +328,48 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 	bool32 perPixel = getPerPixelLighting() &&
 	                  (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT;
 
+	// As in d3d9render.cpp: the cel look stands where per-pixel does and uses
+	// the same vertex shader.
+	bool32 toon = getToonShading() && (vsBits & VSLIGHT_MASK) != 0;
+
+	if(toon)
+		perPixel = 1;
+
+	uploadToonConstants();
+
+	// The hull, before the model, so the model is drawn over the middle of it
+	// and only the band past the silhouette survives. Front faces culled:
+	// what is left of an inflated copy once the faces pointing at the camera
+	// are gone is its far side, which the real model then covers except at the
+	// edge.
+	int32 outline = getOutlineMode();
+
+	if(outline != OUTLINE_NONE){
+		uploadOutlineConstants();
+		setVertexShader(skin_outline_VS);
+		setPixelShader(outline_PS);
+		SetRenderState(CULLMODE, CULLFRONT);
+
+		InstanceData *oinst = header->inst;
+
+		for(uint32 i = 0; i < header->numMeshes; i++){
+			Material *om = oinst->material;
+
+			// Nothing see-through and nothing small enough to be a detail --
+			// the eyebrows and the teeth are scraps laid over the face, and a
+			// hull around a scrap is an ink border around the scrap.
+			if(!oinst->vertexAlpha && om->color.alpha == 255 &&
+			   oinst->numVertices*20 >= (int32)header->totalNumVertex){
+				d3d::setTexture(0, om->texture);
+				drawInst(header, oinst);
+			}
+
+			oinst++;
+		}
+
+		SetRenderState(CULLMODE, CULLBACK);
+	}
+
 	if((vsBits & VSLIGHT_MASK) == 0)
 		setVertexShader(skin_amb_VS);
 	else if(perPixel)
@@ -346,9 +389,11 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 
 		if(inst->material->texture){
 			d3d::setTexture(0, m->texture);
-			setPixelShader(perPixel ? default_tex_pp_PS : default_tex_PS);
+			setPixelShader(toon ? default_tex_toon_PS :
+			               perPixel ? default_tex_pp_PS : default_tex_PS);
 		}else
-			setPixelShader(perPixel ? default_pp_PS : default_PS);
+			setPixelShader(toon ? default_toon_PS :
+			               perPixel ? default_pp_PS : default_PS);
 
 		drawInst(header, inst);
 		inst++;
@@ -430,6 +475,12 @@ createSkinShaders(void)
 		}
 #endif
 		assert(skin_pp_VS);
+	}
+	{
+		static
+#include "shaders/skin_outline_VS.h"
+		skin_outline_VS = createVertexShader((void*)g_vs20_main);
+		assert(skin_outline_VS);
 	}
 }
 

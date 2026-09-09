@@ -139,6 +139,18 @@ int32 u_lightColor;
 
 int32 u_matColor;
 int32 u_surfProps;
+int32 u_shadowMatrix;
+int32 u_shadowParams;
+int32 u_shadowParams2;
+int32 u_shadowLightDir;
+int32 u_toonParams;
+int32 u_outlineColor;
+int32 u_outlineColor2;
+int32 u_toonLightDir;
+int32 u_outlineFlags;
+int32 u_toonRoomTint;
+int32 u_toonExtra;
+int32 u_toonExtra2;
 
 bool32 constantVertexColorWhite;
 
@@ -192,8 +204,358 @@ Shader *uvXformShader, *uvXformShader_noAT;
 Shader *uvXformShader_fullLight, *uvXformShader_fullLight_noAT;
 Shader *defaultShader_pp, *defaultShader_pp_noAT;
 Shader *uvXformShader_pp, *uvXformShader_pp_noAT;
+Shader *depthShader;
+Shader *outlineShader, *skinOutlineShader;
+Shader *depthShader_tex;
 
 static bool32 perPixelLighting;
+static bool32 depthPass;
+
+void
+setDepthPassEnabled(bool32 enable)
+{
+	depthPass = !!enable;
+}
+
+// The shadow map every receiver tests itself against, and the transform that
+// takes a world position into it.
+//
+// Set once a frame, not per draw. setUniform stores into a registry that
+// flushUniforms replays onto whichever shader is next used, so one call reaches
+// every program that reads it.
+//
+// The map goes to texture unit 2 because Shader::create binds tex0..tex3 to
+// units 0..3 by name, unit 0 is the material's own texture and unit 1 is
+// matfx's environment map.
+//
+// **Filtering must be nearest.** The map holds depth packed across three bytes,
+// and a linear filter would average the bytes of two unrelated depths and
+// produce a value that is neither. That is the price of packing rather than
+// using a depth texture, and it is why header.frag compares nine taps by hand
+// instead of asking the hardware for a filtered comparison.
+void
+setShadowMap(Texture *tex, float32 *matrix, float32 *lightDir, const ShadowMapParams *params)
+{
+	setTexture(2, tex);
+
+	setUniform(u_shadowMatrix, matrix);
+
+	float32 dir[4];
+	dir[0] = lightDir[0];
+	dir[1] = lightDir[1];
+	dir[2] = lightDir[2];
+	dir[3] = 0.0f;
+	setUniform(u_shadowLightDir, dir);
+
+	float32 p[4];
+	p[0] = tex ? 1.0f : 0.0f;
+	p[1] = params->bias;
+	p[2] = params->strength;
+	p[3] = params->slopeBias;
+	setUniform(u_shadowParams, p);
+
+	float32 p2[4];
+	p2[0] = params->texel;
+	p2[1] = 0.0f;
+	p2[2] = 0.0f;
+	p2[3] = 0.0f;
+	setUniform(u_shadowParams2, p2);
+}
+
+// The stylised look. Set once, and read by every shader that draws a lit
+// surface -- the world and the characters alike, because a cartoon that only
+// applied to one of them would look like a bug.
+//
+// **Held, not pushed, until the uniform exists.** The application sets this
+// beside setPerPixelLightingEnabled, which is before Engine::open, and until
+// open runs there is no uniform registry to write into -- u_toonParams is
+// still zero, and setUniform would happily write these four floats over
+// whichever uniform registered first. So the values are kept here and the
+// registration site pushes them; a call after the device is up pushes
+// immediately, as a caller would expect.
+// How much brighter than authored every light burns.
+//
+// The kits were lit for a television in 2003 and read dark on a modern
+// display, and there is nowhere else to put this: the colours come out of the
+// level's own assets, and scaling them there would mean writing to the asset.
+// Scaled on the way to the uniform instead, so nothing the game owns changes.
+//
+// The shader clamps after summing, so a scale that overshoots flattens the
+// brightest surfaces to white rather than wrapping.
+static float32 lightIntensity = 1.0f;
+
+void
+setLightIntensity(float32 scale)
+{
+	if(scale < 0.0f)
+		scale = 0.0f;
+
+	lightIntensity = scale;
+}
+
+float32
+getLightIntensity(void)
+{
+	return lightIntensity;
+}
+
+// Whether the uniform registry exists yet. Both setters below are called before
+// Engine::open, and until it runs there is nothing to write into -- see
+// setToonShading, which explains what happens if you try.
+static bool32 toonRegistered;
+
+// Whether each ink is a colour outright or a scale on the surface. See
+// u_outlineFlags.
+static float32 outlineFlags[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+// What colour it is in here. Either the room the scene handed over for a
+// character or, failing that, what setLights worked out from the lights
+// themselves -- so it always holds an answer and the shader never has to ask.
+//
+// **w is not the switch any more.** It was, back when an unset tint meant the
+// shader should go and sum the lights itself; now that nothing is unset, which
+// draws are characters is a separate fact and lives in u_toonExtra.z.
+static float32 toonRoomTint[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+// Whether the scene named the room for this draw. setLights leaves a named one
+// alone and fills in the rest.
+static bool32 toonRoomSet;
+
+// x how flat a character's colours are cut, y which ramp row he is drawn with,
+// z whether this draw is a character at all, w how far the light term is
+// wrapped round the far side. See u_toonExtra.
+static float32 toonExtra[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+// x rim strength, y where the rim starts, z how far the baked colour darkens
+// the lookup, w how hard the shading edges are. See u_toonExtra2.
+static float32 toonExtra2[4] = { 0.0f, 0.65f, 0.0f, 0.0f };
+
+static void
+pushToonExtra(void)
+{
+	if(toonRegistered){
+		setUniform(u_toonExtra, toonExtra);
+		setUniform(u_toonExtra2, toonExtra2);
+	}
+}
+
+void
+setToonFlatten(float32 colors)
+{
+	toonExtra[0] = colors;
+	pushToonExtra();
+}
+
+void
+setToonLook(float32 wrap, float32 rim, float32 rimEdge, float32 occlusion,
+            float32 hardness)
+{
+	toonExtra[3] = wrap;
+	toonExtra2[0] = rim;
+	toonExtra2[1] = rimEdge;
+	toonExtra2[2] = occlusion;
+	toonExtra2[3] = hardness;
+	pushToonExtra();
+}
+
+// Which of the stacked ramps this draw reads. Set per atomic by the game, and
+// meaningless to anything that is not drawing a character.
+void
+setToonRampRow(int32 row)
+{
+	toonExtra[1] = (float32)row;
+	pushToonExtra();
+}
+
+// The outline's colour, and its thickness in world units in alpha. Zero
+// thickness is how the pass is turned off -- see getOutline.
+static float32 outlineColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+// The second ink, and in alpha the object-space height below which it is used.
+// The height is set per atomic by the renderer, because it is a property of the
+// model rather than of the setting.
+static float32 outlineColor2[4] = { 0.0f, 0.0f, 0.0f, -1e30f };
+
+// Whether what is about to be drawn gets a hull at all, and whether it gets one
+// ink or two.
+//
+// **Set by the application, per draw, and off by default.** Deciding here from
+// what the geometry looks like was the first attempt -- anything skinned is a
+// character, near enough -- and it is not near enough: it outlines every
+// skinned prop, every cutscene stand-in and anything else that happens to have
+// bones. Only the game knows which atomic is a character and which character it
+// is, so only the game can say.
+static int32 outlineMode;
+
+// Where the light travels, in world space. Either the direction the game named
+// for a character -- his own front, or the camera -- or, failing that, the
+// brightest directional in the room, resolved by setLights. As with the room
+// colour, it always holds an answer.
+static float32 toonLightDir[4] = { 0.0f, -1.0f, 0.0f, 1.0f };
+
+// Whether the game named it for this draw.
+static bool32 toonLightDirSet;
+
+void
+setToonRoomTint(float32 r, float32 g, float32 b)
+{
+	toonRoomTint[0] = r;
+	toonRoomTint[1] = g;
+	toonRoomTint[2] = b;
+	toonRoomSet = 1;
+
+	// The scene only ever names a room for a character, so the same call says
+	// so. Everything that is wrong on a background -- the flattening, the rim,
+	// the baked occlusion, the hardened normals -- hangs off this.
+	toonExtra[2] = 1.0f;
+
+	if(toonRegistered)
+		setUniform(u_toonRoomTint, toonRoomTint);
+	pushToonExtra();
+}
+
+void
+clearToonRoomTint(void)
+{
+	toonRoomSet = 0;
+	toonExtra[2] = 0.0f;
+	pushToonExtra();
+}
+
+void
+setToonLightDir(float32 x, float32 y, float32 z)
+{
+	toonLightDir[0] = x;
+	toonLightDir[1] = y;
+	toonLightDir[2] = z;
+	toonLightDirSet = 1;
+
+	if(toonRegistered)
+		setUniform(u_toonLightDir, toonLightDir);
+}
+
+void
+clearToonLightDir(void)
+{
+	toonLightDirSet = 0;
+}
+
+void
+setOutlineMode(int32 mode)
+{
+	outlineMode = mode;
+}
+
+int32
+getOutlineMode(void)
+{
+	return outlineColor[3] > 0.0f ? outlineMode : OUTLINE_NONE;
+}
+
+void
+setOutlineFlat(bool32 upper, bool32 lower)
+{
+	outlineFlags[0] = upper ? 1.0f : 0.0f;
+	outlineFlags[1] = lower ? 1.0f : 0.0f;
+
+	if(toonRegistered)
+		setUniform(u_outlineFlags, outlineFlags);
+}
+
+// The floor under the hull's width, as world units per unit of view depth.
+//
+// The application works it out because the sum needs the camera's view window
+// and the size of the picture, and the renderer knows neither. See default.vert
+// for what the shader does with it.
+void
+setOutlineMinWidth(float32 perDepth)
+{
+	outlineFlags[2] = perDepth < 0.0f ? 0.0f : perDepth;
+
+	if(toonRegistered)
+		setUniform(u_outlineFlags, outlineFlags);
+}
+
+void
+setOutlineLower(float32 r, float32 g, float32 b)
+{
+	outlineColor2[0] = r;
+	outlineColor2[1] = g;
+	outlineColor2[2] = b;
+
+	if(toonRegistered)
+		setUniform(u_outlineColor2, outlineColor2);
+}
+
+// Where the two inks meet on this model, in object space.
+//
+// Below any vertex means one ink everywhere, which is what a model with no
+// second region wants -- and what every model but the player gets, since
+// nothing else has pants.
+void
+setOutlineSplit(float32 y)
+{
+	outlineColor2[3] = y;
+
+	if(toonRegistered)
+		setUniform(u_outlineColor2, outlineColor2);
+}
+
+void
+setOutline(float32 r, float32 g, float32 b, float32 thickness)
+{
+	if(thickness < 0.0f)
+		thickness = 0.0f;
+
+	outlineColor[0] = r;
+	outlineColor[1] = g;
+	outlineColor[2] = b;
+	outlineColor[3] = thickness;
+
+	if(toonRegistered)
+		setUniform(u_outlineColor, outlineColor);
+}
+
+// The colour strip the light term looks up. Bound to stage 3 and left there:
+// nothing else in the renderer uses that stage, so it survives every draw.
+void
+setToonRamp(Texture *tex)
+{
+	setTexture(3, tex);
+}
+
+static float32 toonParams[4] = { 0.0f, 3.0f, 1.0f, 0.0f };
+
+void
+setToonShading(bool32 enable, float32 bands, float32 saturation, float32 strength)
+{
+	// One band would leave a surface either fully lit or fully dark with
+	// nothing between, which is a silhouette rather than a drawing.
+	if(bands < 2.0f)
+		bands = 2.0f;
+
+	toonParams[0] = enable ? 1.0f : 0.0f;
+	toonParams[1] = bands;
+	toonParams[2] = saturation;
+	toonParams[3] = strength;
+
+	if(toonRegistered)
+		setUniform(u_toonParams, toonParams);
+}
+
+void
+clearShadowMap(void)
+{
+	float32 params[4] = { 0.0f, 0.0f, 1.0f, 0.0f };
+	setTexture(2, nil);
+	setUniform(u_shadowParams, params);
+}
+
+bool32
+getDepthPass(void)
+{
+	return depthPass;
+}
 
 void
 setPerPixelLightingEnabled(bool32 enable)
@@ -1559,7 +1921,10 @@ setLights(WorldLights *lightData)
 	Light *l;
 	int32 bits;
 
-	uniformObject.ambLight = lightData->ambient;
+	uniformObject.ambLight.red = lightData->ambient.red*lightIntensity;
+	uniformObject.ambLight.green = lightData->ambient.green*lightIntensity;
+	uniformObject.ambLight.blue = lightData->ambient.blue*lightIntensity;
+	uniformObject.ambLight.alpha = lightData->ambient.alpha;
 
 	bits = 0;
 
@@ -1570,7 +1935,10 @@ setLights(WorldLights *lightData)
 	for(i = 0; i < lightData->numDirectionals && i < 8; i++){
 		l = lightData->directionals[i];
 		uniformObject.lightParams[n].type = 1.0f;
-		uniformObject.lightColor[n] = l->color;
+		uniformObject.lightColor[n].red = l->color.red*lightIntensity;
+		uniformObject.lightColor[n].green = l->color.green*lightIntensity;
+		uniformObject.lightColor[n].blue = l->color.blue*lightIntensity;
+		uniformObject.lightColor[n].alpha = l->color.alpha;
 		memcpy(&uniformObject.lightDirection[n], &l->getFrame()->getLTM()->at, sizeof(V3d));
 		bits |= VSLIGHT_DIRECT;
 		n++;
@@ -1617,6 +1985,67 @@ setLights(WorldLights *lightData)
 	// put it in. A full array needs none: the loop runs out on its own.
 	uniformObject.lightParams[n].type = 0.0f;
 out:
+	// The two things the toon pixel shader would otherwise loop for.
+	//
+	// Neither depends on the normal, so neither varies across a model, and
+	// finding them per pixel was eight comparisons a fragment for two numbers
+	// that were already settled here. The key is the brightest directional. The
+	// room is every light summed as if the surface faced all of them at once --
+	// a meaningless quantity for lighting a surface and the right one for
+	// asking what colour it is in here -- scaled down to fit rather than
+	// clamped per channel, so Rock Bottom stays blue instead of clipping cyan.
+	//
+	// The D3D9 backend has always done it this way because ps_2_0 has neither
+	// loops nor branches. This is the same arithmetic, in the same place.
+	if(toonParams[0] != 0.0f){
+		float32 room[3];
+		float32 bestLum = -1.0f;
+
+		room[0] = uniformObject.ambLight.red;
+		room[1] = uniformObject.ambLight.green;
+		room[2] = uniformObject.ambLight.blue;
+
+		for(i = 0; i < lightData->numDirectionals && i < 8; i++){
+			l = lightData->directionals[i];
+
+			float32 r = l->color.red*lightIntensity;
+			float32 g = l->color.green*lightIntensity;
+			float32 b = l->color.blue*lightIntensity;
+
+			room[0] += r;
+			room[1] += g;
+			room[2] += b;
+
+			if(!toonLightDirSet && r + g + b > bestLum){
+				bestLum = r + g + b;
+				V3d *at = &l->getFrame()->getLTM()->at;
+				toonLightDir[0] = at->x;
+				toonLightDir[1] = at->y;
+				toonLightDir[2] = at->z;
+			}
+		}
+
+		if(!toonRoomSet){
+			float32 m = room[0];
+
+			if(room[1] > m) m = room[1];
+			if(room[2] > m) m = room[2];
+
+			if(m > 1.0f){
+				room[0] /= m;
+				room[1] /= m;
+				room[2] /= m;
+			}
+
+			toonRoomTint[0] = room[0] < 0.0f ? 0.0f : room[0];
+			toonRoomTint[1] = room[1] < 0.0f ? 0.0f : room[1];
+			toonRoomTint[2] = room[2] < 0.0f ? 0.0f : room[2];
+		}
+
+		setUniform(u_toonLightDir, toonLightDir);
+		setUniform(u_toonRoomTint, toonRoomTint);
+	}
+
 	// Reached by the gotos above as well, which is the point. They used to jump
 	// PAST these, so an atomic lit by exactly MAX_LIGHTS lights filled
 	// uniformObject and then uploaded none of it -- it drew with whatever the
@@ -1818,6 +2247,27 @@ setFrameBuffer(Camera *cam)
 		if(natfb->fboMate && natfb->fbo)
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
 		natfb->fboMate = nil;
+	}
+
+	// **Say so when a camera texture cannot be drawn into.**
+	//
+	// An incomplete framebuffer is not an error GL raises anywhere: draws
+	// aimed at it are discarded and the texture keeps whatever it held, so the
+	// symptom is a render target that reads as one flat colour and never
+	// changes however much is drawn. Nothing in that points at the target --
+	// it looks like the geometry, the transform or the shader, and all three
+	// can be ruled out at length before anyone suspects the framebuffer.
+	//
+	// Once per raster, and only when it is actually incomplete. A size the
+	// driver will not attach is the usual cause.
+	if(natfb->fbo && !natfb->fboChecked){
+		natfb->fboChecked = 1;
+		GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+		if(status != GL_FRAMEBUFFER_COMPLETE)
+			fprintf(stderr, "librw: camera texture %dx%d cannot be rendered into "
+			                "(framebuffer status 0x%x); everything drawn to it is "
+			                "discarded\n",
+			        fbuf->width, fbuf->height, (unsigned)status);
 	}
 }
 
@@ -2689,6 +3139,40 @@ initOpenGL(void)
 	u_matColor = registerUniform("u_matColor", UNIFORM_VEC4);
 	u_surfProps = registerUniform("u_surfProps", UNIFORM_VEC4);
 
+	// The shadow map's transform and its knobs. Registered whether or not
+	// anything uses them: a shader that does not mention a uniform gets -1 for
+	// its location and flushUniforms skips it, so this costs nothing until a
+	// shader reads it.
+	u_shadowMatrix = registerUniform("u_shadowMatrix", UNIFORM_MAT4);
+	u_shadowParams = registerUniform("u_shadowParams", UNIFORM_VEC4);
+	u_shadowParams2 = registerUniform("u_shadowParams2", UNIFORM_VEC4);
+	u_shadowLightDir = registerUniform("u_shadowLightDir", UNIFORM_VEC4);
+	u_toonParams = registerUniform("u_toonParams", UNIFORM_VEC4);
+	u_outlineColor = registerUniform("u_outlineColor", UNIFORM_VEC4);
+	u_outlineColor2 = registerUniform("u_outlineColor2", UNIFORM_VEC4);
+	u_toonLightDir = registerUniform("u_toonLightDir", UNIFORM_VEC4);
+	u_outlineFlags = registerUniform("u_outlineFlags", UNIFORM_VEC4);
+	u_toonRoomTint = registerUniform("u_toonRoomTint", UNIFORM_VEC4);
+	u_toonExtra = registerUniform("u_toonExtra", UNIFORM_VEC4);
+	u_toonExtra2 = registerUniform("u_toonExtra2", UNIFORM_VEC4);
+	toonRegistered = 1;
+
+	// **Every one of them, and only once there is somewhere to put them.**
+	//
+	// The setters above run before Engine::open -- they are settings, read at
+	// startup -- so each holds its value back and this is where the held values
+	// go in. Two of these used to be pushed here and the rest reached the
+	// shader by accident, through stray uploads in unrelated setters that fell
+	// outside their own guard; the accident is gone and so is what it covered.
+	setUniform(u_toonParams, toonParams);
+	setUniform(u_outlineColor, outlineColor);
+	setUniform(u_outlineColor2, outlineColor2);
+	setUniform(u_outlineFlags, outlineFlags);
+	setUniform(u_toonLightDir, toonLightDir);
+	setUniform(u_toonRoomTint, toonRoomTint);
+	setUniform(u_toonExtra, toonExtra);
+	setUniform(u_toonExtra2, toonExtra2);
+
 	// for im2d
 	registerUniform("u_xform", UNIFORM_VEC4);
 
@@ -2753,8 +3237,8 @@ initOpenGL(void)
 #include "shaders/lighting_fs.inc"
 	const char *vs[] = { shaderDecl, header_vert_src, default_vert_src, nil };
 	const char *vs_fullLight[] = { shaderDecl, "#define DIRECTIONALS\n#define POINTLIGHTS\n#define SPOTLIGHTS\n", header_vert_src, default_vert_src, nil };
-	const char *fs[] = { shaderDecl, header_frag_src, simple_frag_src, nil };
-	const char *fs_noAT[] = { shaderDecl, "#define NO_ALPHATEST\n", header_frag_src, simple_frag_src, nil };
+	const char *fs[] = { shaderDecl, "#define SHADOWRECEIVER\n", header_frag_src, simple_frag_src, nil };
+	const char *fs_noAT[] = { shaderDecl, "#define SHADOWRECEIVER\n", "#define NO_ALPHATEST\n", header_frag_src, simple_frag_src, nil };
 
 	defaultShader = Shader::create(vs, fs);
 	assert(defaultShader);
@@ -2788,8 +3272,8 @@ initOpenGL(void)
 	// byte for byte the source it was.
 	const char *vs_pp[] = { shaderDecl, "#define PERPIXEL\n", header_vert_src, default_vert_src, nil };
 	const char *vs_uv_pp[] = { shaderDecl, "#define PERPIXEL\n#define UVXFORM\n", header_vert_src, default_vert_src, nil };
-	const char *fs_pp[] = { shaderDecl, "#define PERPIXEL\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
-	const char *fs_pp_noAT[] = { shaderDecl, "#define PERPIXEL\n#define NO_ALPHATEST\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
+	const char *fs_pp[] = { shaderDecl, "#define SHADOWRECEIVER\n", "#define PERPIXEL\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
+	const char *fs_pp_noAT[] = { shaderDecl, "#define SHADOWRECEIVER\n", "#define PERPIXEL\n#define NO_ALPHATEST\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
 
 	defaultShader_pp = Shader::create(vs_pp, fs_pp);
 	assert(defaultShader_pp);
@@ -2800,6 +3284,37 @@ initOpenGL(void)
 	assert(uvXformShader_pp);
 	uvXformShader_pp_noAT = Shader::create(vs_uv_pp, fs_pp_noAT);
 	assert(uvXformShader_pp_noAT);
+
+	// The caster pass. The vertex shader is the plain one -- no light defines,
+	// no UV transform -- because depth.frag reads none of its outputs and a
+	// fragment shader may declare fewer inputs than the vertex stage writes.
+	// That is what lets one fragment shader serve both this and the skinned
+	// caster in gl3skin.cpp.
+	{
+#include "shaders/depth_fs.inc"
+		const char *fs_depth[] = { shaderDecl, header_frag_src, depth_frag_src, nil };
+		depthShader = Shader::create(vs, fs_depth);
+		assert(depthShader);
+
+		// The same again, reading the caster's texture so it can cut its own
+		// shape out of the alpha channel. A second program rather than a
+		// branch: most casters are solid and should not pay for a texture
+		// fetch they do not need.
+		const char *fs_depth_tex[] = { shaderDecl, "#define TEX\n", header_frag_src, depth_frag_src, nil };
+		depthShader_tex = Shader::create(vs, fs_depth_tex);
+		assert(depthShader_tex);
+
+		// The outline hull. Its own vertex shader because the inflation
+		// happens there, and the plain fragment shader because a flat colour
+		// needs nothing from the surface it is drawn around.
+#include "shaders/outline_fs.inc"
+		const char *vs_outline[] = { shaderDecl, "#define OUTLINE\n", header_vert_src, default_vert_src, nil };
+		// lighting.frag between the two, because the ink is lit and
+		// ToonRoomLight is where the light uniforms are declared.
+		const char *fs_outline[] = { shaderDecl, header_frag_src, lighting_frag_src, outline_frag_src, nil };
+		outlineShader = Shader::create(vs_outline, fs_outline);
+		assert(outlineShader);
+	}
 
 	openIm2D();
 	openIm3D();
@@ -2839,6 +3354,10 @@ termOpenGL(void)
 	uvXformShader_pp = nil;
 	uvXformShader_pp_noAT->destroy();
 	uvXformShader_pp_noAT = nil;
+	depthShader->destroy();
+	depthShader = nil;
+	depthShader_tex->destroy();
+	depthShader_tex = nil;
 
 	glDeleteTextures(1, &whitetex);
 	whitetex = 0;

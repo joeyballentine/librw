@@ -71,8 +71,22 @@ skinMatfxRender_Default(InstanceDataHeader *header, InstanceData *inst, int32 li
 	// once MatFX::enableEffects has put it here, so most of the meshes it sees
 	// have no effect on them at all -- including every mesh of every frame in
 	// which the game has turned the effects off again.
+	// The per-pixel and cel paths, which this pipeline never offered -- see
+	// d3d9matfx.cpp, where the same gap let every robot out of the cel look
+	// for being shiny.
+	bool32 perPixel = getPerPixelLighting() &&
+	                  (lightBits & VSLIGHT_MASK) == VSLIGHT_DIRECT;
+	bool32 toon = getToonShading() && (lightBits & VSLIGHT_MASK) != 0;
+
+	if(toon)
+		perPixel = 1;
+
+	uploadToonConstants();
+
 	if((lightBits & VSLIGHT_MASK) == 0)
 		setVertexShader(skin_amb_VS);
+	else if(perPixel)
+		setVertexShader(skin_pp_VS);
 	else if((lightBits & VSLIGHT_MASK) == VSLIGHT_DIRECT)
 		setVertexShader(skin_amb_dir_VS);
 	else
@@ -82,9 +96,11 @@ skinMatfxRender_Default(InstanceDataHeader *header, InstanceData *inst, int32 li
 
 	if(m->texture){
 		d3d::setTexture(0, m->texture);
-		setPixelShader(default_tex_PS);
+		setPixelShader(toon ? default_tex_toon_PS :
+		               perPixel ? default_tex_pp_PS : default_tex_PS);
 	}else
-		setPixelShader(default_PS);
+		setPixelShader(toon ? default_toon_PS :
+		               perPixel ? default_pp_PS : default_PS);
 
 	drawInst(header, inst);
 }
@@ -139,6 +155,34 @@ skinMatfxRenderCB(Atomic *atomic, InstanceDataHeader *header)
 	vsBits = lightingCB_Shader(atomic);
 	uploadMatrices(atomic->getFrame()->getLTM());
 	uploadSkinMatrices(atomic);
+
+	// The hull, exactly as d3d9skin.cpp draws it. A character does not stop
+	// being a character because one of his materials reflects.
+	int32 outline = getOutlineMode();
+
+	if(outline != OUTLINE_NONE){
+		uploadOutlineConstants();
+		setVertexShader(skin_outline_VS);
+		setPixelShader(outline_PS);
+		SetRenderState(CULLMODE, CULLFRONT);
+
+		InstanceData *oinst = header->inst;
+
+		for(uint32 i = 0; i < header->numMeshes; i++){
+			Material *om = oinst->material;
+
+			// Nothing see-through and nothing small enough to be a detail.
+			if(!oinst->vertexAlpha && om->color.alpha == 255 &&
+			   oinst->numVertices*20 >= (int32)header->totalNumVertex){
+				d3d::setTexture(0, om->texture);
+				drawInst(header, oinst);
+			}
+
+			oinst++;
+		}
+
+		SetRenderState(CULLMODE, CULLBACK);
+	}
 
 	// Without normals there is nothing to reflect, so the env map cannot be
 	// generated at all and the mesh falls back to plain skinning -- the same

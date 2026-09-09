@@ -31,6 +31,10 @@ Shader *skinShader, *skinShader_noAT;
 Shader *skinShader_fullLight, *skinShader_fullLight_noAT;
 // Skinning with the lighting left to the fragment shader.
 Shader *skinShader_pp, *skinShader_pp_noAT;
+// A skinned caster. Shares depth.frag with the unskinned one -- only the
+// vertex stage differs, and only because the bones do.
+Shader *skinDepthShader;
+Shader *skinDepthShader_tex;
 static int32 u_boneMatrices;
 
 void
@@ -253,6 +257,39 @@ uploadSkinMatrices(Atomic *a)
 	setUniform(u_boneMatrices, skinMatrices);
 }
 
+// The caster pass for a skinned atomic. The one thing it cannot share with
+// gl3render.cpp's is the bones: without them every vertex casts from its bind
+// pose, which is a shadow of a character standing still inside one that is not.
+//
+// No lightingCB here either -- see the comment on defaultRenderDepthCB.
+void
+skinRenderDepthCB(Atomic *atomic, InstanceDataHeader *header)
+{
+	setWorldMatrix(atomic->getFrame()->getLTM());
+	setupVertexInput(header);
+	uploadSkinMatrices(atomic);
+
+	InstanceData *inst = header->inst;
+	int32 n = header->numMeshes;
+	while(n--){
+		Material *m = inst->material;
+
+		// As in defaultRenderDepthCB: cast the shape the texture cuts, not
+		// the rectangle it was cut from, and let setTexture decide whether
+		// there is anything to cut.
+		if(m->texture){
+			setTexture(0, m->texture);
+			skinDepthShader_tex->use();
+		}else
+			skinDepthShader->use();
+
+		drawInst(header, inst);
+		inst++;
+	}
+
+	teardownVertexInput(header);
+}
+
 void
 skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 {
@@ -268,6 +305,65 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 	int32 n = header->numMeshes;
 
 	uploadSkinMatrices(atomic);
+
+	// The hull first, so the model is drawn over the middle of it and only the
+	// band that sticks out past the silhouette survives.
+	//
+	// Front faces culled: what is left of an inflated copy after removing the
+	// faces pointing at the camera is its far side, which the real model then
+	// covers except around the edge. Depth still written, so the band sorts
+	// against the scene like any other geometry.
+	int32 outline = getOutlineMode();
+
+	if(outline != OUTLINE_NONE){
+		SetRenderState(CULLMODE, CULLFRONT);
+		skinOutlineShader->use();
+
+		InstanceData *oinst = header->inst;
+		int32 on = header->numMeshes;
+
+		while(on--){
+			Material *om = oinst->material;
+
+			// **Nothing see-through gets a hull.**
+			//
+			// The eyebrows and the teeth are separate scraps of geometry laid
+			// over the face, and a hull around a scrap is a solid ink border
+			// around the scrap itself -- SpongeBob ends up with his eyebrows
+			// outlined, which no drawing of him has ever done. They are also
+			// the only things on his face drawn with alpha, so the alpha is
+			// what tells them apart from the head they sit on.
+			//
+			// It is the right rule regardless: an ink line is a statement that
+			// a surface ends here, and a surface you can see through does not.
+			// **And nothing small enough to be a detail.**
+			//
+			// The eyebrows and the teeth are separate scraps laid over the
+			// face, so a hull around one is an ink border around the scrap --
+			// SpongeBob with outlined eyebrows, which no drawing of him has.
+			// Being see-through was the first way to tell them from the head
+			// and it only caught some of them; being a tiny fraction of the
+			// model catches the rest. A face is thousands of vertices and an
+			// eyebrow is a handful.
+			//
+			// A twentieth of the model is well clear of a hand or a shoe and
+			// well above anything stuck on as decoration.
+			if(oinst->vertexAlpha || om->color.alpha != 255 ||
+			   oinst->numVertices*20 < (int32)header->totalNumVertex){
+				oinst++;
+				continue;
+			}
+
+			// The hull reads the material's texture to tint its own ink -- see
+			// outline.frag -- so it has to be bound here as well as in the
+			// pass that draws the model itself.
+			setTexture(0, om->texture);
+			drawInst(header, oinst);
+			oinst++;
+		}
+
+		SetRenderState(CULLMODE, CULLBACK);
+	}
 
 	while(n--){
 		m = inst->material;
@@ -322,8 +418,8 @@ skinOpen(void *o, int32, int32)
 #include "shaders/lighting_fs.inc"
 	const char *vs[] = { shaderDecl, header_vert_src, skin_vert_src, nil };
 	const char *vs_fullLight[] = { shaderDecl, "#define DIRECTIONALS\n#define POINTLIGHTS\n#define SPOTLIGHTS\n", header_vert_src, skin_vert_src, nil };
-	const char *fs[] = { shaderDecl, header_frag_src, simple_frag_src, nil };
-	const char *fs_noAT[] = { shaderDecl, "#define NO_ALPHATEST\n", header_frag_src, simple_frag_src, nil };
+	const char *fs[] = { shaderDecl, "#define SHADOWRECEIVER\n", header_frag_src, simple_frag_src, nil };
+	const char *fs_noAT[] = { shaderDecl, "#define SHADOWRECEIVER\n", "#define NO_ALPHATEST\n", header_frag_src, simple_frag_src, nil };
 
 	skinShader = Shader::create(vs, fs);
 	assert(skinShader);
@@ -338,13 +434,37 @@ skinOpen(void *o, int32, int32)
 	// Per-pixel. One vertex shader rather than two: it does no lighting, so
 	// there is nothing for DIRECTIONALS to switch on.
 	const char *vs_pp[] = { shaderDecl, "#define PERPIXEL\n", header_vert_src, skin_vert_src, nil };
-	const char *fs_pp[] = { shaderDecl, "#define PERPIXEL\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
-	const char *fs_pp_noAT[] = { shaderDecl, "#define PERPIXEL\n#define NO_ALPHATEST\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
+	const char *fs_pp[] = { shaderDecl, "#define SHADOWRECEIVER\n", "#define PERPIXEL\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
+	const char *fs_pp_noAT[] = { shaderDecl, "#define SHADOWRECEIVER\n", "#define PERPIXEL\n#define NO_ALPHATEST\n", header_frag_src, lighting_frag_src, simple_frag_src, nil };
 
 	skinShader_pp = Shader::create(vs_pp, fs_pp);
 	assert(skinShader_pp);
 	skinShader_pp_noAT = Shader::create(vs_pp, fs_pp_noAT);
 	assert(skinShader_pp_noAT);
+
+	// The skinned caster: skin.vert as it is, plus the shared depth shader.
+	{
+#include "shaders/depth_fs.inc"
+		const char *fs_depth[] = { shaderDecl, header_frag_src, depth_frag_src, nil };
+		skinDepthShader = Shader::create(vs, fs_depth);
+		assert(skinDepthShader);
+
+		// And the one that reads the caster's texture, so a skinned caster
+		// cuts its shape out of the alpha channel like anything else.
+		const char *fs_depth_tex[] = { shaderDecl, "#define TEX\n", header_frag_src, depth_frag_src, nil };
+		skinDepthShader_tex = Shader::create(vs, fs_depth_tex);
+		assert(skinDepthShader_tex);
+
+		// The skinned outline hull. Same fragment shader as the unskinned one
+		// -- a flat colour does not care how the vertex got where it is.
+#include "shaders/outline_fs.inc"
+		const char *vs_outline[] = { shaderDecl, "#define OUTLINE\n", header_vert_src, skin_vert_src, nil };
+		// lighting.frag between the two, because the ink is lit and
+		// ToonRoomLight is where the light uniforms are declared.
+		const char *fs_outline[] = { shaderDecl, header_frag_src, lighting_frag_src, outline_frag_src, nil };
+		skinOutlineShader = Shader::create(vs_outline, fs_outline);
+		assert(skinOutlineShader);
+	}
 
 	createSkinMatFXShaders();
 
@@ -378,6 +498,10 @@ skinClose(void *o, int32, int32)
 	skinShader_pp = nil;
 	skinShader_pp_noAT->destroy();
 	skinShader_pp_noAT = nil;
+	skinDepthShader->destroy();
+	skinDepthShader = nil;
+	skinDepthShader_tex->destroy();
+	skinDepthShader_tex = nil;
 
 	return o;
 }
@@ -401,6 +525,7 @@ makeSkinPipeline(void)
 	pipe->instanceCB = skinInstanceCB;
 	pipe->uninstanceCB = skinUninstanceCB;
 	pipe->renderCB = skinRenderCB;
+	pipe->depthRenderCB = skinRenderDepthCB;
 	pipe->pluginID = ID_SKIN;
 	pipe->pluginData = 1;
 	return pipe;

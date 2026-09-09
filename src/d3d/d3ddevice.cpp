@@ -1741,6 +1741,17 @@ beginUpdate(Camera *cam)
 	view[14] =  inv.pos.z;
 	view[15] =  1.0f;
 	memcpy(&cam->devView, view, sizeof(RawMatrix));
+
+	// Where the camera is, in world space, for the toon path's eye vector.
+	// Taken from the frame rather than from the matrix above, which has had its
+	// X flipped to make the view space left handed and is no longer the
+	// camera's position in any usable sense.
+	{
+		V3d *p = &cam->getFrame()->getLTM()->pos;
+		float32 campos[4] = { p->x, p->y, p->z, 1.0f };
+
+		d3ddevice->SetVertexShaderConstantF(VSLOC_toonCamPos, campos, 1);
+	}
 //	d3ddevice->SetTransform(D3DTS_VIEW, (D3DMATRIX*)view);
 
 	// Projection Matrix

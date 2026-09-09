@@ -146,6 +146,9 @@ extern void *skin_all_VS;
 // Skinning with the lighting left to the pixel shader. Pairs with the _pp_
 // pixel shaders in rwd3d.h, as the default pipeline's does.
 extern void *skin_pp_VS;
+// The skinned inverted hull. Beside its siblings, in this namespace, because
+// that is where d3d9skin.cpp defines it.
+extern void *skin_outline_VS;
 
 // Skin plugin, combined with MatFX
 

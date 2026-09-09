@@ -205,6 +205,48 @@ renderCB(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 	teardownVertexInput(header);
 }
 
+// The caster pass for a pipeline whose vertices need no moving. matfx shares
+// it: an environment map has nothing to contribute to a depth value.
+//
+// Deliberately does NOT call lightingCB. That reads engine->currentWorld, which
+// Camera::beginUpdate takes from the camera's own world, and a camera rendering
+// an offscreen target need not belong to one -- the shadow map's does not.
+// setWorldMatrix marks the uniform block dirty by itself, so nothing here
+// depends on having been through the lighting.
+void
+defaultRenderDepthCB(Atomic *atomic, InstanceDataHeader *header)
+{
+	setWorldMatrix(atomic->getFrame()->getLTM());
+	setupVertexInput(header);
+
+	InstanceData *inst = header->inst;
+	int32 n = header->numMeshes;
+	while(n--){
+		Material *m = inst->material;
+
+		// A caster that cuts its shape out of a texture has to cast that
+		// shape and not the rectangle it was cut from.
+		//
+		// Whether to actually cut is left to setTexture and the shader rather
+		// than decided here. setTexture reads the raster's own alpha kind and
+		// turns the test on or off from it; where it turns it off, u_alphaRef
+		// opens to a range nothing can fall outside and DoAlphaTest discards
+		// nothing. So an opaque texture costs one fetch and changes no pixel,
+		// and asking getAlphaTest() first would only ever read the state of
+		// the PREVIOUS mesh.
+		if(m->texture){
+			setTexture(0, m->texture);
+			depthShader_tex->use();
+		}else
+			depthShader->use();
+
+		drawInst(header, inst);
+		inst++;
+	}
+
+	teardownVertexInput(header);
+}
+
 void
 defaultRenderCB(Atomic *atomic, InstanceDataHeader *header)
 {
