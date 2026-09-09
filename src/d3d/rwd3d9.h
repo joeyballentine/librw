@@ -101,6 +101,9 @@ public:
 void defaultInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance);
 void defaultUninstanceCB(Geometry *geo, InstanceDataHeader *header);
 void defaultRenderCB_Fix(Atomic *atomic, InstanceDataHeader *header);
+// Whether the hull is drawn round one mesh. Shared so the static pipeline and
+// the two skinned ones cannot drift on what counts as see-through.
+bool32 outlineTakesMesh(InstanceDataHeader *header, InstanceData *inst);
 void defaultRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header);
 
 ObjPipeline *makeDefaultPipeline(void);

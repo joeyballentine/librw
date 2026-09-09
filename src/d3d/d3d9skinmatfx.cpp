@@ -169,12 +169,8 @@ skinMatfxRenderCB(Atomic *atomic, InstanceDataHeader *header)
 		InstanceData *oinst = header->inst;
 
 		for(uint32 i = 0; i < header->numMeshes; i++){
-			Material *om = oinst->material;
-
-			// Nothing see-through and nothing small enough to be a detail.
-			if(!oinst->vertexAlpha && om->color.alpha == 255 &&
-			   oinst->numVertices*20 >= (int32)header->totalNumVertex){
-				d3d::setTexture(0, om->texture);
+			if(outlineTakesMesh(header, oinst)){
+				d3d::setTexture(0, oinst->material->texture);
 				drawInst(header, oinst);
 			}
 

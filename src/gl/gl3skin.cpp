@@ -323,33 +323,7 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 		int32 on = header->numMeshes;
 
 		while(on--){
-			Material *om = oinst->material;
-
-			// **Nothing see-through gets a hull.**
-			//
-			// The eyebrows and the teeth are separate scraps of geometry laid
-			// over the face, and a hull around a scrap is a solid ink border
-			// around the scrap itself -- SpongeBob ends up with his eyebrows
-			// outlined, which no drawing of him has ever done. They are also
-			// the only things on his face drawn with alpha, so the alpha is
-			// what tells them apart from the head they sit on.
-			//
-			// It is the right rule regardless: an ink line is a statement that
-			// a surface ends here, and a surface you can see through does not.
-			// **And nothing small enough to be a detail.**
-			//
-			// The eyebrows and the teeth are separate scraps laid over the
-			// face, so a hull around one is an ink border around the scrap --
-			// SpongeBob with outlined eyebrows, which no drawing of him has.
-			// Being see-through was the first way to tell them from the head
-			// and it only caught some of them; being a tiny fraction of the
-			// model catches the rest. A face is thousands of vertices and an
-			// eyebrow is a handful.
-			//
-			// A twentieth of the model is well clear of a hand or a shoe and
-			// well above anything stuck on as decoration.
-			if(oinst->vertexAlpha || om->color.alpha != 255 ||
-			   oinst->numVertices*20 < (int32)header->totalNumVertex){
+			if(!outlineTakesMesh(header, oinst)){
 				oinst++;
 				continue;
 			}
@@ -357,7 +331,7 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 			// The hull reads the material's texture to tint its own ink -- see
 			// outline.frag -- so it has to be bound here as well as in the
 			// pass that draws the model itself.
-			setTexture(0, om->texture);
+			setTexture(0, oinst->material->texture);
 			drawInst(header, oinst);
 			oinst++;
 		}

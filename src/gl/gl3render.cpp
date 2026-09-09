@@ -144,6 +144,36 @@ lightingCB(void)
 }
 
 
+// Whether the hull is drawn round this mesh.
+//
+// **A hull is geometry, so it traces the shape a mesh is CUT from and not the
+// shape its texture leaves behind.** Round a plant's alpha card that is a
+// rectangle of ink with a plant inside it, which is the one way this effect
+// looks like a bug rather than a style. So anything see-through is left alone,
+// whether the transparency is in the vertices, the material or the texture. An
+// ink line is a statement that a surface ends here, and a surface you can see
+// through does not.
+//
+// **And nothing small enough to be a detail.** The eyebrows and the teeth are
+// separate scraps laid over the face, so a hull around one is an ink border
+// around the scrap -- SpongeBob with outlined eyebrows, which no drawing of him
+// has. A face is thousands of vertices and an eyebrow is a handful, and a
+// twentieth of the model is well clear of a hand or a shoe.
+bool32
+outlineTakesMesh(InstanceDataHeader *header, InstanceData *inst)
+{
+	Material *m = inst->material;
+
+	if(inst->vertexAlpha || m->color.alpha != 0xFF)
+		return 0;
+
+	if(m->texture && m->texture->raster &&
+	   GETGL3RASTEREXT(m->texture->raster)->hasAlpha)
+		return 0;
+
+	return inst->numVertices*20 >= (int32)header->totalNumVertex;
+}
+
 // The default pipeline's render, and the UV-transforming one's. They differ by
 // four shader programs and one uniform upload, so they are one function rather
 // than a copy that will drift.
@@ -164,6 +194,32 @@ renderCB(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 	// be worth comparing against.
 	if(uvXform)
 		setUniform(u_uvXform, uvTransform);
+
+	// The hull, before the model, so the model covers the middle of it and only
+	// the band past the silhouette survives. Front faces culled: what is left of
+	// an inflated copy once the faces pointing at the camera are gone is its far
+	// side. The same pass gl3skin.cpp draws, for everything that is not a
+	// character -- a tree is a static atomic and came through here.
+	if(getOutlineMode() != OUTLINE_NONE){
+		SetRenderState(CULLMODE, CULLFRONT);
+		outlineShader->use();
+
+		InstanceData *oinst = header->inst;
+		int32 on = header->numMeshes;
+
+		while(on--){
+			if(outlineTakesMesh(header, oinst)){
+				// The hull reads the material's texture to tint its own ink
+				// -- see outline.frag -- so it is bound here as well.
+				setTexture(0, oinst->material->texture);
+				drawInst(header, oinst);
+			}
+
+			oinst++;
+		}
+
+		SetRenderState(CULLMODE, CULLBACK);
+	}
 
 	InstanceData *inst = header->inst;
 	int32 n = header->numMeshes;

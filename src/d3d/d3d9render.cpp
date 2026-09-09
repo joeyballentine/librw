@@ -184,6 +184,34 @@ renderCB_Shader(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 
 	uploadToonConstants();
 
+	// The hull, before the model, so the model is drawn over the middle of it
+	// and only the band past the silhouette survives. Front faces culled: what
+	// is left of an inflated copy once the faces pointing at the camera are
+	// gone is its far side, which the real model then covers except at the
+	// edge. The same pass the skin pipeline draws, for everything that is not
+	// a character -- a tree is a static atomic and came through here.
+	int32 outline = getOutlineMode();
+
+	if(outline != OUTLINE_NONE){
+		uploadOutlineConstants();
+		setVertexShader(outline_VS);
+		setPixelShader(outline_PS);
+		SetRenderState(CULLMODE, CULLFRONT);
+
+		InstanceData *oinst = header->inst;
+
+		for(uint32 i = 0; i < header->numMeshes; i++){
+			if(outlineTakesMesh(header, oinst)){
+				d3d::setTexture(0, oinst->material->texture);
+				drawInst(header, oinst);
+			}
+
+			oinst++;
+		}
+
+		SetRenderState(CULLMODE, CULLBACK);
+	}
+
 	if((vsBits & VSLIGHT_MASK) == 0)
 		setVertexShader(uvXform ? uvxform_amb_VS : default_amb_VS);
 	else if(perPixel)
@@ -212,6 +240,32 @@ renderCB_Shader(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 		drawInst(header, inst);
 		inst++;
 	}
+}
+
+// Whether the hull is drawn round this mesh.
+//
+// **A hull is geometry, so it traces the shape a mesh is CUT from and not the
+// shape its texture leaves behind.** Round a plant's alpha card that is a
+// rectangle of ink with a plant inside it, which is the one way this effect
+// looks like a bug rather than a style. So anything see-through is left alone,
+// whether the transparency is in the vertices, the material or the texture.
+//
+// And nothing small enough to be a detail: the eyebrows and the teeth are
+// scraps laid over a face, and a hull around a scrap is an ink border around
+// the scrap.
+bool32
+outlineTakesMesh(InstanceDataHeader *header, InstanceData *inst)
+{
+	Material *m = inst->material;
+
+	if(inst->vertexAlpha || m->color.alpha != 255)
+		return 0;
+
+	if(m->texture && m->texture->raster &&
+	   GETD3DRASTEREXT(m->texture->raster)->hasAlpha)
+		return 0;
+
+	return inst->numVertices*20 >= (int32)header->totalNumVertex;
 }
 
 void

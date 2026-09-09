@@ -131,6 +131,10 @@ extern Shader *depthShader, *depthShader_tex;
 // The inverted hull, drawn around a model before the model itself.
 extern Shader *outlineShader, *skinOutlineShader;
 
+// Whether the hull is drawn round one mesh. Shared so the static pipeline and
+// the two skinned ones cannot drift on what counts as see-through.
+bool32 outlineTakesMesh(InstanceDataHeader *header, InstanceData *inst);
+
 // Draw atomics as depth rather than as a picture, for the shadow map's caster
 // pass. While this is on, the default and skin pipelines ignore lighting,
 // material colour and texture and write packed depth instead.
