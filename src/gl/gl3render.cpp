@@ -159,17 +159,31 @@ lightingCB(void)
 // around the scrap -- SpongeBob with outlined eyebrows, which no drawing of him
 // has. A face is thousands of vertices and an eyebrow is a handful, and a
 // twentieth of the model is well clear of a hand or a shoe.
+// Whether a see-through mesh may still be inked. Off by default, so a plant
+// card and a floor decal are left alone; the application turns it on around a
+// model it NAMED as a character, because a jellyfish and Bubble Buddy are
+// see-through by nature and are still the thing a line goes round.
+static bool32 outlineAlphaOK;
+
+void
+setOutlineAlpha(bool32 allow)
+{
+	outlineAlphaOK = !!allow;
+}
+
 bool32
 outlineTakesMesh(InstanceDataHeader *header, InstanceData *inst)
 {
 	Material *m = inst->material;
 
-	if(inst->vertexAlpha || m->color.alpha != 0xFF)
-		return 0;
+	if(!outlineAlphaOK){
+		if(inst->vertexAlpha || m->color.alpha != 0xFF)
+			return 0;
 
-	if(m->texture && m->texture->raster &&
-	   GETGL3RASTEREXT(m->texture->raster)->hasAlpha)
-		return 0;
+		if(m->texture && m->texture->raster &&
+		   GETGL3RASTEREXT(m->texture->raster)->hasAlpha)
+			return 0;
+	}
 
 	return inst->numVertices*20 >= (int32)header->totalNumVertex;
 }

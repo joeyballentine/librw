@@ -253,17 +253,31 @@ renderCB_Shader(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 // And nothing small enough to be a detail: the eyebrows and the teeth are
 // scraps laid over a face, and a hull around a scrap is an ink border around
 // the scrap.
+// Whether a see-through mesh may still be inked. Off by default, so a plant
+// card and a floor decal are left alone; the application turns it on around a
+// model it NAMED as a character, because a jellyfish and Bubble Buddy are
+// see-through by nature and are still the thing a line goes round.
+static bool32 outlineAlphaOK;
+
+void
+setOutlineAlpha(bool32 allow)
+{
+	outlineAlphaOK = !!allow;
+}
+
 bool32
 outlineTakesMesh(InstanceDataHeader *header, InstanceData *inst)
 {
 	Material *m = inst->material;
 
-	if(inst->vertexAlpha || m->color.alpha != 255)
-		return 0;
+	if(!outlineAlphaOK){
+		if(inst->vertexAlpha || m->color.alpha != 255)
+			return 0;
 
-	if(m->texture && m->texture->raster &&
-	   GETD3DRASTEREXT(m->texture->raster)->hasAlpha)
-		return 0;
+		if(m->texture && m->texture->raster &&
+		   GETD3DRASTEREXT(m->texture->raster)->hasAlpha)
+			return 0;
+	}
 
 	return inst->numVertices*20 >= (int32)header->totalNumVertex;
 }

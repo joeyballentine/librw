@@ -65,7 +65,12 @@ const char *outline_frag_src =
 "	// the far side is what the caster pass recorded -- every fragment facing\n"
 "	// away from the light would compare against its own record and break into\n"
 "	// stripes. Those fragments are returned lit instead.\n"
-"	vec4 color = vec4(ink*room*ShadowFactorV(v_shadowPos, v_shadowNdl), 1.0);\n"
+"	// **The ink is as see-through as the surface it goes round.**\n"
+"	//\n"
+"	// Bubble Buddy is a bubble: a solid line round a transparent character\n"
+"	// reads as a sticker on the glass. Taking the alpha from the texture and\n"
+"	// the vertex costs nothing on an opaque model, where both are one.\n"
+"	vec4 color = vec4(ink*room*ShadowFactorV(v_shadowPos, v_shadowNdl), tex.a*v_color.a);\n"
 
 "	// Into the fog like everything else. An outline that stayed black as the\n"
 "	// model behind it faded would draw a hard shape around a ghost.\n"

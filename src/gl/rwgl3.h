@@ -133,6 +133,7 @@ extern Shader *outlineShader, *skinOutlineShader;
 
 // Whether the hull is drawn round one mesh. Shared so the static pipeline and
 // the two skinned ones cannot drift on what counts as see-through.
+void setOutlineAlpha(bool32 allow);
 bool32 outlineTakesMesh(InstanceDataHeader *header, InstanceData *inst);
 
 // Draw atomics as depth rather than as a picture, for the shadow map's caster

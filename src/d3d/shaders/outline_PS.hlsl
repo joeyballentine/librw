@@ -28,7 +28,12 @@ float4 main(VS_out input) : COLOR
 	// Lit like everything else. A line that stayed the same colour while the
 	// surface it surrounds went blue reads as something laid over the scene
 	// rather than part of it.
-	float4 color = float4(ink*toonRoom.rgb, 1.0);
+	// **The ink is as see-through as the surface it goes round.**
+	//
+	// Bubble Buddy is a bubble: a solid line round a transparent character
+	// reads as a sticker on the glass. Taking the alpha from the texture and
+	// the vertex costs nothing on an opaque model, where both are one.
+	float4 color = float4(ink*toonRoom.rgb, tex.a*input.Color.a);
 
 	color.rgb = lerp(fogColor.rgb, color.rgb, input.TexCoord0.z);
 	return color;
