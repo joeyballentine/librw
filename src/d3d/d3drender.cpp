@@ -692,6 +692,15 @@ setOutlineMinWidth(float32 perDepth)
 	outlineFlags[2] = perDepth < 0.0f ? 0.0f : perDepth;
 }
 
+// The ceiling over it, the same units. Zero for none, which is what a hull with
+// no cap gets: it keeps one world width and swells on screen as the camera
+// closes.
+void
+setOutlineMaxWidth(float32 perDepth)
+{
+	outlineFlags[3] = perDepth < 0.0f ? 0.0f : perDepth;
+}
+
 void
 setToonRamp(Texture *tex)
 {

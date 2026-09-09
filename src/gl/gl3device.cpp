@@ -476,6 +476,18 @@ setOutlineMinWidth(float32 perDepth)
 		setUniform(u_outlineFlags, outlineFlags);
 }
 
+// The ceiling over it, the same units. Zero for none, which is what a hull with
+// no cap gets: it keeps one world width and swells on screen as the camera
+// closes.
+void
+setOutlineMaxWidth(float32 perDepth)
+{
+	outlineFlags[3] = perDepth < 0.0f ? 0.0f : perDepth;
+
+	if(toonRegistered)
+		setUniform(u_outlineFlags, outlineFlags);
+}
+
 void
 setOutlineLower(float32 r, float32 g, float32 b)
 {

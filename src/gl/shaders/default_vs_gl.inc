@@ -65,6 +65,15 @@ const char *default_vert_src =
 "	float thickness = max(u_outlineColor.a,\n"
 "	                      u_outlineFlags.z*max(clipBase.w, 1e-4));\n"
 
+
+"	// **And a ceiling in screen units, because a line that swells is worse.**\n"
+"	// A fixed world width grows without limit as the camera closes on a\n"
+"	// character, and a drawing's ink does not: it holds one weight whatever the\n"
+"	// shot. u_outlineFlags.w is that ceiling, divided through the same way as\n"
+"	// the floor. Zero means no ceiling.\n"
+"	if(u_outlineFlags.w > 0.0)\n"
+"		thickness = min(thickness, u_outlineFlags.w*max(clipBase.w, 1e-4));\n"
+
 "	Vertex.xyz += normalize(Normal)*thickness;\n"
 
 "	// The hull's own facing, for the shadow the ink takes. The normal is in\n"

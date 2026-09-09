@@ -63,6 +63,15 @@ main(void)
 	float thickness = max(u_outlineColor.a,
 	                      u_outlineFlags.z*max(clipBase.w, 1e-4));
 
+
+	// **And a ceiling in screen units, because a line that swells is worse.**
+	// A fixed world width grows without limit as the camera closes on a
+	// character, and a drawing's ink does not: it holds one weight whatever the
+	// shot. u_outlineFlags.w is that ceiling, divided through the same way as
+	// the floor. Zero means no ceiling.
+	if(u_outlineFlags.w > 0.0)
+		thickness = min(thickness, u_outlineFlags.w*max(clipBase.w, 1e-4));
+
 	Vertex.xyz += normalize(Normal)*thickness;
 
 	// The hull's own facing, for the shadow the ink takes. The normal is in

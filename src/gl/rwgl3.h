@@ -265,6 +265,7 @@ void setOutlineSplit(float32 y);
 // distant character keeps a line instead of losing it below a pixel. The
 // application works the number out; it needs the camera and the render size.
 void setOutlineMinWidth(float32 perDepth);
+void setOutlineMaxWidth(float32 perDepth);
 
 // The strip of colour the light term looks up in place of being multiplied in
 // directly -- band count, widths and colours all live in the texture. nil

@@ -112,6 +112,7 @@ void setToonRampRow(int32 row);
 // A floor under the hull's width, in world units per unit of view depth, so a
 // distant character keeps a line instead of losing it below a pixel.
 void setOutlineMinWidth(float32 perDepth);
+void setOutlineMaxWidth(float32 perDepth);
 void setToonRoomTint(float32 r, float32 g, float32 b);
 void clearToonRoomTint(void);
 void setToonLightDir(float32 x, float32 y, float32 z);

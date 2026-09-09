@@ -9,7 +9,7 @@
 // has already claimed.
 float4 outlineColor : register(c233);   // rgb ink or scale, a thickness
 float4 outlineColor2 : register(c234);  // rgb ink or scale, a split height
-float4 outlineFlags : register(c235);   // x upper flat, y lower flat, z min width
+float4 outlineFlags : register(c235);   // x upper flat, y lower flat, z min, w max
 #endif
 
 // Where the camera is, in world space. The pixel shader wants the vector from
@@ -86,6 +86,15 @@ VS_out main(in VS_in input)
 	float outlineW = mul(combinedMat, Local).w;
 	float thickness = max(outlineColor.a,
 	                      outlineFlags.z*max(outlineW, 1e-4));
+
+
+	// **And a ceiling in screen units, because a line that swells is worse.**
+	// A fixed world width grows without limit as the camera closes on a
+	// character, and a drawing's ink does not: it holds one weight whatever the
+	// shot. outlineFlags.w is that ceiling, divided through the same way as the
+	// floor. Zero means no ceiling.
+	if(outlineFlags.w > 0.0)
+		thickness = min(thickness, outlineFlags.w*max(outlineW, 1e-4));
 
 	Local.xyz += normalize(input.Normal)*thickness;
 
