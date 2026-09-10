@@ -305,7 +305,13 @@ uploadSkinMatrices(Atomic *a)
 		RawMatrix::transpose((RawMatrix*)m, (RawMatrix*)&bones[i]);
 		m += 12;
 	}
-	d3d::setVertexShaderConstantF(VSLOC_boneMatrices, skinMatrices, skin->numBones*3);
+
+	// **The count that was written, not the count the model claims.**
+	// computeSkinMatrices stops at MAXNUMSKINBONES; uploading skin->numBones
+	// instead sends whatever follows in the array, and past 64 bones it runs off
+	// the end of the register range the bones own -- straight over the outline
+	// constants, the eye position and the hull's direction at c233 to c237.
+	d3d::setVertexShaderConstantF(VSLOC_boneMatrices, skinMatrices, numBones*3);
 }
 
 void
