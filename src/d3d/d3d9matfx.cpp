@@ -167,6 +167,39 @@ matfxRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header)
 
 	bool normals = !!(atomic->geometry->flags & Geometry::NORMALS);
 
+	// **The hull, which this pipeline never drew.** A material effect says how
+	// a surface is shaded and nothing about whether a line goes round it, but
+	// only the plain and the skinned pipelines ever drew one, so anything with
+	// an environment map came out uninked. The shiny pickups are the case that
+	// shows it: solid objects, tagged for an outline like any other, and the
+	// one class of thing in a level with no line on it.
+	//
+	// The same pass as d3d9render.cpp's, for the same reasons; that is where
+	// the whole of it is explained.
+	if(getOutlineMode() != OUTLINE_NONE){
+
+		uploadOutlineConstants();
+		setVertexShader(outline_VS);
+		setPixelShader(outline_PS);
+
+		uint32 outlineCull = GetRenderState(CULLMODE);
+
+		SetRenderState(CULLMODE, getOutlineInverted() ? CULLBACK : CULLFRONT);
+
+		InstanceData *oinst = header->inst;
+
+		for(uint32 i = 0; i < header->numMeshes; i++){
+			if(outlineTakesMesh(header, oinst)){
+				d3d::setTexture(0, oinst->material->texture);
+				drawInst(header, oinst);
+			}
+
+			oinst++;
+		}
+
+		SetRenderState(CULLMODE, outlineCull);
+	}
+
 	InstanceData *inst = header->inst;
 	for(uint32 i = 0; i < header->numMeshes; i++){
 		Material *m = inst->material;

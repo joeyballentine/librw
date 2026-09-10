@@ -142,6 +142,30 @@ matfxRenderCB(Atomic *atomic, InstanceDataHeader *header)
 
 	setupVertexInput(header);
 
+	// The hull, which this pipeline never drew. d3d9matfx.cpp says why an
+	// environment map is no reason to go uninked, and gl3render.cpp has the
+	// pass itself.
+	if(getOutlineMode() != OUTLINE_NONE){
+		uint32 outlineCull = GetRenderState(CULLMODE);
+
+		SetRenderState(CULLMODE, getOutlineInverted() ? CULLBACK : CULLFRONT);
+		outlineShader->use();
+
+		InstanceData *oinst = header->inst;
+		int32 on = header->numMeshes;
+
+		while(on--){
+			if(outlineTakesMesh(header, oinst)){
+				setTexture(0, oinst->material->texture);
+				drawInst(header, oinst);
+			}
+
+			oinst++;
+		}
+
+		SetRenderState(CULLMODE, outlineCull);
+	}
+
 	InstanceData *inst = header->inst;
 	int32 n = header->numMeshes;
 

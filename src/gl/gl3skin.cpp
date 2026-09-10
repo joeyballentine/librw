@@ -316,6 +316,12 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 	int32 outline = getOutlineMode();
 
 	if(outline != OUTLINE_NONE){
+		// **Put back what was standing, not CULLBACK.** The application decides
+		// whether a model is drawn two-sided, and a hull that restores CULLBACK
+		// takes that away from the model's own pass: half of a shiny pickup, which
+		// the game draws with no culling at all, simply disappeared.
+		uint32 outlineCull = GetRenderState(CULLMODE);
+
 		SetRenderState(CULLMODE, getOutlineInverted() ? CULLBACK : CULLFRONT);
 		skinOutlineShader->use();
 
@@ -336,7 +342,7 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 			oinst++;
 		}
 
-		SetRenderState(CULLMODE, CULLBACK);
+		SetRenderState(CULLMODE, outlineCull);
 	}
 
 	while(n--){

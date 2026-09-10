@@ -193,11 +193,18 @@ renderCB_Shader(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 	int32 outline = getOutlineMode();
 
 	if(outline != OUTLINE_NONE){
+
 		uploadOutlineConstants();
 		setVertexShader(outline_VS);
 		setPixelShader(outline_PS);
 		// Or back faces, for a model wound inside out: its near side is the
 		// one pointing away, and the copy is pushed inward to match.
+		// **Put back what was standing, not CULLBACK.** The application decides
+		// whether a model is drawn two-sided, and a hull that restores CULLBACK
+		// takes that away from the model's own pass: half of a shiny pickup, which
+		// the game draws with no culling at all, simply disappeared.
+		uint32 outlineCull = GetRenderState(CULLMODE);
+
 		SetRenderState(CULLMODE, getOutlineInverted() ? CULLBACK : CULLFRONT);
 
 		InstanceData *oinst = header->inst;
@@ -211,7 +218,7 @@ renderCB_Shader(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 			oinst++;
 		}
 
-		SetRenderState(CULLMODE, CULLBACK);
+		SetRenderState(CULLMODE, outlineCull);
 	}
 
 	if((vsBits & VSLIGHT_MASK) == 0)

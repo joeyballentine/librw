@@ -164,6 +164,12 @@ skinMatfxRenderCB(Atomic *atomic, InstanceDataHeader *header)
 		uploadOutlineConstants();
 		setVertexShader(skin_outline_VS);
 		setPixelShader(outline_PS);
+		// **Put back what was standing, not CULLBACK.** The application decides
+		// whether a model is drawn two-sided, and a hull that restores CULLBACK
+		// takes that away from the model's own pass: half of a shiny pickup, which
+		// the game draws with no culling at all, simply disappeared.
+		uint32 outlineCull = GetRenderState(CULLMODE);
+
 		SetRenderState(CULLMODE, getOutlineInverted() ? CULLBACK : CULLFRONT);
 
 		InstanceData *oinst = header->inst;
@@ -177,7 +183,7 @@ skinMatfxRenderCB(Atomic *atomic, InstanceDataHeader *header)
 			oinst++;
 		}
 
-		SetRenderState(CULLMODE, CULLBACK);
+		SetRenderState(CULLMODE, outlineCull);
 	}
 
 	// Without normals there is nothing to reflect, so the env map cannot be
