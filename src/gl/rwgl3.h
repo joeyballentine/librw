@@ -267,6 +267,14 @@ void setOutlineFlat(bool32 upper, bool32 lower);
 // How much of the shade the application traced from its own models to take.
 void setToonModelShade(float32 amount);
 
+// The stretch on an ink that is a scale on the surface. outline.frag says what
+// each of the two does.
+void setOutlineInk(float32 saturation, float32 gamma);
+
+// How bright the room is, as a scale on the colour the lights resolve to. 1 is
+// the lights' own answer. gl3device.cpp says why they cannot answer it alone.
+void setToonRoomScale(float32 scale);
+
 void setOutlineSplit(float32 y);
 
 // Whether the next hull is drawn for a model wound inside out: inflated

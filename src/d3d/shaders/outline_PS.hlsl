@@ -12,6 +12,31 @@ struct VS_out {
 	float4 Outline		: TEXCOORD1;
 };
 
+// The stretch on a scaled ink: x how much colour it keeps, y a curve on its
+// brightness. c2, which no other pixel shader in this set declares -- and it is
+// uploaded immediately before the hull draws in any case.
+float4 outlineInk : register(c2);
+
+#define inkSaturation (outlineInk.x)
+#define inkGamma (outlineInk.y)
+
+// **A stretch, not a lift.** Multiplying the surface down gives an ink of the
+// right hue and a washed-out one: a scale holds saturation where it was and
+// takes brightness off everything, so a mid tone lands halfway to grey.
+//
+// Pushing the colour away from its own luminance puts the hue back, and a curve
+// under one lifts the middle without moving either end. Both leave a genuine
+// black alone -- there is no colour to push and no room to lift -- which is what
+// keeps an ink that was black black.
+float3 InkStretch(float3 c)
+{
+	float l = dot(c, float3(0.299, 0.587, 0.114));
+
+	c = saturate(lerp(l.xxx, c, inkSaturation));
+
+	return pow(c, inkGamma);
+}
+
 sampler2D tex0 : register(s0);
 
 float4 main(VS_out input) : COLOR
@@ -22,8 +47,11 @@ float4 main(VS_out input) : COLOR
 	// every character an ink on its own hue for nothing. Flat: a colour named
 	// outright, for a region whose ink is not a darker version of itself --
 	// SpongeBob's trousers are inked black whatever they are painted.
+	// The stretch goes on the scaled variety only. A flat ink was named
+	// outright, and a named colour is not something to second-guess.
 	float4 tex = tex2D(tex0, input.TexCoord0.xy);
-	float3 ink = lerp(tex.rgb*input.Outline.rgb, input.Outline.rgb, input.Outline.a);
+	float3 ink = lerp(InkStretch(tex.rgb*input.Outline.rgb), input.Outline.rgb,
+	                  input.Outline.a);
 
 	// Lit like everything else. A line that stayed the same colour while the
 	// surface it surrounds went blue reads as something laid over the scene

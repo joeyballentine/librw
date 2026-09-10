@@ -149,6 +149,7 @@ int32 u_outlineColor2;
 int32 u_toonLightDir;
 int32 u_outlineFlags;
 int32 u_outlineSign;
+int32 u_outlineInk;
 int32 u_toonRoomTint;
 int32 u_toonExtra;
 int32 u_toonExtra2;
@@ -311,6 +312,14 @@ static float32 outlineFlags[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
 // x is +1 for a hull pushed out of the surface, -1 for one pushed into it.
 static float32 outlineSign[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+
+// The stretch on a scaled ink: saturation, then a curve. 1 and 1 is the plain
+// multiply this had before either existed.
+static float32 outlineInk[4] = { 1.0f, 1.0f, 0.0f, 0.0f };
+
+// How bright the room is, which the lights cannot say. See the D3D9 twin in
+// d3drender.cpp.
+static float32 toonRoomScale = 1.0f;
 
 // What colour it is in here. Either the room the scene handed over for a
 // character or, failing that, what setLights worked out from the lights
@@ -575,6 +584,22 @@ setToonShading(bool32 enable, float32 bands, float32 saturation, float32 strengt
 
 	if(toonRegistered)
 		setUniform(u_toonParams, toonParams);
+}
+
+void
+setToonRoomScale(float32 scale)
+{
+	toonRoomScale = scale;
+}
+
+void
+setOutlineInk(float32 saturation, float32 gamma)
+{
+	outlineInk[0] = saturation;
+	outlineInk[1] = gamma;
+
+	if(toonRegistered)
+		setUniform(u_outlineInk, outlineInk);
 }
 
 // How much of the shade the application traced from its own models to take.
@@ -2086,8 +2111,20 @@ out:
 			toonRoomTint[2] = room[2] < 0.0f ? 0.0f : room[2];
 		}
 
+		// The level's own brightness, steepened. See setToonRoomPower.
+		float32 shown[4];
+
+		shown[0] = toonRoomTint[0];
+		shown[1] = toonRoomTint[1];
+		shown[2] = toonRoomTint[2];
+		shown[3] = toonRoomTint[3];
+
+		shown[0] *= toonRoomScale;
+		shown[1] *= toonRoomScale;
+		shown[2] *= toonRoomScale;
+
 		setUniform(u_toonLightDir, toonLightDir);
-		setUniform(u_toonRoomTint, toonRoomTint);
+		setUniform(u_toonRoomTint, shown);
 	}
 
 	// Reached by the gotos above as well, which is the point. They used to jump
@@ -3197,6 +3234,7 @@ initOpenGL(void)
 	u_toonLightDir = registerUniform("u_toonLightDir", UNIFORM_VEC4);
 	u_outlineFlags = registerUniform("u_outlineFlags", UNIFORM_VEC4);
 	u_outlineSign = registerUniform("u_outlineSign", UNIFORM_VEC4);
+	u_outlineInk = registerUniform("u_outlineInk", UNIFORM_VEC4);
 	u_toonRoomTint = registerUniform("u_toonRoomTint", UNIFORM_VEC4);
 	u_toonExtra = registerUniform("u_toonExtra", UNIFORM_VEC4);
 	u_toonExtra2 = registerUniform("u_toonExtra2", UNIFORM_VEC4);
@@ -3214,6 +3252,7 @@ initOpenGL(void)
 	setUniform(u_outlineColor2, outlineColor2);
 	setUniform(u_outlineFlags, outlineFlags);
 	setUniform(u_outlineSign, outlineSign);
+	setUniform(u_outlineInk, outlineInk);
 	setUniform(u_toonLightDir, toonLightDir);
 	setUniform(u_toonRoomTint, toonRoomTint);
 	setUniform(u_toonExtra, toonExtra);

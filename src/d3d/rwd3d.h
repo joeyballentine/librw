@@ -126,6 +126,14 @@ void setOutlineFlat(bool32 upper, bool32 lower);
 // Read per pixel off the prelight; see toonConstants.h.
 void setToonModelShade(float32 amount);
 
+// The stretch on an ink that is a scale on the surface: how much colour it
+// keeps, and a curve on its brightness. outline_PS.hlsl says what each does.
+void setOutlineInk(float32 saturation, float32 gamma);
+
+// How bright the room is, as a scale on the colour the lights resolve to. 1 is
+// the lights' own answer. d3drender.cpp says why they cannot answer it alone.
+void setToonRoomScale(float32 scale);
+
 void setOutlineSplit(float32 y);
 void setOutlineMode(int32 mode);
 int32 getOutlineMode(void);
@@ -147,6 +155,10 @@ void uploadOutlineConstants(void);
 // pipeline's bone matrices.
 enum
 {
+	// The outline pass alone, and uploaded right before it draws, so what any
+	// other pass leaves in c2 does not matter.
+	PSLOC_outlineInk = 2,
+
 	PSLOC_toonParams = 27,
 	PSLOC_toonLightDir = 28,
 	PSLOC_toonRoom = 29,

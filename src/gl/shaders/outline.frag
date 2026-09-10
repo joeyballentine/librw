@@ -22,6 +22,18 @@ FSIN vec4 v_outline;
 // vertex shader from the same normal the inflation used.
 FSIN float v_shadowNdl;
 
+// A stretch on a scaled ink: x how much colour it keeps, y a curve on its
+// brightness. The D3D9 twin in outline_PS.hlsl says why a plain multiply washes
+// an ink out and why this leaves a black one alone.
+vec3 InkStretch(vec3 c)
+{
+	float l = dot(c, vec3(0.299, 0.587, 0.114));
+
+	c = clamp(mix(vec3(l), c, u_outlineInk.x), 0.0, 1.0);
+
+	return pow(c, vec3(u_outlineInk.y));
+}
+
 void
 main(void)
 {
@@ -43,8 +55,10 @@ main(void)
 	// not simply a darker version of himself. SpongeBob is the case -- the show
 	// draws him with the same green his holes are, which is nowhere near a
 	// darkened yellow.
+	// The stretch goes on the scaled variety only. A flat ink was named
+	// outright, and a named colour is not something to second-guess.
 	vec4 tex = texture(tex0, vec2(v_tex0.x, 1.0-v_tex0.y));
-	vec3 ink = mix(tex.rgb*v_outline.rgb, v_outline.rgb, v_outline.a);
+	vec3 ink = mix(InkStretch(tex.rgb*v_outline.rgb), v_outline.rgb, v_outline.a);
 
 	// **The ink is lit like everything else.** An outline is drawn in ink that
 	// belongs to the picture, not stamped on top of it, so a line that stayed

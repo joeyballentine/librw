@@ -624,6 +624,10 @@ void *outline_PS;
 // y is how much of the traced model shade to take; see toonConstants.h, which
 // says why that slot and not a new one.
 static float32 toonParams[4] = { 0.0f, 0.0f, 1.0f, 0.0f };
+
+// The stretch on a scaled ink: saturation, then a curve. 1 and 1 is the plain
+// multiply this had before either existed. See outline_PS.hlsl.
+static float32 outlineInk[4] = { 1.0f, 1.0f, 0.0f, 0.0f };
 static float32 toonLightDir[4] = { 0.0f, -1.0f, 0.0f, 0.0f };
 static float32 toonRoom[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
 // x how flat a character's colours are cut, y which ramp row he is drawn with,
@@ -647,6 +651,18 @@ static Texture *toonRamp;
 // application has overridden them.
 static bool32 toonLightDirSet;
 static bool32 toonRoomSet;
+
+// **How bright the room is, which the lights cannot say.**
+//
+// The room colour here is every light summed and then held at one, so a house
+// indoors comes out the same as open sunlight: four lights pointing four ways
+// add up past one whether or not any surface sees more than one of them.
+//
+// So the level's brightness is not worked out here. The application measures it
+// off the paint the artists baked -- the one record of how bright a room was
+// meant to be -- and hands it over as a scale on the room. 1 leaves the lights'
+// own answer standing.
+static float32 toonRoomScale = 1.0f;
 
 void
 setToonShading(bool32 enable, float32 bands, float32 saturation, float32 strength)
@@ -816,6 +832,12 @@ setToonModelShade(float32 amount)
 	toonParams[1] = amount;
 }
 
+void
+setToonRoomScale(float32 scale)
+{
+	toonRoomScale = scale;
+}
+
 // Push what the toon pixel shaders read. Called once a draw, after the lights
 // are known, because two of the three are resolved from them.
 void
@@ -824,17 +846,38 @@ uploadToonConstants(void)
 	if(!getToonShading())
 		return;
 
+	float32 room[4];
+
+	room[0] = toonRoom[0];
+	room[1] = toonRoom[1];
+	room[2] = toonRoom[2];
+	room[3] = toonRoom[3];
+
+	// One factor across all three, so a level's hue is untouched and a blue room
+	// stays blue as it darkens.
+	room[0] *= toonRoomScale;
+	room[1] *= toonRoomScale;
+	room[2] *= toonRoomScale;
+
 	setTexture(3, toonRamp);
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonParams, toonParams, 1);
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonLightDir, toonLightDir, 1);
-	d3ddevice->SetPixelShaderConstantF(PSLOC_toonRoom, toonRoom, 1);
+	d3ddevice->SetPixelShaderConstantF(PSLOC_toonRoom, room, 1);
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonExtra, toonExtra, 1);
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonExtra2, toonExtra2, 1);
 }
 
 void
+setOutlineInk(float32 saturation, float32 gamma)
+{
+	outlineInk[0] = saturation;
+	outlineInk[1] = gamma;
+}
+
+void
 uploadOutlineConstants(void)
 {
+	d3ddevice->SetPixelShaderConstantF(PSLOC_outlineInk, outlineInk, 1);
 	d3ddevice->SetVertexShaderConstantF(VSLOC_outlineColor, outlineColor, 1);
 	d3ddevice->SetVertexShaderConstantF(VSLOC_outlineColor2, outlineColor2, 1);
 	d3ddevice->SetVertexShaderConstantF(VSLOC_outlineFlags, outlineFlags, 1);

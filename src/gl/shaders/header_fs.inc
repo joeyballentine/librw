@@ -205,6 +205,8 @@ const char *header_frag_src =
 "// pushed away from grey, w how strongly a surface facing away from the camera\n"
 "// is lifted.\n"
 "uniform vec4 u_toonParams;\n"
+"// The stretch on a scaled ink. See outline.frag.\n"
+"uniform vec4 u_outlineInk;\n"
 
 "#define toonEnabled (u_toonParams.x)\n"
 "// y was the band count and nothing has read it since the bands moved into the\n"

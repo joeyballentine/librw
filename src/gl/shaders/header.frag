@@ -204,6 +204,8 @@ uniform vec4 u_toonExtra2;
 // pushed away from grey, w how strongly a surface facing away from the camera
 // is lifted.
 uniform vec4 u_toonParams;
+// The stretch on a scaled ink. See outline.frag.
+uniform vec4 u_outlineInk;
 
 #define toonEnabled (u_toonParams.x)
 // y was the band count and nothing has read it since the bands moved into the
