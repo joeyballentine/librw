@@ -345,6 +345,9 @@ float ToonOcclusion(vec3 prelit)
 //
 // Characters only. A rim on the world draws a bright line along every wall the
 // camera happens to see edge-on.
+// A panelled prop takes a third of it over a wide edge: the facing does not turn
+// across a flat panel, so the smoothstep below would become a step and flip a
+// whole face at once. See the D3D9 twin in toonConstants.h.
 float ToonRimAmount(vec3 N, vec3 V)
 {
 	if(toonRim <= 0.0 || toonIsCharacter == 0.0)
@@ -355,8 +358,14 @@ float ToonRimAmount(vec3 N, vec3 V)
 	// Capped like ToonRamp's, and for the same reason: this is meant to soften
 	// one pixel, and an uncapped spread turns it into a wash.
 	float w = clamp(fwidth(f), 1.0/255.0, 0.05);
+	float rim = toonRim;
 
-	return toonRim*smoothstep(toonRimEdge - w, toonRimEdge + w, f);
+	if(toonRampRow > 2.5){
+		rim *= 0.34;
+		w = max(w, 0.18);
+	}
+
+	return rim*smoothstep(toonRimEdge - w, toonRimEdge + w, f);
 }
 
 // The face's own normal, from how the surface moves across the triangle.

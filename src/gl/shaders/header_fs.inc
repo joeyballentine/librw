@@ -346,6 +346,9 @@ const char *header_frag_src =
 "//\n"
 "// Characters only. A rim on the world draws a bright line along every wall the\n"
 "// camera happens to see edge-on.\n"
+"// A panelled prop takes a third of it over a wide edge: the facing does not turn\n"
+"// across a flat panel, so the smoothstep below would become a step and flip a\n"
+"// whole face at once. See the D3D9 twin in toonConstants.h.\n"
 "float ToonRimAmount(vec3 N, vec3 V)\n"
 "{\n"
 "	if(toonRim <= 0.0 || toonIsCharacter == 0.0)\n"
@@ -356,8 +359,14 @@ const char *header_frag_src =
 "	// Capped like ToonRamp's, and for the same reason: this is meant to soften\n"
 "	// one pixel, and an uncapped spread turns it into a wash.\n"
 "	float w = clamp(fwidth(f), 1.0/255.0, 0.05);\n"
+"	float rim = toonRim;\n"
 
-"	return toonRim*smoothstep(toonRimEdge - w, toonRimEdge + w, f);\n"
+"	if(toonRampRow > 2.5){\n"
+"		rim *= 0.34;\n"
+"		w = max(w, 0.18);\n"
+"	}\n"
+
+"	return rim*smoothstep(toonRimEdge - w, toonRimEdge + w, f);\n"
 "}\n"
 
 "// The face's own normal, from how the surface moves across the triangle.\n"

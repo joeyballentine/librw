@@ -161,6 +161,15 @@ float ToonOcclusion(float3 prelit)
 //
 // Characters only. A rim on the world draws a bright line along every wall the
 // camera happens to see edge-on.
+//
+// **A panelled prop takes a third of it, spread wide.** A rim traces a
+// silhouette by watching the facing turn as the surface curves. It does not turn
+// across a flat panel: f is nearly constant, its derivatives are nearly zero,
+// and the smoothstep that is meant to soften one pixel becomes a step -- so a
+// whole face of a tiki flipped to a quarter of the room's colour at once, with a
+// hard line across it, which is the gloss the tikis had. Holding the edge open
+// turns that line into a falloff across the face, and the fraction keeps what is
+// left quiet. The ramp row is what says a model is panels; iToon.cpp measures it.
 float ToonRimAmount(float3 N, float3 V)
 {
 	if(toonRim <= 0.0 || toonIsCharacter == 0.0)
@@ -170,8 +179,14 @@ float ToonRimAmount(float3 N, float3 V)
 
 	// Capped like ToonRamp's, and for the same reason.
 	float w = clamp(abs(ddx(f)) + abs(ddy(f)), 1.0/255.0, 0.05);
+	float rim = toonRim;
 
-	return toonRim*smoothstep(toonRimEdge - w, toonRimEdge + w, f);
+	if(toonRampRow > 2.5){
+		rim *= 0.34;
+		w = max(w, 0.18);
+	}
+
+	return rim*smoothstep(toonRimEdge - w, toonRimEdge + w, f);
 }
 
 // The face's own normal, from how the surface moves across the triangle.
