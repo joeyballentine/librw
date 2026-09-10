@@ -859,6 +859,31 @@ uploadToonConstants(void)
 	room[1] *= toonRoomScale;
 	room[2] *= toonRoomScale;
 
+	// **Where the eye is, uploaded here rather than when a camera begins.**
+	//
+	// A frame is not one camera. Measured in gl01: the scene's camera begins
+	// eight passes, a projection camera parked 2000 units overhead begins six,
+	// and the glow's three begin from the world origin -- fourteen passes, one
+	// eye position between them. Whoever went last owned it, so a surface drawn
+	// after the glow worked out its eye vector from the origin: a direction that
+	// depends on where the model stands and not at all on where you are, which
+	// holds still on the model while the camera moves round it.
+	//
+	// This runs immediately before each draw, off the camera doing the drawing,
+	// so there is no window for another pass to leave something behind. The GL3
+	// side never had the bug: it undoes the view matrix in the vertex shader,
+	// and that matrix is uploaded per draw already.
+	{
+		Camera *cam = engine->currentCamera;
+
+		if(cam){
+			V3d *p = &cam->getFrame()->getLTM()->pos;
+			float32 campos[4] = { p->x, p->y, p->z, 1.0f };
+
+			d3ddevice->SetVertexShaderConstantF(VSLOC_toonCamPos, campos, 1);
+		}
+	}
+
 	setTexture(3, toonRamp);
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonParams, toonParams, 1);
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonLightDir, toonLightDir, 1);
