@@ -31,6 +31,7 @@ main(void)
 	// texture, so they are held rather than applied where they are found.
 	vec3 toonRoom = vec3(1.0);
 	float toonRimAmt = 0.0;
+	float toonGlossAmt = 0.0;
 
 #ifdef PERPIXEL
 	// lighting.frag declares the uniforms both arms below read.
@@ -98,6 +99,7 @@ main(void)
 		// **N and not Ns.** The rim wants the real surface; the hardened
 		// normal is for the bands. ToonRimAmount says what that cost.
 		toonRimAmt = ToonRimAmount(N, v_viewDir);
+		toonGlossAmt = ToonGlossAmount(N, v_viewDir, L);
 	}else{
 		color.rgb = v_color.rgb;
 		color.rgb += u_ambLight.rgb*surfAmbient;
@@ -116,6 +118,11 @@ main(void)
 	// looks like -- white in daylight, blue in Rock Bottom -- and which cannot
 	// take the result out of range however bright the surface already is.
 	color.rgb = mix(color.rgb, toonRoom, toonRimAmt);
+
+	// The glint, over everything the surface is. Towards white and not towards
+	// the room, unlike the rim: a highlight is the light itself, where a rim is
+	// the room seen along an edge.
+	color.rgb = mix(color.rgb, vec3(1.0), toonGlossAmt);
 
 	// After the material and before the fog. Before the fog because a shadow is
 	// a property of the surface and fog is a property of the air in front of it

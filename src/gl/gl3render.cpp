@@ -272,11 +272,21 @@ renderCB(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 		// every fragment and has nothing to gain, and the per-pixel fragment
 		// shader does not do point or spot lights, so anything reached by one
 		// keeps the per-vertex path.
-		if((vsBits & VSLIGHT_MASK) == 0){
+		//
+		// A draw with no lights takes the per-pixel shader too where it has
+		// asked for the cel look: that is the one carrying a normal and a view
+		// vector across, and the fragment shader's toon block is inside its
+		// PERPIXEL guard. See setToonUnlit and the D3D9 twin in d3d9render.cpp.
+		if((vsBits & VSLIGHT_MASK) == 0 && !getToonUnlit()){
 			if(getAlphaTest())
 				(uvXform ? uvXformShader : defaultShader)->use();
 			else
 				(uvXform ? uvXformShader_noAT : defaultShader_noAT)->use();
+		}else if(getToonUnlit() && (vsBits & VSLIGHT_MASK) == 0){
+			if(getAlphaTest())
+				(uvXform ? uvXformShader_pp : defaultShader_pp)->use();
+			else
+				(uvXform ? uvXformShader_pp_noAT : defaultShader_pp_noAT)->use();
 		}else if(getPerPixelLighting() && (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT){
 			if(getAlphaTest())
 				(uvXform ? uvXformShader_pp : defaultShader_pp)->use();

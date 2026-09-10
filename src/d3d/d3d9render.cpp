@@ -177,7 +177,10 @@ renderCB_Shader(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 	// per-pixel it does not care how many lights there are, because it uses
 	// none of them: the direction and the room colour were resolved on the way
 	// to the uniform.
-	bool32 toon = getToonShading() && (vsBits & VSLIGHT_MASK) != 0;
+	// A draw with no lights is usually art that wants nothing done to it, which
+	// is why the count is asked at all. getToonUnlit is a draw saying otherwise.
+	bool32 toon = getToonShading() &&
+	              ((vsBits & VSLIGHT_MASK) != 0 || getToonUnlit());
 
 	if(toon)
 		perPixel = 1;
@@ -230,10 +233,15 @@ renderCB_Shader(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 		SetRenderState(CULLMODE, outlineCull);
 	}
 
-	if((vsBits & VSLIGHT_MASK) == 0)
-		setVertexShader(uvXform ? uvxform_amb_VS : default_amb_VS);
-	else if(perPixel)
+	// **The per-pixel case is asked first, and it has to be.** It used to come
+	// second, behind a test for no lights at all, which was harmless while
+	// per-pixel and the cel look both needed a light: the first arm never took a
+	// draw the second wanted. An unlit cel draw is exactly that draw, and the
+	// shader it needs is the one that carries a normal and a view vector across.
+	if(perPixel)
 		setVertexShader(uvXform ? uvxform_pp_VS : default_pp_VS);
+	else if((vsBits & VSLIGHT_MASK) == 0)
+		setVertexShader(uvXform ? uvxform_amb_VS : default_amb_VS);
 	else if((vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT)
 		setVertexShader(uvXform ? uvxform_amb_dir_VS : default_amb_dir_VS);
 	else

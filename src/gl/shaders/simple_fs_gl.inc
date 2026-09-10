@@ -32,6 +32,7 @@ const char *simple_frag_src =
 "	// texture, so they are held rather than applied where they are found.\n"
 "	vec3 toonRoom = vec3(1.0);\n"
 "	float toonRimAmt = 0.0;\n"
+"	float toonGlossAmt = 0.0;\n"
 
 "#ifdef PERPIXEL\n"
 "	// lighting.frag declares the uniforms both arms below read.\n"
@@ -99,6 +100,7 @@ const char *simple_frag_src =
 "		// **N and not Ns.** The rim wants the real surface; the hardened\n"
 "		// normal is for the bands. ToonRimAmount says what that cost.\n"
 "		toonRimAmt = ToonRimAmount(N, v_viewDir);\n"
+"		toonGlossAmt = ToonGlossAmount(N, v_viewDir, L);\n"
 "	}else{\n"
 "		color.rgb = v_color.rgb;\n"
 "		color.rgb += u_ambLight.rgb*surfAmbient;\n"
@@ -117,6 +119,11 @@ const char *simple_frag_src =
 "	// looks like -- white in daylight, blue in Rock Bottom -- and which cannot\n"
 "	// take the result out of range however bright the surface already is.\n"
 "	color.rgb = mix(color.rgb, toonRoom, toonRimAmt);\n"
+
+"	// The glint, over everything the surface is. Towards white and not towards\n"
+"	// the room, unlike the rim: a highlight is the light itself, where a rim is\n"
+"	// the room seen along an edge.\n"
+"	color.rgb = mix(color.rgb, vec3(1.0), toonGlossAmt);\n"
 
 "	// After the material and before the fog. Before the fog because a shadow is\n"
 "	// a property of the surface and fog is a property of the air in front of it\n"

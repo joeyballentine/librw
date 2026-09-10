@@ -193,6 +193,13 @@ const char *header_frag_src =
 "#define toonIsCharacter (u_toonExtra.z)\n"
 "#define toonWrap (u_toonExtra.w)\n"
 
+"// The glint, on a vector of its own: x how strong it is, y how far round the\n"
+"// half vector it starts. See ToonGlossAmount.\n"
+"uniform vec4 u_toonGloss;\n"
+
+"#define toonGloss (u_toonGloss.x)\n"
+"#define toonGlossEdge (u_toonGloss.y)\n"
+
 "#define toonRim (u_toonExtra2.x)\n"
 "#define toonRimEdge (u_toonExtra2.y)\n"
 "#define toonOcclusion (u_toonExtra2.z)\n"
@@ -417,6 +424,35 @@ const char *header_frag_src =
 "//\n"
 "// Applied after the texture, unlike the banding, because it is the artwork's\n"
 "// colour that wants pushing and not the light's.\n"
+"// How strongly light bounces off this pixel, as an amount to blend by.\n"
+"//\n"
+"// **A band and not a lobe.** A specular highlight is a gradient, and a gradient\n"
+"// is the thing the cel look exists to remove -- so the half vector's facing is\n"
+"// thresholded the way the ramp thresholds the light term, one step wide,\n"
+"// antialiased across the pixel by its own derivatives. What that draws is a\n"
+"// glint with an edge on it, which is how the show draws light on water.\n"
+"//\n"
+"// Not gated on toonIsCharacter: the surfaces that want this are not characters.\n"
+"// The goo is the one that asks so far. See the D3D9 twin in toonConstants.h.\n"
+"//\n"
+"// L is where the light travels, so the direction towards it is its negative.\n"
+"float ToonGlossAmount(vec3 N, vec3 V, vec3 L)\n"
+"{\n"
+"	if(toonGloss <= 0.0)\n"
+"		return 0.0;\n"
+
+"	vec3 H = normalize(normalize(V) - normalize(L));\n"
+"	float s = dot(N, H);\n"
+
+"	if(s <= 0.0)\n"
+"		return 0.0;\n"
+
+"	// Capped like ToonRamp's and ToonRimAmount's, and for the same reason.\n"
+"	float w = clamp(fwidth(s), 1.0/255.0, 0.05);\n"
+
+"	return toonGloss*smoothstep(toonGlossEdge - w, toonGlossEdge + w, s);\n"
+"}\n"
+
 "// Cut a colour down to a handful of shades, keeping the colour.\n"
 "//\n"
 "// **Rounding each channel on its own was the obvious way and it is wrong.** It\n"

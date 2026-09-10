@@ -638,6 +638,10 @@ static float32 toonExtra[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 // x rim strength, y where the rim starts, z how far the baked colour darkens
 // the lookup, w how hard the shading edges are.
 static float32 toonExtra2[4] = { 0.0f, 0.65f, 0.0f, 0.0f };
+
+// x how strong the glint is, y how far round the half vector it starts. Off
+// unless a draw asks for it; see ToonGlossAmount in toonConstants.h.
+static float32 toonGloss[4] = { 0.0f, 0.85f, 0.0f, 0.0f };
 static float32 outlineColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 static float32 outlineColor2[4] = { 0.0f, 0.0f, 0.0f, -1.0e30f };
 static float32 outlineFlags[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -697,6 +701,37 @@ setToonLook(float32 wrap, float32 rim, float32 rimEdge, float32 occlusion,
 	toonExtra2[3] = hardness;
 }
 
+// A hard highlight, for the draws that are wet. Set per draw and cleared after,
+// the way the ramp row is.
+void
+setToonGloss(float32 amount, float32 edge)
+{
+	toonGloss[0] = amount;
+	toonGloss[1] = edge;
+}
+
+// Whether this draw takes the cel look with no lights on it.
+//
+// **The look needs no lights and the renderer needed one anyway.** The key
+// direction and the room colour are resolved before the draw, so the shader
+// reads neither light array -- but a draw with no lights is usually art that
+// wants nothing done to it, and the light count stood in for that. The goo is
+// the case where the two come apart: a wide surface of liquid, drawn with no
+// light kit at all, that wants bands more than anything else in a scene does.
+static bool32 toonUnlit;
+
+void
+setToonUnlit(bool32 on)
+{
+	toonUnlit = on ? 1 : 0;
+}
+
+bool32
+getToonUnlit(void)
+{
+	return toonUnlit;
+}
+
 void
 setToonRampRow(int32 row)
 {
@@ -727,21 +762,30 @@ setToonRamp(Texture *tex)
 	toonRamp = tex;
 }
 
+// What colour it is in here, named rather than resolved from the lights. A draw
+// with no lights has nothing to resolve it from and would come out black.
 void
-setToonRoomTint(float32 r, float32 g, float32 b)
+setToonRoomColor(float32 r, float32 g, float32 b)
 {
 	toonRoom[0] = r;
 	toonRoom[1] = g;
 	toonRoom[2] = b;
 	toonRoomSet = 1;
+}
 
-	// The scene only ever names a room for a character, so the same call says
+void
+setToonRoomTint(float32 r, float32 g, float32 b)
+{
+	setToonRoomColor(r, g, b);
+
+	// The scene only ever names a room for a CHARACTER, so the same call says
 	// so. Everything that is wrong on a background -- the flattening, the rim,
 	// the baked occlusion, the hardened normals -- hangs off this.
 	//
 	// It used to ride in toonRoom.w, which worked while an unset room meant
 	// something. It does not any more: uploadLights fills one in for every
-	// draw, so the two facts had to come apart.
+	// draw, so the two facts had to come apart. The goo took them apart again:
+	// it names a room and is not a character, so it calls the half above.
 	toonExtra[2] = 1.0f;
 }
 
@@ -904,6 +948,7 @@ uploadToonConstants(void)
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonRoom, room, 1);
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonExtra, toonExtra, 1);
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonExtra2, toonExtra2, 1);
+	d3ddevice->SetPixelShaderConstantF(PSLOC_toonGloss, toonGloss, 1);
 }
 
 void

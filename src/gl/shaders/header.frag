@@ -192,6 +192,13 @@ uniform vec4 u_toonExtra2;
 #define toonIsCharacter (u_toonExtra.z)
 #define toonWrap (u_toonExtra.w)
 
+// The glint, on a vector of its own: x how strong it is, y how far round the
+// half vector it starts. See ToonGlossAmount.
+uniform vec4 u_toonGloss;
+
+#define toonGloss (u_toonGloss.x)
+#define toonGlossEdge (u_toonGloss.y)
+
 #define toonRim (u_toonExtra2.x)
 #define toonRimEdge (u_toonExtra2.y)
 #define toonOcclusion (u_toonExtra2.z)
@@ -416,6 +423,35 @@ vec3 ToonHardNormal(vec3 N, vec3 V)
 //
 // Applied after the texture, unlike the banding, because it is the artwork's
 // colour that wants pushing and not the light's.
+// How strongly light bounces off this pixel, as an amount to blend by.
+//
+// **A band and not a lobe.** A specular highlight is a gradient, and a gradient
+// is the thing the cel look exists to remove -- so the half vector's facing is
+// thresholded the way the ramp thresholds the light term, one step wide,
+// antialiased across the pixel by its own derivatives. What that draws is a
+// glint with an edge on it, which is how the show draws light on water.
+//
+// Not gated on toonIsCharacter: the surfaces that want this are not characters.
+// The goo is the one that asks so far. See the D3D9 twin in toonConstants.h.
+//
+// L is where the light travels, so the direction towards it is its negative.
+float ToonGlossAmount(vec3 N, vec3 V, vec3 L)
+{
+	if(toonGloss <= 0.0)
+		return 0.0;
+
+	vec3 H = normalize(normalize(V) - normalize(L));
+	float s = dot(N, H);
+
+	if(s <= 0.0)
+		return 0.0;
+
+	// Capped like ToonRamp's and ToonRimAmount's, and for the same reason.
+	float w = clamp(fwidth(s), 1.0/255.0, 0.05);
+
+	return toonGloss*smoothstep(toonGlossEdge - w, toonGlossEdge + w, s);
+}
+
 // Cut a colour down to a handful of shades, keeping the colour.
 //
 // **Rounding each channel on its own was the obvious way and it is wrong.** It

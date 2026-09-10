@@ -228,6 +228,29 @@ void setToonFlatten(float32 colors);
 void setToonLook(float32 wrap, float32 rim, float32 rimEdge, float32 occlusion,
                  float32 hardness);
 
+// A hard highlight on a surface the light bounces off rather than scatters into.
+//
+//   amount  how far the pixel is carried towards white where the glint lands.
+//   edge    how far round the half vector the glint starts.
+//
+// 0 is off, and off is where every draw starts: this is asked for by the few
+// surfaces that are wet, not by characters. See ToonGlossAmount in header.frag.
+void setToonGloss(float32 amount, float32 edge);
+
+// Whether the next draw takes the cel look although no light is on it.
+//
+// The look reads no light array -- the key direction and the room colour are
+// resolved before the draw -- but a draw with no lights is usually art that
+// wants nothing done to it, and the light count stood in for that. The goo is
+// where the two come apart: a wide surface of liquid, drawn with no light kit,
+// that wants bands more than anything else in a scene.
+void setToonUnlit(bool32 on);
+bool32 getToonUnlit(void);
+
+// What colour it is in here, without also saying the draw is a character. A draw
+// with no lights has nothing to resolve a room colour from.
+void setToonRoomColor(float32 r, float32 g, float32 b);
+
 // Which of the stacked ramps the next draw is shaded with. Skin does not band
 // like sheet metal, and the strip holds a row for each.
 void setToonRampRow(int32 row);

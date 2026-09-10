@@ -106,6 +106,18 @@ void setToonFlatten(float32 colors);
 void setToonLook(float32 wrap, float32 rim, float32 rimEdge, float32 occlusion,
                  float32 hardness);
 
+// A hard highlight on a surface the light bounces off. See rwgl3.h.
+void setToonGloss(float32 amount, float32 edge);
+
+// Whether the next draw takes the cel look although no light is on it. See
+// rwgl3.h, which declares the same call and says what it is for.
+void setToonUnlit(bool32 on);
+bool32 getToonUnlit(void);
+
+// What colour it is in here, without saying the draw is a character. See
+// setToonRoomTint, which says both.
+void setToonRoomColor(float32 r, float32 g, float32 b);
+
 // Which of the stacked ramps the next draw is shaded with.
 void setToonRampRow(int32 row);
 
@@ -165,6 +177,10 @@ enum
 	PSLOC_toonRoom = 29,
 	PSLOC_toonExtra = 30,
 	PSLOC_toonExtra2 = 31,
+
+	// Past what ps_2_0 has, which is fine: toonConstants.h is included by the
+	// TOON permutations alone and those are the only ps_3_0 shaders here.
+	PSLOC_toonGloss = 32,
 
 	VSLOC_outlineColor = 233,
 	VSLOC_outlineColor2 = 234,

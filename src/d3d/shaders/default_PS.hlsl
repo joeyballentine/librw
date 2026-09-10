@@ -37,6 +37,7 @@ float4 main(VS_out input) : COLOR
 	// texture. See simple.frag on the GL3 side.
 	float3 toonRoomC = float3(1.0, 1.0, 1.0);
 	float toonRimAmt = 0.0;
+	float toonGlossAmt = 0.0;
 
 #ifdef TOON
 	// **The lighting is replaced, not shaded on top of.**
@@ -61,6 +62,7 @@ float4 main(VS_out input) : COLOR
 	// for the bands. ToonRimAmount says what that cost.
 	toonRoomC = toonRoom.rgb;
 	toonRimAmt = ToonRimAmount(N, input.ViewDir);
+	toonGlossAmt = ToonGlossAmount(N, input.ViewDir, toonLightDir.xyz);
 	color.a *= ppMatCol.a;
 #elif defined(PERPIXEL)
 	// The vertex shader handed over the prelight and a normal and did nothing
@@ -97,6 +99,11 @@ float4 main(VS_out input) : COLOR
 	// looks like, and which cannot take the result out of range however bright
 	// the surface already is.
 	color.rgb = lerp(color.rgb, toonRoomC, toonRimAmt);
+
+	// The glint, over everything the surface is. Towards white and not towards
+	// the room, unlike the rim: a highlight is the light itself, where a rim is
+	// the room seen along an edge.
+	color.rgb = lerp(color.rgb, float3(1.0, 1.0, 1.0), toonGlossAmt);
 
 	color.rgb = ToonSaturate(color.rgb);
 

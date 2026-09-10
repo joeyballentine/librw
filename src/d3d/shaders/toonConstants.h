@@ -28,6 +28,19 @@ float4 toonRoom : register(c29);
 float4 toonExtra : register(c30);
 float4 toonExtra2 : register(c31);
 
+// The glint, on a register of its own.
+//
+// **Declared for the TOON build alone, because c32 is past what ps_2_0 has.**
+// outline_PS.hlsl includes this header and is ps_2_0, which stops at c31 and
+// would refuse the line below. Everything that reads the glint is under the
+// same guard, and the ink pass has no use for a highlight.
+#ifdef TOON
+float4 toonGlossParams : register(c32);
+
+#define toonGloss (toonGlossParams.x)
+#define toonGlossEdge (toonGlossParams.y)
+#endif
+
 #define toonEnabled (toonParams.x)
 #define toonSaturation (toonParams.z)
 #define toonStrength (toonParams.w)
@@ -223,6 +236,38 @@ float3 ToonHardNormal(float3 N, float3 V)
 
 	return normalize(lerp(N, Ng, toonHardness));
 }
+
+// How strongly light bounces off this pixel, as an amount to blend by.
+//
+// **A band and not a lobe.** A specular highlight is a gradient, and a gradient
+// is the thing the cel look exists to remove -- so the half vector's facing is
+// thresholded the way the ramp thresholds the light term, one step wide,
+// antialiased across the pixel by its own derivatives. What that draws is a
+// glint with an edge on it, which is how the show draws light on water.
+//
+// Not gated on toonIsCharacter. The surfaces that want this are not characters:
+// the goo is the one that asks so far, where it is most of what says the surface
+// is liquid and not a painted floor.
+//
+// L is where the light travels, so the direction towards it is its negative.
+#ifdef TOON
+float ToonGlossAmount(float3 N, float3 V, float3 L)
+{
+	if(toonGloss <= 0.0)
+		return 0.0;
+
+	float3 H = normalize(normalize(V) - normalize(L));
+	float s = dot(N, H);
+
+	if(s <= 0.0)
+		return 0.0;
+
+	// Capped like ToonRamp's and ToonRimAmount's, and for the same reason.
+	float w = clamp(abs(ddx(s)) + abs(ddy(s)), 1.0/255.0, 0.05);
+
+	return toonGloss*smoothstep(toonGlossEdge - w, toonGlossEdge + w, s);
+}
+#endif
 
 // Cut a colour down to a handful of shades, keeping the colour.
 //

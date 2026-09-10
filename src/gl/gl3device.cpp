@@ -153,6 +153,7 @@ int32 u_outlineInk;
 int32 u_toonRoomTint;
 int32 u_toonExtra;
 int32 u_toonExtra2;
+int32 u_toonGloss;
 
 bool32 constantVertexColorWhite;
 
@@ -343,12 +344,17 @@ static float32 toonExtra[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 // the lookup, w how hard the shading edges are. See u_toonExtra2.
 static float32 toonExtra2[4] = { 0.0f, 0.65f, 0.0f, 0.0f };
 
+// x how strong the glint is, y how far round the half vector it starts. Off
+// unless a draw asks for it. See ToonGlossAmount in header.frag.
+static float32 toonGloss[4] = { 0.0f, 0.85f, 0.0f, 0.0f };
+
 static void
 pushToonExtra(void)
 {
 	if(toonRegistered){
 		setUniform(u_toonExtra, toonExtra);
 		setUniform(u_toonExtra2, toonExtra2);
+		setUniform(u_toonGloss, toonGloss);
 	}
 }
 
@@ -368,6 +374,32 @@ setToonLook(float32 wrap, float32 rim, float32 rimEdge, float32 occlusion,
 	toonExtra2[1] = rimEdge;
 	toonExtra2[2] = occlusion;
 	toonExtra2[3] = hardness;
+	pushToonExtra();
+}
+
+// A hard highlight, for the draws that are wet. Set per draw and cleared after,
+// the way the ramp row is.
+// Whether this draw takes the cel look with no lights on it. See the D3D9 twin
+// in d3drender.cpp, which says why the light count was ever asked.
+static bool32 toonUnlit;
+
+void
+setToonUnlit(bool32 on)
+{
+	toonUnlit = on ? 1 : 0;
+}
+
+bool32
+getToonUnlit(void)
+{
+	return toonUnlit;
+}
+
+void
+setToonGloss(float32 amount, float32 edge)
+{
+	toonGloss[0] = amount;
+	toonGloss[1] = edge;
 	pushToonExtra();
 }
 
@@ -410,20 +442,27 @@ static float32 toonLightDir[4] = { 0.0f, -1.0f, 0.0f, 1.0f };
 static bool32 toonLightDirSet;
 
 void
-setToonRoomTint(float32 r, float32 g, float32 b)
+setToonRoomColor(float32 r, float32 g, float32 b)
 {
 	toonRoomTint[0] = r;
 	toonRoomTint[1] = g;
 	toonRoomTint[2] = b;
 	toonRoomSet = 1;
 
-	// The scene only ever names a room for a character, so the same call says
-	// so. Everything that is wrong on a background -- the flattening, the rim,
-	// the baked occlusion, the hardened normals -- hangs off this.
-	toonExtra[2] = 1.0f;
-
 	if(toonRegistered)
 		setUniform(u_toonRoomTint, toonRoomTint);
+}
+
+void
+setToonRoomTint(float32 r, float32 g, float32 b)
+{
+	setToonRoomColor(r, g, b);
+
+	// The scene only ever names a room for a CHARACTER, so the same call says
+	// so. Everything that is wrong on a background -- the flattening, the rim,
+	// the baked occlusion, the hardened normals -- hangs off this. The goo names
+	// a room and is not a character, so it calls the half above.
+	toonExtra[2] = 1.0f;
 	pushToonExtra();
 }
 
@@ -3255,6 +3294,7 @@ initOpenGL(void)
 	u_toonRoomTint = registerUniform("u_toonRoomTint", UNIFORM_VEC4);
 	u_toonExtra = registerUniform("u_toonExtra", UNIFORM_VEC4);
 	u_toonExtra2 = registerUniform("u_toonExtra2", UNIFORM_VEC4);
+	u_toonGloss = registerUniform("u_toonGloss", UNIFORM_VEC4);
 	toonRegistered = 1;
 
 	// **Every one of them, and only once there is somewhere to put them.**
