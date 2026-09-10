@@ -175,18 +175,23 @@ float ToonRimAmount(float3 N, float3 V)
 	if(toonRim <= 0.0 || toonIsCharacter == 0.0)
 		return 0.0;
 
-	float f = 1.0 - saturate(dot(N, normalize(V)));
+	float ndv = dot(N, normalize(V));
+
+	// **Nothing at all on a face that points away from the eye.** The game
+	// leaves culling off unless a model's pipe flags ask for it, so a face
+	// pointing away is drawn as often as not, and such a face has no silhouette
+	// for the eye to see. The step at zero is not a seam: zero facing IS the
+	// silhouette, and what lies past it is either nothing or the inside of the
+	// model.
+	if(ndv <= 0.0)
+		return 0.0;
+
+	float f = 1.0 - ndv;
 
 	// Capped like ToonRamp's, and for the same reason.
 	float w = clamp(abs(ddx(f)) + abs(ddy(f)), 1.0/255.0, 0.05);
-	float rim = toonRim;
 
-	if(toonRampRow > 2.5){
-		rim *= 0.34;
-		w = max(w, 0.18);
-	}
-
-	return rim*smoothstep(toonRimEdge - w, toonRimEdge + w, f);
+	return toonRim*smoothstep(toonRimEdge - w, toonRimEdge + w, f);
 }
 
 // The face's own normal, from how the surface moves across the triangle.

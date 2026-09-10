@@ -354,19 +354,21 @@ const char *header_frag_src =
 "	if(toonRim <= 0.0 || toonIsCharacter == 0.0)\n"
 "		return 0.0;\n"
 
-"	float f = 1.0 - clamp(dot(N, normalize(V)), 0.0, 1.0);\n"
+"	// Nothing on a face that points away from the eye: a model the game draws\n"
+"	// two-sided shows plenty of them, and a rim describes the edge of a surface\n"
+"	// the eye is looking at.\n"
+"	float ndv = dot(N, normalize(V));\n"
+
+"	if(ndv <= 0.0)\n"
+"		return 0.0;\n"
+
+"	float f = 1.0 - ndv;\n"
 
 "	// Capped like ToonRamp's, and for the same reason: this is meant to soften\n"
 "	// one pixel, and an uncapped spread turns it into a wash.\n"
 "	float w = clamp(fwidth(f), 1.0/255.0, 0.05);\n"
-"	float rim = toonRim;\n"
 
-"	if(toonRampRow > 2.5){\n"
-"		rim *= 0.34;\n"
-"		w = max(w, 0.18);\n"
-"	}\n"
-
-"	return rim*smoothstep(toonRimEdge - w, toonRimEdge + w, f);\n"
+"	return toonRim*smoothstep(toonRimEdge - w, toonRimEdge + w, f);\n"
 "}\n"
 
 "// The face's own normal, from how the surface moves across the triangle.\n"
