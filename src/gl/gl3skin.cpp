@@ -336,7 +336,11 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 
 			// The hull reads the material's texture to tint its own ink -- see
 			// outline.frag -- so it has to be bound here as well as in the
-			// pass that draws the model itself.
+			// pass that draws the model itself, and the material with it: the
+			// ink is drawn at the surface's alpha. See gl3render.cpp.
+			setMaterial(flags, oinst->material->color, oinst->material->surfaceProps);
+			setPipelineVertexAlpha(oinst->vertexAlpha ||
+			                       oinst->material->color.alpha != 0xFF);
 			setTexture(0, oinst->material->texture);
 			drawInst(header, oinst);
 			oinst++;

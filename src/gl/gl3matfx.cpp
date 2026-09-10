@@ -156,6 +156,11 @@ matfxRenderCB(Atomic *atomic, InstanceDataHeader *header)
 
 		while(on--){
 			if(outlineTakesMesh(header, oinst)){
+				// The material as well as its texture, so the ink is drawn at
+				// the surface's alpha. See gl3render.cpp.
+				setMaterial(flags, oinst->material->color, oinst->material->surfaceProps);
+				setPipelineVertexAlpha(oinst->vertexAlpha ||
+				                       oinst->material->color.alpha != 0xFF);
 				setTexture(0, oinst->material->texture);
 				drawInst(header, oinst);
 			}

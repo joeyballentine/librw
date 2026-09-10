@@ -149,10 +149,10 @@ lightingCB(void)
 // **A hull is geometry, so it traces the shape a mesh is CUT from and not the
 // shape its texture leaves behind.** Round a plant's alpha card that is a
 // rectangle of ink with a plant inside it, which is the one way this effect
-// looks like a bug rather than a style. So anything see-through is left alone,
-// whether the transparency is in the vertices, the material or the texture. An
-// ink line is a statement that a surface ends here, and a surface you can see
-// through does not.
+// looks like a bug rather than a style. So a mesh whose shape is cut by
+// transparency is left alone, whether that is a texture with holes in it or
+// alpha painted per vertex. An ink line is a statement that a surface ends
+// here, and an edge that only a texture puts there is not one.
 //
 // **And nothing small enough to be a detail.** The eyebrows and the teeth are
 // separate scraps laid over the face, so a hull around one is an ink border
@@ -176,8 +176,15 @@ outlineTakesMesh(InstanceDataHeader *header, InstanceData *inst)
 {
 	Material *m = inst->material;
 
+	// **A material's own alpha is a fade and not a cutout.** It is one number
+	// over the whole mesh, so it says how solid the surface is and nothing about
+	// what shape it is -- the hull still traces the same silhouette. The two
+	// that DO change the shape are a texture with holes in it and alpha painted
+	// per vertex, and those are what this refuses. Before, any model on its way
+	// out lost its line the moment its alpha left 255: the HUD models pop off
+	// as the interface fades, and a tiki fades as the camera closes on it.
 	if(!outlineAlphaOK){
-		if(inst->vertexAlpha || m->color.alpha != 0xFF)
+		if(inst->vertexAlpha)
 			return 0;
 
 		if(m->texture && m->texture->raster &&
@@ -232,7 +239,12 @@ renderCB(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 		while(on--){
 			if(outlineTakesMesh(header, oinst)){
 				// The hull reads the material's texture to tint its own ink
-				// -- see outline.frag -- so it is bound here as well.
+				// -- see outline.frag -- so it is bound here as well, and the
+				// material with it: the ink is drawn at the surface's alpha
+				// and nothing else uploads one before the mesh loop.
+				setMaterial(flags, oinst->material->color, oinst->material->surfaceProps);
+				setPipelineVertexAlpha(oinst->vertexAlpha ||
+				                       oinst->material->color.alpha != 0xFF);
 				setTexture(0, oinst->material->texture);
 				drawInst(header, oinst);
 			}

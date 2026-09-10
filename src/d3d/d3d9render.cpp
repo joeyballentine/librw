@@ -211,6 +211,15 @@ renderCB_Shader(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 
 		for(uint32 i = 0; i < header->numMeshes; i++){
 			if(outlineTakesMesh(header, oinst)){
+				// **The surface's own material, which nothing here uploaded.**
+				// The hull runs before the mesh loop, so the colour standing
+				// was the last mesh of whatever was drawn before this atomic --
+				// and the ink takes its alpha from that colour, so a model
+				// fading out was inked at a stranger's opacity. See the
+				// outline pixel shader, where the ink is the surface darkened.
+				setMaterial(flags, oinst->material->color, oinst->material->surfaceProps);
+				d3d::setPipelineVertexAlpha(oinst->vertexAlpha ||
+				                            oinst->material->color.alpha != 255);
 				d3d::setTexture(0, oinst->material->texture);
 				drawInst(header, oinst);
 			}
@@ -256,8 +265,9 @@ renderCB_Shader(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 // **A hull is geometry, so it traces the shape a mesh is CUT from and not the
 // shape its texture leaves behind.** Round a plant's alpha card that is a
 // rectangle of ink with a plant inside it, which is the one way this effect
-// looks like a bug rather than a style. So anything see-through is left alone,
-// whether the transparency is in the vertices, the material or the texture.
+// looks like a bug rather than a style. So a mesh whose shape is cut by
+// transparency is left alone, whether that is a texture with holes in it or
+// alpha painted per vertex.
 //
 // And nothing small enough to be a detail: the eyebrows and the teeth are
 // scraps laid over a face, and a hull around a scrap is an ink border around
@@ -279,8 +289,15 @@ outlineTakesMesh(InstanceDataHeader *header, InstanceData *inst)
 {
 	Material *m = inst->material;
 
+	// **A material's own alpha is a fade and not a cutout.** It is one number
+	// over the whole mesh, so it says how solid the surface is and nothing about
+	// what shape it is -- the hull still traces the same silhouette. The two
+	// that DO change the shape are a texture with holes in it and alpha painted
+	// per vertex, and those are what this refuses. Before, any model on its way
+	// out lost its line the moment its alpha left 255: the HUD models pop off
+	// as the interface fades, and a tiki fades as the camera closes on it.
 	if(!outlineAlphaOK){
-		if(inst->vertexAlpha || m->color.alpha != 255)
+		if(inst->vertexAlpha)
 			return 0;
 
 		if(m->texture && m->texture->raster &&

@@ -176,6 +176,12 @@ skinMatfxRenderCB(Atomic *atomic, InstanceDataHeader *header)
 
 		for(uint32 i = 0; i < header->numMeshes; i++){
 			if(outlineTakesMesh(header, oinst)){
+				// The surface's own material, so the ink is drawn at the
+				// surface's alpha. d3d9render.cpp says why it is not already
+				// standing.
+				setMaterial(flags, oinst->material->color, oinst->material->surfaceProps);
+				d3d::setPipelineVertexAlpha(oinst->vertexAlpha ||
+				                            oinst->material->color.alpha != 255);
 				d3d::setTexture(0, oinst->material->texture);
 				drawInst(header, oinst);
 			}
