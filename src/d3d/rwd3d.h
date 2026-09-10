@@ -122,6 +122,10 @@ bool32 getToonShading(void);
 void setOutline(float32 r, float32 g, float32 b, float32 thickness);
 void setOutlineLower(float32 r, float32 g, float32 b);
 void setOutlineFlat(bool32 upper, bool32 lower);
+// How much of the shade the application traced from its own models to take.
+// Read per pixel off the prelight; see toonConstants.h.
+void setToonModelShade(float32 amount);
+
 void setOutlineSplit(float32 y);
 void setOutlineMode(int32 mode);
 int32 getOutlineMode(void);

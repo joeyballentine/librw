@@ -32,6 +32,12 @@ float4 toonExtra2 : register(c31);
 #define toonSaturation (toonParams.z)
 #define toonStrength (toonParams.w)
 
+// **y was the band count and nothing has read it since the bands moved into the
+// ramp texture.** Reusing a dead slot rather than reaching for c32: the non-toon
+// variants of this shader are ps_2_0 and share this header, and ps_2_0 has 32
+// registers.
+#define toonModelShade (toonParams.y)
+
 #define toonColors (toonExtra.x)
 #define toonRampRow (toonExtra.y)
 #define toonIsCharacter (toonExtra.z)
@@ -79,6 +85,27 @@ float3 ToonRamp(float l)
 
 	return 0.25*(ToonRampAt(l - 0.375*w) + ToonRampAt(l - 0.125*w) +
 	             ToonRampAt(l + 0.125*w) + ToonRampAt(l + 0.375*w));
+}
+
+// How much light the level's own models leave standing here.
+//
+// **A shadow the light rig cannot know about.** The world is lit from a
+// direction and a colour, and a house standing in the way is neither -- so the
+// scene traces what its placed models block and hands the answer over per
+// vertex, in the prelight, which on this path carries nothing else: the vertex
+// shader adds no lighting when the pixel shader is going to.
+//
+// It scales the term BEFORE the ramp rather than darkening the colour after, so
+// a shadow crosses the same bands the shading does and reads as part of the same
+// drawing.
+float ToonModelShade(float3 prelit)
+{
+	if(toonModelShade <= 0.0)
+		return 1.0;
+
+	float v = max(prelit.r, max(prelit.g, prelit.b));
+
+	return lerp(1.0, v, toonModelShade);
 }
 
 // What the ramp is indexed by: the facing, wrapped and occluded.

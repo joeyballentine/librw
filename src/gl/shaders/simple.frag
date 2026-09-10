@@ -71,7 +71,10 @@ main(void)
 		sh = ShadowFactorN(v_shadowPos, v_normal);
 #endif
 
-		vec3 cel = ToonRamp(ToonLight(Ns, L, ToonOcclusion(v_color.rgb), sh));
+		vec3 cel = ToonRamp(ToonLight(Ns, L,
+		                              ToonOcclusion(v_color.rgb) *
+		                              ToonModelShade(v_color.rgb),
+		                              sh));
 
 		// **The room's colour multiplies BOTH bands, not just the dark one.**
 		//

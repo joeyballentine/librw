@@ -264,6 +264,9 @@ void setOutlineLower(float32 r, float32 g, float32 b);
 // surface it surrounds. Scaled suits a character whose ink is a darker version
 // of himself, which is most of them; flat suits one whose is not.
 void setOutlineFlat(bool32 upper, bool32 lower);
+// How much of the shade the application traced from its own models to take.
+void setToonModelShade(float32 amount);
+
 void setOutlineSplit(float32 y);
 
 // Whether the next hull is drawn for a model wound inside out: inflated

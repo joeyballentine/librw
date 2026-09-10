@@ -150,7 +150,7 @@ uniform vec4 u_toonExtra;
 uniform vec4 u_toonParams;
 
 #define toonEnabled (u_toonParams.x)
-#define toonBands (u_toonParams.y)
+#define toonModelShade (u_toonParams.y)
 #define toonSaturation (u_toonParams.z)
 #define toonStrength (u_toonParams.w)
 

@@ -207,7 +207,9 @@ const char *header_frag_src =
 "uniform vec4 u_toonParams;\n"
 
 "#define toonEnabled (u_toonParams.x)\n"
-"#define toonBands (u_toonParams.y)\n"
+"// y was the band count and nothing has read it since the bands moved into the\n"
+"// ramp texture. See the D3D9 twin in toonConstants.h.\n"
+"#define toonModelShade (u_toonParams.y)\n"
 "#define toonSaturation (u_toonParams.z)\n"
 "#define toonStrength (u_toonParams.w)\n"
 
@@ -274,6 +276,18 @@ const char *header_frag_src =
 "// in here instead, a cast shadow lands in the same flat band as the shading\n"
 "// shadow and the two are indistinguishable -- which is what a drawing does with\n"
 "// them.\n"
+"// How much light the level's own models leave standing here. The D3D9 twin in\n"
+"// toonConstants.h says why it scales the term before the ramp.\n"
+"float ToonModelShade(vec3 prelit)\n"
+"{\n"
+"	if(toonModelShade <= 0.0)\n"
+"		return 1.0;\n"
+
+"	float v = max(prelit.r, max(prelit.g, prelit.b));\n"
+
+"	return mix(1.0, v, toonModelShade);\n"
+"}\n"
+
 "float ToonLight(vec3 N, vec3 L, float occlusion, float shadow)\n"
 "{\n"
 "	float ndl = dot(N, -L);\n"

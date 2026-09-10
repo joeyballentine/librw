@@ -52,7 +52,8 @@ float4 main(VS_out input) : COLOR
 	float3 Ns = ToonHardNormal(N, input.ViewDir);
 
 	float3 cel = ToonRamp(ToonLight(Ns, toonLightDir.xyz,
-	                                ToonOcclusion(input.Color.rgb)));
+	                                ToonOcclusion(input.Color.rgb) *
+	                                ToonModelShade(input.Color.rgb)));
 
 	color.rgb = toonRoom.rgb * lerp(float3(1.0, 1.0, 1.0), cel, toonStrength);
 

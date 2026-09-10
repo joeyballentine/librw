@@ -151,7 +151,7 @@ const char *header_vert_src =
 "uniform vec4 u_toonParams;\n"
 
 "#define toonEnabled (u_toonParams.x)\n"
-"#define toonBands (u_toonParams.y)\n"
+"#define toonModelShade (u_toonParams.y)\n"
 "#define toonSaturation (u_toonParams.z)\n"
 "#define toonStrength (u_toonParams.w)\n"
 

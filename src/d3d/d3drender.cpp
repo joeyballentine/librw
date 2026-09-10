@@ -621,7 +621,9 @@ void *default_tex_toon_PS;
 void *outline_VS;
 void *outline_PS;
 
-static float32 toonParams[4] = { 0.0f, 3.0f, 1.0f, 0.0f };
+// y is how much of the traced model shade to take; see toonConstants.h, which
+// says why that slot and not a new one.
+static float32 toonParams[4] = { 0.0f, 0.0f, 1.0f, 0.0f };
 static float32 toonLightDir[4] = { 0.0f, -1.0f, 0.0f, 0.0f };
 static float32 toonRoom[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
 // x how flat a character's colours are cut, y which ramp row he is drawn with,
@@ -804,6 +806,14 @@ bool32
 getOutlineInverted(void)
 {
 	return outlineSign[0] < 0.0f;
+}
+
+// How much of the shade the scene traced from its placed models to take, 0 for
+// none. Per draw: the world takes it and the things standing in it do not.
+void
+setToonModelShade(float32 amount)
+{
+	toonParams[1] = amount;
 }
 
 // Push what the toon pixel shaders read. Called once a draw, after the lights

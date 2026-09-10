@@ -565,10 +565,23 @@ setToonShading(bool32 enable, float32 bands, float32 saturation, float32 strengt
 	if(bands < 2.0f)
 		bands = 2.0f;
 
+	// toonParams[1] is the model shade now; the band count moved into the ramp
+	// texture and nothing read it here. setToonModelShade owns it.
+	(void)bands;
+
 	toonParams[0] = enable ? 1.0f : 0.0f;
-	toonParams[1] = bands;
 	toonParams[2] = saturation;
 	toonParams[3] = strength;
+
+	if(toonRegistered)
+		setUniform(u_toonParams, toonParams);
+}
+
+// How much of the shade the application traced from its own models to take.
+void
+setToonModelShade(float32 amount)
+{
+	toonParams[1] = amount;
 
 	if(toonRegistered)
 		setUniform(u_toonParams, toonParams);

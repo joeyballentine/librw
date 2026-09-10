@@ -72,7 +72,10 @@ const char *simple_frag_src =
 "		sh = ShadowFactorN(v_shadowPos, v_normal);\n"
 "#endif\n"
 
-"		vec3 cel = ToonRamp(ToonLight(Ns, L, ToonOcclusion(v_color.rgb), sh));\n"
+"		vec3 cel = ToonRamp(ToonLight(Ns, L,\n"
+"		                              ToonOcclusion(v_color.rgb) *\n"
+"		                              ToonModelShade(v_color.rgb),\n"
+"		                              sh));\n"
 
 "		// **The room's colour multiplies BOTH bands, not just the dark one.**\n"
 "		//\n"
