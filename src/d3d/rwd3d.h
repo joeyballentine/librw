@@ -142,6 +142,7 @@ int32 getOutlineMode(void);
 // along the negated normal, with back faces culled instead of front ones.
 // Together those treat the mesh as wound the other way, which it is.
 void setOutlineInverted(bool32 on);
+void setOutlineDepthBias(float32 widths);
 bool32 getOutlineInverted(void);
 
 // Push what the toon shaders read. The pixel constants go once a draw, after

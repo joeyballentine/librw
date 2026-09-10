@@ -480,6 +480,23 @@ getOutlineInverted(void)
 	return outlineSign[0] < 0.0f;
 }
 
+// How far past the hull its depth is read from, in hull widths.
+//
+// The margin by which the ink loses to a surface the model is nearly touching.
+// Zero reads the depth where the hull actually is, which is what lets the copy
+// cross into the floor and the ink come out on top of it. See default.vert.
+// Below zero reads it from further IN instead, and -1 lands on the vertex the
+// hull was pushed from: the model's own surface, with none of the copy's
+// standing in space left in it.
+void
+setOutlineDepthBias(float32 widths)
+{
+	outlineSign[1] = widths;
+
+	if(toonRegistered)
+		setUniform(u_outlineSign, outlineSign);
+}
+
 void
 setOutlineFlat(bool32 upper, bool32 lower)
 {

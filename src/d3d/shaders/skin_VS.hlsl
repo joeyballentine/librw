@@ -114,9 +114,9 @@ VS_out main(in VS_in input)
 	// A fixed world width falls below a pixel somewhere down the level and the
 	// character stops being inked, which is the one thing an animated drawing
 	// never does.
-	float outlineW = mul(combinedMat, float4(SkinVertex, 1.0)).w;
+	float4 clipBase = mul(combinedMat, float4(SkinVertex, 1.0));
 	float thickness = max(outlineColor.a,
-	                      outlineFlags.z*max(outlineW, 1e-4));
+	                      outlineFlags.z*max(clipBase.w, 1e-4));
 
 
 	// **And a ceiling in screen units, because a line that swells is worse.**
@@ -125,12 +125,24 @@ VS_out main(in VS_in input)
 	// shot. outlineFlags.w is that ceiling, divided through the same way as the
 	// floor. Zero means no ceiling.
 	if(outlineFlags.w > 0.0)
-		thickness = min(thickness, outlineFlags.w*max(outlineW, 1e-4));
+		thickness = min(thickness, outlineFlags.w*max(clipBase.w, 1e-4));
 
 	SkinVertex += normalize(SkinHull)*thickness*outlineSign.x;
 #endif
 
 	output.Position = mul(combinedMat, float4(SkinVertex, 1.0));
+
+#ifdef OUTLINE
+	// Its depth from a point pushed further out again, so the ink loses to
+	// anything the model is nearly touching. See default_VS.hlsl.
+	float2 outlineDZW = output.Position.zw - clipBase.zw;
+	float2 outlineRef = output.Position.zw +
+	                    outlineSign.y*sign(outlineDZW.y)*outlineDZW;
+
+	output.Position.z = saturate(outlineRef.x/max(outlineRef.y, 1e-4))*
+	                    output.Position.w;
+#endif
+
 	float3 Vertex = mul(worldMat, float4(SkinVertex, 1.0)).xyz;
 	float3 Normal = mul(normalMat, SkinNormal);
 

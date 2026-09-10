@@ -824,6 +824,20 @@ getOutlineInverted(void)
 	return outlineSign[0] < 0.0f;
 }
 
+// How far past the hull its depth is read from, in hull widths.
+//
+// The margin by which the ink loses to a surface the model is nearly touching.
+// Zero reads the depth where the hull actually is, which is what lets the copy
+// cross into the floor and the ink come out on top of it. See default_VS.hlsl.
+// Below zero reads it from further IN instead, and -1 lands on the vertex the
+// hull was pushed from: the model's own surface, with none of the copy's
+// standing in space left in it.
+void
+setOutlineDepthBias(float32 widths)
+{
+	outlineSign[1] = widths;
+}
+
 // How much of the shade the scene traced from its placed models to take, 0 for
 // none. Per draw: the world takes it and the things standing in it do not.
 void

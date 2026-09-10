@@ -102,6 +102,32 @@ main(void)
 
 	gl_Position = u_proj * u_view * Vertex;
 
+#ifdef OUTLINE
+	// **The hull takes its depth from further out than it stands.** An inflated
+	// copy is geometry in space, so wherever the model comes within a hull width
+	// of something else the copy is inside it -- an arm's hull crosses into the
+	// chest, a prop's into the floor -- and the ink then wins the depth test
+	// against a surface that is in front of it. That reads as a patch of black
+	// inside the silhouette instead of a line round it.
+	//
+	// The pixel stays where the hull is and its depth is taken from a point
+	// pushed the same way again, u_outlineSign.y widths further out. The ink loses to
+	// anything within that margin of the surface. clipBase is the vertex before
+	// the push, so the difference between the two clip positions is what one
+	// width does to depth, and the sign of it says which way is away from the
+	// eye -- a model wound inside out pushes the other way.
+	//
+	// The margin shrinks to nothing where the push runs across the view, which
+	// is the silhouette itself. So the band that IS the outline keeps its own
+	// depth and still draws against a wall directly behind it.
+	vec2 outlineDZW = gl_Position.zw - clipBase.zw;
+	vec2 outlineRef = gl_Position.zw +
+	                  u_outlineSign.y*sign(outlineDZW.y)*outlineDZW;
+
+	gl_Position.z = clamp(outlineRef.x/max(outlineRef.y, 1e-4), -1.0, 1.0)*
+	                gl_Position.w;
+#endif
+
 #ifdef UVXFORM
 	vec4 uv = vec4(in_tex0, 1.0, 1.0);
 	v_tex0 = vec2(dot(u_uvXform[0], uv), dot(u_uvXform[1], uv));

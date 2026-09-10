@@ -107,6 +107,17 @@ const char *skin_vert_src =
 
 "	gl_Position = u_proj * u_view * Vertex;\n"
 
+"#ifdef OUTLINE\n"
+"	// Its depth from a point pushed further out again, so the ink loses to\n"
+"	// anything the model is nearly touching. See default.vert.\n"
+"	vec2 outlineDZW = gl_Position.zw - clipBase.zw;\n"
+"	vec2 outlineRef = gl_Position.zw +\n"
+"	                  u_outlineSign.y*sign(outlineDZW.y)*outlineDZW;\n"
+
+"	gl_Position.z = clamp(outlineRef.x/max(outlineRef.y, 1e-4), -1.0, 1.0)*\n"
+"	                gl_Position.w;\n"
+"#endif\n"
+
 "	v_tex0 = in_tex0;\n"
 
 "	v_color = in_color;\n"

@@ -106,6 +106,17 @@ main(void)
 
 	gl_Position = u_proj * u_view * Vertex;
 
+#ifdef OUTLINE
+	// Its depth from a point pushed further out again, so the ink loses to
+	// anything the model is nearly touching. See default.vert.
+	vec2 outlineDZW = gl_Position.zw - clipBase.zw;
+	vec2 outlineRef = gl_Position.zw +
+	                  u_outlineSign.y*sign(outlineDZW.y)*outlineDZW;
+
+	gl_Position.z = clamp(outlineRef.x/max(outlineRef.y, 1e-4), -1.0, 1.0)*
+	                gl_Position.w;
+#endif
+
 	v_tex0 = in_tex0;
 
 	v_color = in_color;

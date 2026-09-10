@@ -93,9 +93,9 @@ VS_out main(in VS_in input)
 	// by the camera and the render height -- the game works it out, because
 	// only the game knows both -- so multiplying by clip w, which is view
 	// depth, gives the world width that covers those pixels here.
-	float outlineW = mul(combinedMat, Local).w;
+	float4 clipBase = mul(combinedMat, Local);
 	float thickness = max(outlineColor.a,
-	                      outlineFlags.z*max(outlineW, 1e-4));
+	                      outlineFlags.z*max(clipBase.w, 1e-4));
 
 
 	// **And a ceiling in screen units, because a line that swells is worse.**
@@ -104,7 +104,7 @@ VS_out main(in VS_in input)
 	// shot. outlineFlags.w is that ceiling, divided through the same way as the
 	// floor. Zero means no ceiling.
 	if(outlineFlags.w > 0.0)
-		thickness = min(thickness, outlineFlags.w*max(outlineW, 1e-4));
+		thickness = min(thickness, outlineFlags.w*max(clipBase.w, 1e-4));
 
 	// **The hull's own normal where the geometry carries one.** A model that has
 	// not been through iToonHullNormals arrives with these sets absent, which
@@ -123,6 +123,33 @@ VS_out main(in VS_in input)
 #endif
 
 	output.Position = mul(combinedMat, Local);
+
+#ifdef OUTLINE
+	// **The hull takes its depth from further out than it stands.** An inflated
+	// copy is geometry in space, so wherever the model comes within a hull width
+	// of something else the copy is inside it -- an arm's hull crosses into the
+	// chest, a prop's into the floor -- and the ink then wins the depth test
+	// against a surface that is in front of it. That reads as a patch of black
+	// inside the silhouette instead of a line round it.
+	//
+	// The pixel stays where the hull is and its depth is taken from a point
+	// pushed the same way again, outlineSign.y widths further out. The ink loses to
+	// anything within that margin of the surface. clipBase is the vertex before
+	// the push, so the difference between the two clip positions is what one
+	// width does to depth, and the sign of it says which way is away from the
+	// eye -- a model wound inside out pushes the other way.
+	//
+	// The margin shrinks to nothing where the push runs across the view, which
+	// is the silhouette itself. So the band that IS the outline keeps its own
+	// depth and still draws against a wall directly behind it.
+	float2 outlineDZW = output.Position.zw - clipBase.zw;
+	float2 outlineRef = output.Position.zw +
+	                    outlineSign.y*sign(outlineDZW.y)*outlineDZW;
+
+	output.Position.z = saturate(outlineRef.x/max(outlineRef.y, 1e-4))*
+	                    output.Position.w;
+#endif
+
 	float3 Vertex = mul(worldMat, Local).xyz;
 
 #ifdef UVXFORM

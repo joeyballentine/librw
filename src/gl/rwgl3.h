@@ -281,6 +281,7 @@ void setOutlineSplit(float32 y);
 // along the negated normal, with back faces culled instead of front ones.
 // Together those treat the mesh as wound the other way, which it is.
 void setOutlineInverted(bool32 on);
+void setOutlineDepthBias(float32 widths);
 bool32 getOutlineInverted(void);
 
 // A floor under the hull's width, in world units per unit of view depth, so a
