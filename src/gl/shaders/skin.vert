@@ -72,7 +72,18 @@ main(void)
 	if(u_outlineFlags.w > 0.0)
 		thickness = min(thickness, u_outlineFlags.w*max(clipBase.w, 1e-4));
 
-	Vertex.xyz += normalize(Normal)*thickness*u_outlineSign.x;
+	// The hull's own normal, skinned and transformed the same way the surface's
+	// was. See default.vert, which says why it is not the surface's.
+	vec3 hullLocal = vec3(in_tex1, in_tex2.x);
+	vec3 SkinHull = vec3(0.0, 0.0, 0.0);
+
+	if(dot(hullLocal, hullLocal) <= 1e-8)
+		hullLocal = in_normal;
+
+	for(int k = 0; k < 4; k++)
+		SkinHull += (mat3(u_boneMatrices[int(in_indices[k])]) * hullLocal) * in_weights[k];
+
+	Vertex.xyz += normalize(mat3(u_normal) * SkinHull)*thickness*u_outlineSign.x;
 
 	// The hull's own facing, for the shadow the ink takes. The normal is in
 	// hand here and the fragment stage has no other way to get it.

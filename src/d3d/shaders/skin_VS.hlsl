@@ -26,6 +26,13 @@ struct VS_in
 	float4 Position		: POSITION;
 	float3 Normal		: NORMAL;
 	float2 TexCoord		: TEXCOORD0;
+#ifdef OUTLINE
+	// The normal the hull inflates along, which is not the one that lights the
+	// surface: it is every normal at this position averaged, so the copy does
+	// not crack at a hard corner. iToon.cpp puts it here.
+	float2 HullNormalXY	: TEXCOORD1;
+	float2 HullNormalZ	: TEXCOORD2;
+#endif
 	float4 Prelight		: COLOR0;
 	float4 Weights		: BLENDWEIGHT;
 	int4 Indices		: BLENDINDICES;
@@ -70,9 +77,25 @@ VS_out main(in VS_in input)
 
 	float3 SkinVertex = float3(0.0, 0.0, 0.0);
 	float3 SkinNormal = float3(0.0, 0.0, 0.0);
+#ifdef OUTLINE
+	// **The hull's own normal, skinned beside the surface's.** It is every normal
+	// at this position averaged, so the inflated copy does not crack at a hard
+	// corner, and it is no use lighting anything -- iToon.cpp puts it in two
+	// texture coordinate sets rather than over the top of the artists'. A model
+	// that has not been through iToonHullNormals reads zero here and falls back
+	// to the normal that lights it, which is the push this always made.
+	float3 HullLocal = float3(input.HullNormalXY, input.HullNormalZ.x);
+	float3 SkinHull = float3(0.0, 0.0, 0.0);
+
+	if(dot(HullLocal, HullLocal) <= 1e-8)
+		HullLocal = input.Normal;
+#endif
 	for(j = 0; j < 4; j++){
 		SkinVertex += mul(Local, boneMatrices[input.Indices[j]]).xyz * input.Weights[j];
 		SkinNormal += mul(input.Normal, (float3x3)boneMatrices[input.Indices[j]]).xyz * input.Weights[j];
+#ifdef OUTLINE
+		SkinHull += mul(HullLocal, (float3x3)boneMatrices[input.Indices[j]]).xyz * input.Weights[j];
+#endif
 	}
 
 #ifdef OUTLINE
@@ -104,7 +127,7 @@ VS_out main(in VS_in input)
 	if(outlineFlags.w > 0.0)
 		thickness = min(thickness, outlineFlags.w*max(outlineW, 1e-4));
 
-	SkinVertex += SkinNormal*thickness*outlineSign.x;
+	SkinVertex += normalize(SkinHull)*thickness*outlineSign.x;
 #endif
 
 	output.Position = mul(combinedMat, float4(SkinVertex, 1.0));

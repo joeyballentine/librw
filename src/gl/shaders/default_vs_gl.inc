@@ -74,7 +74,19 @@ const char *default_vert_src =
 "	if(u_outlineFlags.w > 0.0)\n"
 "		thickness = min(thickness, u_outlineFlags.w*max(clipBase.w, 1e-4));\n"
 
-"	Vertex.xyz += normalize(Normal)*thickness*u_outlineSign.x;\n"
+"	// **The hull's own normal, which is not the one that lights the surface.** It\n"
+"	// is every normal at this position averaged, so the inflated copy does not\n"
+"	// crack at a hard corner, and it describes a crease rather than either face\n"
+"	// meeting there -- iToon.cpp puts it in two texture coordinate sets rather\n"
+"	// than over the top of the artists'. A model that has not been through\n"
+"	// iToonHullNormals reads zero here and falls back to the surface's, which is\n"
+"	// the push this always made.\n"
+"	vec3 hullLocal = vec3(in_tex1, in_tex2.x);\n"
+
+"	if(dot(hullLocal, hullLocal) <= 1e-8)\n"
+"		hullLocal = in_normal;\n"
+
+"	Vertex.xyz += normalize(mat3(u_normal) * hullLocal)*thickness*u_outlineSign.x;\n"
 
 "	// The hull's own facing, for the shadow the ink takes. The normal is in\n"
 "	// hand here and the fragment stage has no other way to get it.\n"

@@ -73,7 +73,18 @@ const char *skin_vert_src =
 "	if(u_outlineFlags.w > 0.0)\n"
 "		thickness = min(thickness, u_outlineFlags.w*max(clipBase.w, 1e-4));\n"
 
-"	Vertex.xyz += normalize(Normal)*thickness*u_outlineSign.x;\n"
+"	// The hull's own normal, skinned and transformed the same way the surface's\n"
+"	// was. See default.vert, which says why it is not the surface's.\n"
+"	vec3 hullLocal = vec3(in_tex1, in_tex2.x);\n"
+"	vec3 SkinHull = vec3(0.0, 0.0, 0.0);\n"
+
+"	if(dot(hullLocal, hullLocal) <= 1e-8)\n"
+"		hullLocal = in_normal;\n"
+
+"	for(int k = 0; k < 4; k++)\n"
+"		SkinHull += (mat3(u_boneMatrices[int(in_indices[k])]) * hullLocal) * in_weights[k];\n"
+
+"	Vertex.xyz += normalize(mat3(u_normal) * SkinHull)*thickness*u_outlineSign.x;\n"
 
 "	// The hull's own facing, for the shadow the ink takes. The normal is in\n"
 "	// hand here and the fragment stage has no other way to get it.\n"

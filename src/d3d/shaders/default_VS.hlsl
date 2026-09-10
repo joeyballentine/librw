@@ -39,6 +39,13 @@ struct VS_in
 	float4 Position		: POSITION;
 	float3 Normal		: NORMAL;
 	float2 TexCoord		: TEXCOORD0;
+#ifdef OUTLINE
+	// The normal the hull inflates along, which is not the one that lights the
+	// surface: it is every normal at this position averaged, so the copy does
+	// not crack at a hard corner. iToon.cpp puts it here.
+	float2 HullNormalXY	: TEXCOORD1;
+	float2 HullNormalZ	: TEXCOORD2;
+#endif
 	float4 Prelight		: COLOR0;
 };
 
@@ -99,7 +106,16 @@ VS_out main(in VS_in input)
 	if(outlineFlags.w > 0.0)
 		thickness = min(thickness, outlineFlags.w*max(outlineW, 1e-4));
 
-	Local.xyz += normalize(input.Normal)*thickness*outlineSign.x;
+	// **The hull's own normal where the geometry carries one.** A model that has
+	// not been through iToonHullNormals arrives with these sets absent, which
+	// reads as zero, and falls back to the normal that lights it -- the same
+	// push this always made, cracks at the corners and all.
+	float3 hullN = float3(input.HullNormalXY, input.HullNormalZ.x);
+	float hullLen2 = dot(hullN, hullN);
+
+	hullN = hullLen2 > 1e-8 ? hullN*rsqrt(hullLen2) : normalize(input.Normal);
+
+	Local.xyz += hullN*thickness*outlineSign.x;
 
 	output.Outline = input.Position.y < outlineColor2.a
 	               ? float4(outlineColor2.rgb, outlineFlags.y)

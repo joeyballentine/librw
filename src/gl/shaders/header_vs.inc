@@ -11,6 +11,7 @@ const char *header_vert_src =
 "#define ATTRIB_INDICES	4\n"
 "#define ATTRIB_TEXCOORDS0	5\n"
 "#define ATTRIB_TEXCOORDS1	6\n"
+"#define ATTRIB_TEXCOORDS2	7\n"
 
 
 "VSIN(ATTRIB_NORMAL)	vec3 in_normal;\n"
@@ -18,7 +19,10 @@ const char *header_vert_src =
 "VSIN(ATTRIB_WEIGHTS)	vec4 in_weights;\n"
 "VSIN(ATTRIB_INDICES)	vec4 in_indices;\n"
 "VSIN(ATTRIB_TEXCOORDS0)	vec2 in_tex0;\n"
+"// Sets one and two carry the hull's normal, (x,y) and (z,0), on a model that has\n"
+"// been through iToonHullNormals. See the outline push in default.vert.\n"
 "VSIN(ATTRIB_TEXCOORDS1)	vec2 in_tex1;\n"
+"VSIN(ATTRIB_TEXCOORDS2)	vec2 in_tex2;\n"
 
 
 "#ifdef USE_UBOS\n"
