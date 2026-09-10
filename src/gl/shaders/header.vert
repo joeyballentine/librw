@@ -121,6 +121,10 @@ uniform vec4 u_outlineColor2;
 // Whether each ink is a colour in its own right (1) or a scale on the surface
 // it surrounds (0). x is the upper region, y the lower.
 uniform vec4 u_outlineFlags;
+// Which way the hull inflates: x is +1 out of the surface, -1 into it, for a
+// model wound inside out -- its normals point in, so pushing along them
+// shrinks the copy instead of swelling it.
+uniform vec4 u_outlineSign;
 
 // A light locked to the model rather than to the world, in xyz, with w saying
 // whether to use it.

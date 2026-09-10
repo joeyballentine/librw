@@ -266,6 +266,12 @@ void setOutlineLower(float32 r, float32 g, float32 b);
 void setOutlineFlat(bool32 upper, bool32 lower);
 void setOutlineSplit(float32 y);
 
+// Whether the next hull is drawn for a model wound inside out: inflated
+// along the negated normal, with back faces culled instead of front ones.
+// Together those treat the mesh as wound the other way, which it is.
+void setOutlineInverted(bool32 on);
+bool32 getOutlineInverted(void);
+
 // A floor under the hull's width, in world units per unit of view depth, so a
 // distant character keeps a line instead of losing it below a pixel. The
 // application works the number out; it needs the camera and the render size.

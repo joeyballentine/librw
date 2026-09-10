@@ -73,7 +73,7 @@ main(void)
 	if(u_outlineFlags.w > 0.0)
 		thickness = min(thickness, u_outlineFlags.w*max(clipBase.w, 1e-4));
 
-	Vertex.xyz += normalize(Normal)*thickness;
+	Vertex.xyz += normalize(Normal)*thickness*u_outlineSign.x;
 
 	// The hull's own facing, for the shadow the ink takes. The normal is in
 	// hand here and the fragment stage has no other way to get it.

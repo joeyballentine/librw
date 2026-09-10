@@ -164,7 +164,7 @@ skinMatfxRenderCB(Atomic *atomic, InstanceDataHeader *header)
 		uploadOutlineConstants();
 		setVertexShader(skin_outline_VS);
 		setPixelShader(outline_PS);
-		SetRenderState(CULLMODE, CULLFRONT);
+		SetRenderState(CULLMODE, getOutlineInverted() ? CULLBACK : CULLFRONT);
 
 		InstanceData *oinst = header->inst;
 

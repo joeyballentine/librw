@@ -143,7 +143,7 @@ skinMatfxRenderCB(Atomic *atomic, InstanceDataHeader *header)
 			// that never fires.
 		}
 
-		SetRenderState(CULLMODE, CULLFRONT);
+		SetRenderState(CULLMODE, getOutlineInverted() ? CULLBACK : CULLFRONT);
 		skinOutlineShader->use();
 
 		InstanceData *oinst = header->inst;

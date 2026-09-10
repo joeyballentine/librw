@@ -148,6 +148,7 @@ int32 u_outlineColor;
 int32 u_outlineColor2;
 int32 u_toonLightDir;
 int32 u_outlineFlags;
+int32 u_outlineSign;
 int32 u_toonRoomTint;
 int32 u_toonExtra;
 int32 u_toonExtra2;
@@ -308,6 +309,9 @@ static bool32 toonRegistered;
 // u_outlineFlags.
 static float32 outlineFlags[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
+// x is +1 for a hull pushed out of the surface, -1 for one pushed into it.
+static float32 outlineSign[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+
 // What colour it is in here. Either the room the scene handed over for a
 // character or, failing that, what setLights worked out from the lights
 // themselves -- so it always holds an answer and the shader never has to ask.
@@ -450,6 +454,21 @@ int32
 getOutlineMode(void)
 {
 	return outlineColor[3] > 0.0f ? outlineMode : OUTLINE_NONE;
+}
+
+void
+setOutlineInverted(bool32 on)
+{
+	outlineSign[0] = on ? -1.0f : 1.0f;
+
+	if(toonRegistered)
+		setUniform(u_outlineSign, outlineSign);
+}
+
+bool32
+getOutlineInverted(void)
+{
+	return outlineSign[0] < 0.0f;
 }
 
 void
@@ -3164,6 +3183,7 @@ initOpenGL(void)
 	u_outlineColor2 = registerUniform("u_outlineColor2", UNIFORM_VEC4);
 	u_toonLightDir = registerUniform("u_toonLightDir", UNIFORM_VEC4);
 	u_outlineFlags = registerUniform("u_outlineFlags", UNIFORM_VEC4);
+	u_outlineSign = registerUniform("u_outlineSign", UNIFORM_VEC4);
 	u_toonRoomTint = registerUniform("u_toonRoomTint", UNIFORM_VEC4);
 	u_toonExtra = registerUniform("u_toonExtra", UNIFORM_VEC4);
 	u_toonExtra2 = registerUniform("u_toonExtra2", UNIFORM_VEC4);
@@ -3180,6 +3200,7 @@ initOpenGL(void)
 	setUniform(u_outlineColor, outlineColor);
 	setUniform(u_outlineColor2, outlineColor2);
 	setUniform(u_outlineFlags, outlineFlags);
+	setUniform(u_outlineSign, outlineSign);
 	setUniform(u_toonLightDir, toonLightDir);
 	setUniform(u_toonRoomTint, toonRoomTint);
 	setUniform(u_toonExtra, toonExtra);

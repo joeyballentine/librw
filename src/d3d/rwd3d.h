@@ -126,6 +126,12 @@ void setOutlineSplit(float32 y);
 void setOutlineMode(int32 mode);
 int32 getOutlineMode(void);
 
+// Whether the next hull is drawn for a model wound inside out: inflated
+// along the negated normal, with back faces culled instead of front ones.
+// Together those treat the mesh as wound the other way, which it is.
+void setOutlineInverted(bool32 on);
+bool32 getOutlineInverted(void);
+
 // Push what the toon shaders read. The pixel constants go once a draw, after
 // the lights, because the direction and the room colour are resolved from
 // them; the vertex ones go before the hull pass that reads them.
@@ -150,7 +156,12 @@ enum
 	// Where the camera is. The toon pixel shader wants the vector from the
 	// surface to the eye, and a vertex shader here has no view matrix to
 	// recover it from -- combinedMat has already swallowed the projection.
-	VSLOC_toonCamPos = 236
+	VSLOC_toonCamPos = 236,
+
+	// Which way the hull inflates: x is +1 out of the surface or -1 into it.
+	// A model wound inside out has its normals pointing in, and pushing it
+	// along them shrinks the copy instead of swelling it.
+	VSLOC_outlineSign = 237
 };
 
 extern void *default_toon_PS;

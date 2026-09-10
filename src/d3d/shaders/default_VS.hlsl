@@ -10,6 +10,9 @@
 float4 outlineColor : register(c233);   // rgb ink or scale, a thickness
 float4 outlineColor2 : register(c234);  // rgb ink or scale, a split height
 float4 outlineFlags : register(c235);   // x upper flat, y lower flat, z min, w max
+// x is +1 to push the copy out of the surface, -1 to push it in, for a model
+// wound inside out. c237: c236 is the camera, below.
+float4 outlineSign : register(c237);
 #endif
 
 // Where the camera is, in world space. The pixel shader wants the vector from
@@ -96,7 +99,7 @@ VS_out main(in VS_in input)
 	if(outlineFlags.w > 0.0)
 		thickness = min(thickness, outlineFlags.w*max(outlineW, 1e-4));
 
-	Local.xyz += normalize(input.Normal)*thickness;
+	Local.xyz += normalize(input.Normal)*thickness*outlineSign.x;
 
 	output.Outline = input.Position.y < outlineColor2.a
 	               ? float4(outlineColor2.rgb, outlineFlags.y)

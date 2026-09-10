@@ -316,7 +316,7 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 	int32 outline = getOutlineMode();
 
 	if(outline != OUTLINE_NONE){
-		SetRenderState(CULLMODE, CULLFRONT);
+		SetRenderState(CULLMODE, getOutlineInverted() ? CULLBACK : CULLFRONT);
 		skinOutlineShader->use();
 
 		InstanceData *oinst = header->inst;

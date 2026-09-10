@@ -10,6 +10,7 @@
 float4 outlineColor : register(c233);   // rgb ink or scale, a thickness
 float4 outlineColor2 : register(c234);  // rgb ink or scale, a split height
 float4 outlineFlags : register(c235);   // x upper flat, y lower flat, z min, w max
+float4 outlineSign : register(c237);    // x +1 out of the surface, -1 into it
 #endif
 
 // Where the camera is, in world space. The pixel shader wants the vector from
@@ -103,7 +104,7 @@ VS_out main(in VS_in input)
 	if(outlineFlags.w > 0.0)
 		thickness = min(thickness, outlineFlags.w*max(outlineW, 1e-4));
 
-	SkinVertex += SkinNormal*thickness;
+	SkinVertex += SkinNormal*thickness*outlineSign.x;
 #endif
 
 	output.Position = mul(combinedMat, float4(SkinVertex, 1.0));

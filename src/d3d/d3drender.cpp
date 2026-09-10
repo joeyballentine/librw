@@ -635,6 +635,8 @@ static float32 toonExtra2[4] = { 0.0f, 0.65f, 0.0f, 0.0f };
 static float32 outlineColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 static float32 outlineColor2[4] = { 0.0f, 0.0f, 0.0f, -1.0e30f };
 static float32 outlineFlags[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+// x is +1 for a hull pushed out of the surface, -1 for one pushed into it.
+static float32 outlineSign[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
 static int32 outlineMode;
 static Texture *toonRamp;
 
@@ -792,6 +794,18 @@ getOutlineMode(void)
 	return outlineColor[3] > 0.0f ? outlineMode : OUTLINE_NONE;
 }
 
+void
+setOutlineInverted(bool32 on)
+{
+	outlineSign[0] = on ? -1.0f : 1.0f;
+}
+
+bool32
+getOutlineInverted(void)
+{
+	return outlineSign[0] < 0.0f;
+}
+
 // Push what the toon pixel shaders read. Called once a draw, after the lights
 // are known, because two of the three are resolved from them.
 void
@@ -814,6 +828,7 @@ uploadOutlineConstants(void)
 	d3ddevice->SetVertexShaderConstantF(VSLOC_outlineColor, outlineColor, 1);
 	d3ddevice->SetVertexShaderConstantF(VSLOC_outlineColor2, outlineColor2, 1);
 	d3ddevice->SetVertexShaderConstantF(VSLOC_outlineFlags, outlineFlags, 1);
+	d3ddevice->SetVertexShaderConstantF(VSLOC_outlineSign, outlineSign, 1);
 }
 
 int32

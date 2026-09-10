@@ -73,7 +73,7 @@ const char *skin_vert_src =
 "	if(u_outlineFlags.w > 0.0)\n"
 "		thickness = min(thickness, u_outlineFlags.w*max(clipBase.w, 1e-4));\n"
 
-"	Vertex.xyz += normalize(Normal)*thickness;\n"
+"	Vertex.xyz += normalize(Normal)*thickness*u_outlineSign.x;\n"
 
 "	// The hull's own facing, for the shadow the ink takes. The normal is in\n"
 "	// hand here and the fragment stage has no other way to get it.\n"

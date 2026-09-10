@@ -196,7 +196,9 @@ renderCB_Shader(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 		uploadOutlineConstants();
 		setVertexShader(outline_VS);
 		setPixelShader(outline_PS);
-		SetRenderState(CULLMODE, CULLFRONT);
+		// Or back faces, for a model wound inside out: its near side is the
+		// one pointing away, and the copy is pushed inward to match.
+		SetRenderState(CULLMODE, getOutlineInverted() ? CULLBACK : CULLFRONT);
 
 		InstanceData *oinst = header->inst;
 

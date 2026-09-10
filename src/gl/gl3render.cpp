@@ -215,7 +215,9 @@ renderCB(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 	// side. The same pass gl3skin.cpp draws, for everything that is not a
 	// character -- a tree is a static atomic and came through here.
 	if(getOutlineMode() != OUTLINE_NONE){
-		SetRenderState(CULLMODE, CULLFRONT);
+		// Or back faces, for a model wound inside out: its near side is the
+		// one pointing away, and the copy is pushed inward to match.
+		SetRenderState(CULLMODE, getOutlineInverted() ? CULLBACK : CULLFRONT);
 		outlineShader->use();
 
 		InstanceData *oinst = header->inst;
