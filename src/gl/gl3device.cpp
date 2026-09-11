@@ -153,7 +153,7 @@ int32 u_outlineInk;
 int32 u_toonRoomTint;
 int32 u_toonExtra;
 int32 u_toonExtra2;
-int32 u_toonGloss;
+int32 u_toonExtra3;
 
 bool32 constantVertexColorWhite;
 
@@ -344,9 +344,9 @@ static float32 toonExtra[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 // the lookup, w how hard the shading edges are. See u_toonExtra2.
 static float32 toonExtra2[4] = { 0.0f, 0.65f, 0.0f, 0.0f };
 
-// x how strong the glint is, y how far round the half vector it starts. Off
-// unless a draw asks for it. See ToonGlossAmount in header.frag.
-static float32 toonGloss[4] = { 0.0f, 0.85f, 0.0f, 0.0f };
+// x how strong the glint is, y how far round the half vector it starts, z how
+// the rim light is put on. See header.frag.
+static float32 toonExtra3[4] = { 0.0f, 0.85f, 0.0f, 0.0f };
 
 static void
 pushToonExtra(void)
@@ -354,7 +354,7 @@ pushToonExtra(void)
 	if(toonRegistered){
 		setUniform(u_toonExtra, toonExtra);
 		setUniform(u_toonExtra2, toonExtra2);
-		setUniform(u_toonGloss, toonGloss);
+		setUniform(u_toonExtra3, toonExtra3);
 	}
 }
 
@@ -398,8 +398,15 @@ getToonUnlit(void)
 void
 setToonGloss(float32 amount, float32 edge)
 {
-	toonGloss[0] = amount;
-	toonGloss[1] = edge;
+	toonExtra3[0] = amount;
+	toonExtra3[1] = edge;
+	pushToonExtra();
+}
+
+void
+setToonRimBlend(int32 mode)
+{
+	toonExtra3[2] = (float32)mode;
 	pushToonExtra();
 }
 
@@ -3294,7 +3301,7 @@ initOpenGL(void)
 	u_toonRoomTint = registerUniform("u_toonRoomTint", UNIFORM_VEC4);
 	u_toonExtra = registerUniform("u_toonExtra", UNIFORM_VEC4);
 	u_toonExtra2 = registerUniform("u_toonExtra2", UNIFORM_VEC4);
-	u_toonGloss = registerUniform("u_toonGloss", UNIFORM_VEC4);
+	u_toonExtra3 = registerUniform("u_toonExtra3", UNIFORM_VEC4);
 	toonRegistered = 1;
 
 	// **Every one of them, and only once there is somewhere to put them.**

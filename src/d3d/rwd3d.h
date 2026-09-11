@@ -109,6 +109,10 @@ void setToonLook(float32 wrap, float32 rim, float32 rimEdge, float32 occlusion,
 // A hard highlight on a surface the light bounces off. See rwgl3.h.
 void setToonGloss(float32 amount, float32 edge);
 
+// How the rim light is put on: 0 towards the room's colour, 1 screened over the
+// surface, 2 added. See rwgl3.h, which says what each looks like.
+void setToonRimBlend(int32 mode);
+
 // Whether the next draw takes the cel look although no light is on it. See
 // rwgl3.h, which declares the same call and says what it is for.
 void setToonUnlit(bool32 on);
@@ -178,9 +182,10 @@ enum
 	PSLOC_toonExtra = 30,
 	PSLOC_toonExtra2 = 31,
 
-	// Past what ps_2_0 has, which is fine: toonConstants.h is included by the
-	// TOON permutations alone and those are the only ps_3_0 shaders here.
-	PSLOC_toonGloss = 32,
+	// Past what ps_2_0 has. toonConstants.h declares it for the TOON
+	// permutations alone for that reason, and those are the only ps_3_0 shaders
+	// here. outline_PS.hlsl shares the header and is ps_2_0.
+	PSLOC_toonExtra3 = 32,
 
 	VSLOC_outlineColor = 233,
 	VSLOC_outlineColor2 = 234,

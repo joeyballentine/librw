@@ -113,11 +113,23 @@ main(void)
 
 	color *= texture(tex0, vec2(v_tex0.x, 1.0-v_tex0.y));
 
-	// The silhouette light, after the texture and as a blend rather than an
-	// addition. Towards the colour of the room, which is what light in here
-	// looks like -- white in daylight, blue in Rock Bottom -- and which cannot
-	// take the result out of range however bright the surface already is.
-	color.rgb = mix(color.rgb, toonRoom, toonRimAmt);
+	// The silhouette light, after the texture.
+	//
+	// **Three ways to put it on, because a rim is light and not paint.** Towards
+	// the room's colour replaces what is there: at full amount the band IS the
+	// room -- white in daylight, blue in Rock Bottom -- so whatever the surface
+	// was doing stops at its edge. Screening keeps it, brightening by what is
+	// left of the range rather than by a fixed amount, and cannot leave the
+	// range however bright either side already is. Adding is the brightest and
+	// the only one that clips. See the D3D9 twin in default_PS.hlsl.
+	vec3 rimLight = toonRimAmt*toonRoom;
+
+	if(toonRimBlend >= 1.5)
+		color.rgb = clamp(color.rgb + rimLight, 0.0, 1.0);
+	else if(toonRimBlend >= 0.5)
+		color.rgb = 1.0 - (1.0 - color.rgb)*(1.0 - rimLight);
+	else
+		color.rgb = mix(color.rgb, toonRoom, toonRimAmt);
 
 	// The glint, over everything the surface is. Towards white and not towards
 	// the room, unlike the rim: a highlight is the light itself, where a rim is

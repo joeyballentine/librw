@@ -237,6 +237,17 @@ void setToonLook(float32 wrap, float32 rim, float32 rimEdge, float32 occlusion,
 // surfaces that are wet, not by characters. See ToonGlossAmount in header.frag.
 void setToonGloss(float32 amount, float32 edge);
 
+// How the rim light is put on.
+//
+//   0  towards the room's colour. A replacement: at full amount the band IS
+//      the room, so whatever the surface was doing stops at its edge.
+//   1  screened over the surface. Brightens by what is left of the range
+//      rather than by a fixed amount, so the texture reads through the band,
+//      and it cannot leave the range however bright either side is.
+//   2  added, and clamped. The brightest of the three and the only one that
+//      clips.
+void setToonRimBlend(int32 mode);
+
 // Whether the next draw takes the cel look although no light is on it.
 //
 // The look reads no light array -- the key direction and the room colour are

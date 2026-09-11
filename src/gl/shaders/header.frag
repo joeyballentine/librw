@@ -192,12 +192,14 @@ uniform vec4 u_toonExtra2;
 #define toonIsCharacter (u_toonExtra.z)
 #define toonWrap (u_toonExtra.w)
 
-// The glint, on a vector of its own: x how strong it is, y how far round the
-// half vector it starts. See ToonGlossAmount.
-uniform vec4 u_toonGloss;
+// The glint and the rim's blend, on a third vector: x how strong the glint is,
+// y how far round the half vector it starts, z how the rim light is put on. See
+// ToonGlossAmount, and setToonRimBlend in rwgl3.h.
+uniform vec4 u_toonExtra3;
 
-#define toonGloss (u_toonGloss.x)
-#define toonGlossEdge (u_toonGloss.y)
+#define toonGloss (u_toonExtra3.x)
+#define toonGlossEdge (u_toonExtra3.y)
+#define toonRimBlend (u_toonExtra3.z)
 
 #define toonRim (u_toonExtra2.x)
 #define toonRimEdge (u_toonExtra2.y)

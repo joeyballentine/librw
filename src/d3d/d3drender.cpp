@@ -639,9 +639,9 @@ static float32 toonExtra[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 // the lookup, w how hard the shading edges are.
 static float32 toonExtra2[4] = { 0.0f, 0.65f, 0.0f, 0.0f };
 
-// x how strong the glint is, y how far round the half vector it starts. Off
-// unless a draw asks for it; see ToonGlossAmount in toonConstants.h.
-static float32 toonGloss[4] = { 0.0f, 0.85f, 0.0f, 0.0f };
+// x how strong the glint is, y how far round the half vector it starts, z how
+// the rim light is put on. See toonConstants.h.
+static float32 toonExtra3[4] = { 0.0f, 0.85f, 0.0f, 0.0f };
 static float32 outlineColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 static float32 outlineColor2[4] = { 0.0f, 0.0f, 0.0f, -1.0e30f };
 static float32 outlineFlags[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -706,8 +706,14 @@ setToonLook(float32 wrap, float32 rim, float32 rimEdge, float32 occlusion,
 void
 setToonGloss(float32 amount, float32 edge)
 {
-	toonGloss[0] = amount;
-	toonGloss[1] = edge;
+	toonExtra3[0] = amount;
+	toonExtra3[1] = edge;
+}
+
+void
+setToonRimBlend(int32 mode)
+{
+	toonExtra3[2] = (float32)mode;
 }
 
 // Whether this draw takes the cel look with no lights on it.
@@ -948,7 +954,7 @@ uploadToonConstants(void)
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonRoom, room, 1);
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonExtra, toonExtra, 1);
 	d3ddevice->SetPixelShaderConstantF(PSLOC_toonExtra2, toonExtra2, 1);
-	d3ddevice->SetPixelShaderConstantF(PSLOC_toonGloss, toonGloss, 1);
+	d3ddevice->SetPixelShaderConstantF(PSLOC_toonExtra3, toonExtra3, 1);
 }
 
 void

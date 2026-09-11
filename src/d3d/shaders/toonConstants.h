@@ -28,17 +28,18 @@ float4 toonRoom : register(c29);
 float4 toonExtra : register(c30);
 float4 toonExtra2 : register(c31);
 
-// The glint, on a register of its own.
+// The glint and the rim's blend, on a third register.
 //
 // **Declared for the TOON build alone, because c32 is past what ps_2_0 has.**
 // outline_PS.hlsl includes this header and is ps_2_0, which stops at c31 and
-// would refuse the line below. Everything that reads the glint is under the
-// same guard, and the ink pass has no use for a highlight.
+// would refuse the line below. Everything that reads these is under the same
+// guard, and the ink pass has no use for either.
 #ifdef TOON
-float4 toonGlossParams : register(c32);
+float4 toonExtra3 : register(c32);
 
-#define toonGloss (toonGlossParams.x)
-#define toonGlossEdge (toonGlossParams.y)
+#define toonGloss (toonExtra3.x)
+#define toonGlossEdge (toonExtra3.y)
+#define toonRimBlend (toonExtra3.z)
 #endif
 
 #define toonEnabled (toonParams.x)

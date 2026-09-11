@@ -193,12 +193,14 @@ const char *header_frag_src =
 "#define toonIsCharacter (u_toonExtra.z)\n"
 "#define toonWrap (u_toonExtra.w)\n"
 
-"// The glint, on a vector of its own: x how strong it is, y how far round the\n"
-"// half vector it starts. See ToonGlossAmount.\n"
-"uniform vec4 u_toonGloss;\n"
+"// The glint and the rim's blend, on a third vector: x how strong the glint is,\n"
+"// y how far round the half vector it starts, z how the rim light is put on. See\n"
+"// ToonGlossAmount, and setToonRimBlend in rwgl3.h.\n"
+"uniform vec4 u_toonExtra3;\n"
 
-"#define toonGloss (u_toonGloss.x)\n"
-"#define toonGlossEdge (u_toonGloss.y)\n"
+"#define toonGloss (u_toonExtra3.x)\n"
+"#define toonGlossEdge (u_toonExtra3.y)\n"
+"#define toonRimBlend (u_toonExtra3.z)\n"
 
 "#define toonRim (u_toonExtra2.x)\n"
 "#define toonRimEdge (u_toonExtra2.y)\n"

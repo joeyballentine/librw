@@ -94,11 +94,24 @@ float4 main(VS_out input) : COLOR
 	color *= tex2D(tex0, input.TexCoord0.xy);
 #endif
 #ifdef TOON
-	// The silhouette light, after the texture and as a blend rather than an
-	// addition. Towards the colour of the room, which is what light in here
-	// looks like, and which cannot take the result out of range however bright
-	// the surface already is.
-	color.rgb = lerp(color.rgb, toonRoomC, toonRimAmt);
+	// The silhouette light, after the texture.
+	//
+	// **Three ways to put it on, because a rim is light and not paint.** Towards
+	// the room's colour replaces what is there: at full amount the band IS the
+	// room, so whatever the surface was doing stops at its edge. Screening keeps
+	// it -- brightening by what is left of the range rather than by a fixed
+	// amount, so the texture still reads through the band -- and cannot leave
+	// the range however bright either side already is. Adding is the brightest
+	// of the three and the only one that clips, which is what it looked like
+	// before any of this was a blend at all.
+	float3 rimLight = toonRimAmt*toonRoomC;
+
+	if(toonRimBlend >= 1.5)
+		color.rgb = saturate(color.rgb + rimLight);
+	else if(toonRimBlend >= 0.5)
+		color.rgb = 1.0 - (1.0 - color.rgb)*(1.0 - rimLight);
+	else
+		color.rgb = lerp(color.rgb, toonRoomC, toonRimAmt);
 
 	// The glint, over everything the surface is. Towards white and not towards
 	// the room, unlike the rim: a highlight is the light itself, where a rim is
