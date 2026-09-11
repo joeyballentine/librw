@@ -944,17 +944,17 @@ uploadToonConstants(void)
 			V3d *p = &cam->getFrame()->getLTM()->pos;
 			float32 campos[4] = { p->x, p->y, p->z, 1.0f };
 
-			d3ddevice->SetVertexShaderConstantF(VSLOC_toonCamPos, campos, 1);
+			setVertexShaderConstantF(VSLOC_toonCamPos, campos, 1);
 		}
 	}
 
 	setTexture(3, toonRamp);
-	d3ddevice->SetPixelShaderConstantF(PSLOC_toonParams, toonParams, 1);
-	d3ddevice->SetPixelShaderConstantF(PSLOC_toonLightDir, toonLightDir, 1);
-	d3ddevice->SetPixelShaderConstantF(PSLOC_toonRoom, room, 1);
-	d3ddevice->SetPixelShaderConstantF(PSLOC_toonExtra, toonExtra, 1);
-	d3ddevice->SetPixelShaderConstantF(PSLOC_toonExtra2, toonExtra2, 1);
-	d3ddevice->SetPixelShaderConstantF(PSLOC_toonExtra3, toonExtra3, 1);
+	setPixelShaderConstantF(PSLOC_toonParams, toonParams, 1);
+	setPixelShaderConstantF(PSLOC_toonLightDir, toonLightDir, 1);
+	setPixelShaderConstantF(PSLOC_toonRoom, room, 1);
+	setPixelShaderConstantF(PSLOC_toonExtra, toonExtra, 1);
+	setPixelShaderConstantF(PSLOC_toonExtra2, toonExtra2, 1);
+	setPixelShaderConstantF(PSLOC_toonExtra3, toonExtra3, 1);
 }
 
 void
@@ -967,11 +967,11 @@ setOutlineInk(float32 saturation, float32 gamma)
 void
 uploadOutlineConstants(void)
 {
-	d3ddevice->SetPixelShaderConstantF(PSLOC_outlineInk, outlineInk, 1);
-	d3ddevice->SetVertexShaderConstantF(VSLOC_outlineColor, outlineColor, 1);
-	d3ddevice->SetVertexShaderConstantF(VSLOC_outlineColor2, outlineColor2, 1);
-	d3ddevice->SetVertexShaderConstantF(VSLOC_outlineFlags, outlineFlags, 1);
-	d3ddevice->SetVertexShaderConstantF(VSLOC_outlineSign, outlineSign, 1);
+	setPixelShaderConstantF(PSLOC_outlineInk, outlineInk, 1);
+	setVertexShaderConstantF(VSLOC_outlineColor, outlineColor, 1);
+	setVertexShaderConstantF(VSLOC_outlineColor2, outlineColor2, 1);
+	setVertexShaderConstantF(VSLOC_outlineFlags, outlineFlags, 1);
+	setVertexShaderConstantF(VSLOC_outlineSign, outlineSign, 1);
 }
 
 int32
