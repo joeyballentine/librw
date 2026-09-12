@@ -3070,57 +3070,83 @@ static struct {
 	{ 0, 0, 0 },
 };
 
+// The whole of one profile's attempt: a window, a context on it, and the
+// entry points for the API that context turned out to speak. All three have
+// to succeed together for the profile to count as available.
+//
+// Creating the context INSIDE the loop is the point. SDL_CreateWindow does
+// not fail on a profile the driver cannot give -- the request is only
+// attributes at that stage -- so a loop that breaks on the window alone
+// always takes the first entry, and the fallbacks below it are unreachable.
+// On a host with no desktop GL at all (Android, and any GLES-only driver)
+// that meant asking for CORE 3.3, getting a window, and then failing at
+// SDL_GL_CreateContext with the ES entries never tried.
 static int
-startSDL3(void)
+tryProfileSDL3(int index, SDL_Window **pwin, SDL_GLContext *pctx)
 {
 	SDL_Window *win;
 	SDL_GLContext ctx;
-	DisplayMode *mode;
+	DisplayMode *mode = &glGlobals.modes[glGlobals.currentMode];
 
-	mode = &glGlobals.modes[glGlobals.currentMode];
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, profiles[index].gl);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, profiles[index].major);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, profiles[index].minor);
+
+	if(mode->flags & VIDEOMODEEXCLUSIVE) {
+		win = SDL_CreateWindow(glGlobals.winTitle, mode->mode.w, mode->mode.h, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
+		// This is the recommended way for SDL3.
+		if (win) {
+			SDL_SetWindowFullscreenMode(win, &mode->mode);
+			SDL_SetWindowFullscreen(win, true);
+		}
+	} else {
+		win = SDL_CreateWindow(glGlobals.winTitle, glGlobals.winWidth, glGlobals.winHeight, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
+		if (win)
+			SDL_SetWindowFullscreenMode(win, NULL);
+	}
+	if(win == nil)
+		return 0;
+
+	ctx = SDL_GL_CreateContext(win);
+	if(ctx == nil){
+		SDL_DestroyWindow(win);
+		return 0;
+	}
+
+	// Set before the load, because which loader runs is read from them.
+	gl3Caps.gles = profiles[index].gl == SDL_GL_CONTEXT_PROFILE_ES;
+	gl3Caps.glversion = profiles[index].major*10 + profiles[index].minor;
+
+	// A driver may hand back a context older than the one asked for rather
+	// than refusing, so this is a real failure case and not a formality:
+	// glad fails when an entry point the requested version promises is not
+	// there. Falling through to the next profile is the right answer.
+	if(!((gl3Caps.gles ? gladLoadGLES2Loader : gladLoadGLLoader) ((GLADloadproc) SDL_GL_GetProcAddress, gl3Caps.glversion))){
+		SDL_GL_DestroyContext(ctx);
+		SDL_DestroyWindow(win);
+		return 0;
+	}
+
+	*pwin = win;
+	*pctx = ctx;
+	return 1;
+}
+
+static int
+startSDL3(void)
+{
+	SDL_Window *win = nil;
+	SDL_GLContext ctx = nil;
 
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, glGlobals.numSamples);
 
 	int i;
-	for(i = 0; profiles[i].gl; i++){
-		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, profiles[i].gl);
-		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, profiles[i].major);
-		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, profiles[i].minor);
+	for(i = 0; profiles[i].gl; i++)
+		if(tryProfileSDL3(i, &win, &ctx))
+			break;
 
-		if(mode->flags & VIDEOMODEEXCLUSIVE) {
-			win = SDL_CreateWindow(glGlobals.winTitle, mode->mode.w, mode->mode.h, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
-			// This is the recommended way for SDL3.
-			if (win) {
-				SDL_SetWindowFullscreenMode(win, &mode->mode);
-				SDL_SetWindowFullscreen(win, true);
-			}
-		} else {
-			win = SDL_CreateWindow(glGlobals.winTitle, glGlobals.winWidth, glGlobals.winHeight, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
-			if (win)
-				SDL_SetWindowFullscreenMode(win, NULL);
-		}
-		// The window is made whatever the version; it is the context that is
-		// refused. Try the next profile when it is.
-		if(win){
-			ctx = SDL_GL_CreateContext(win);
-			if(ctx){
-				gl3Caps.gles = profiles[i].gl == SDL_GL_CONTEXT_PROFILE_ES;
-				gl3Caps.glversion = profiles[i].major*10 + profiles[i].minor;
-				break;
-			}
-			SDL_DestroyWindow(win);
-			win = nil;
-		}
-	}
-	if(win == nil){
+	if(win == nil || ctx == nil){
 		RWERROR((ERR_GENERAL, SDL_GetError()));
-		return 0;
-	}
-
-	if (!((gl3Caps.gles ? gladLoadGLES2Loader : gladLoadGLLoader) ((GLADloadproc) SDL_GL_GetProcAddress, gl3Caps.glversion)) ) {
-		RWERROR((ERR_GENERAL, "gladLoadGLLoader failed"));
-		SDL_GL_DestroyContext(ctx);
-		SDL_DestroyWindow(win);
 		return 0;
 	}
 

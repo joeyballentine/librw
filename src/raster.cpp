@@ -566,6 +566,18 @@ xbox_to_gl3(rw::Raster *ras)
 #ifdef RW_GL3
 	using namespace rw;
 
+	// Same refusal d3d_to_gl3 makes above, and for the same reason: without
+	// S3TC there is nothing to upload the blocks to, and a DXT raster made
+	// here would fail at glCompressedTexImage2D with the texture already
+	// installed -- so it draws as garbage rather than as a missing format.
+	// Returning nil sends the caller down convertTexToCurrentPlatform's
+	// Image path, which decompresses on the CPU and costs only memory.
+	//
+	// Whole GLES families have no S3TC: Adreno and Mali expose ETC and ASTC
+	// instead, so this is the ordinary case on Android rather than an edge.
+	if(!gl3::gl3Caps.dxtSupported)
+		return nil;
+
 	int dxt = 0;
 	xbox::XboxRaster *xboxras = GETXBOXRASTEREXT(ras);
 	if(xboxras->customFormat){
