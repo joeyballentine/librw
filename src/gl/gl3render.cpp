@@ -273,25 +273,27 @@ renderCB(Atomic *atomic, InstanceDataHeader *header, bool32 uvXform)
 		// shader does not do point or spot lights, so anything reached by one
 		// keeps the per-vertex path.
 		//
-		// A draw with no lights takes the per-pixel shader too where it has
-		// asked for the cel look: that is the one carrying a normal and a view
-		// vector across, and the fragment shader's toon block is inside its
-		// PERPIXEL guard. See setToonUnlit and the D3D9 twin in d3d9render.cpp.
-		if((vsBits & VSLIGHT_MASK) == 0 && !getToonUnlit()){
+		// The cel look takes the per-pixel shader whatever the lights are and
+		// whether or not per-pixel lighting is on: that is the one carrying a
+		// normal and a view vector across, and the fragment shader's toon block
+		// is inside its PERPIXEL guard. A draw with no lights takes it only
+		// where it asked to with setToonUnlit. See the D3D9 twin in
+		// d3d9render.cpp.
+		bool32 toon = getToonShading() &&
+		              ((vsBits & VSLIGHT_MASK) != 0 || getToonUnlit());
+		bool32 perPixel = toon ||
+		                  (getPerPixelLighting() && (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT);
+
+		if(perPixel){
+			if(getAlphaTest())
+				(uvXform ? uvXformShader_pp : defaultShader_pp)->use();
+			else
+				(uvXform ? uvXformShader_pp_noAT : defaultShader_pp_noAT)->use();
+		}else if((vsBits & VSLIGHT_MASK) == 0){
 			if(getAlphaTest())
 				(uvXform ? uvXformShader : defaultShader)->use();
 			else
 				(uvXform ? uvXformShader_noAT : defaultShader_noAT)->use();
-		}else if(getToonUnlit() && (vsBits & VSLIGHT_MASK) == 0){
-			if(getAlphaTest())
-				(uvXform ? uvXformShader_pp : defaultShader_pp)->use();
-			else
-				(uvXform ? uvXformShader_pp_noAT : defaultShader_pp_noAT)->use();
-		}else if(getPerPixelLighting() && (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT){
-			if(getAlphaTest())
-				(uvXform ? uvXformShader_pp : defaultShader_pp)->use();
-			else
-				(uvXform ? uvXformShader_pp_noAT : defaultShader_pp_noAT)->use();
 		}else{
 			if(getAlphaTest())
 				(uvXform ? uvXformShader_fullLight : defaultShader_fullLight)->use();

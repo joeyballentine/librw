@@ -344,6 +344,7 @@ float32 getLightIntensity(void);
 // `strength` dials the whole stylised shading against the plain lighting: 0 is
 // the game as it was, 1 is the full cartoon.
 void setToonShading(bool32 enable, float32 bands, float32 saturation, float32 strength);
+bool32 getToonShading(void);
 
 // Evaluate lighting per fragment rather than per vertex, in the default,
 // uvxform and skin pipelines. Directional lights only: an atomic reached by a

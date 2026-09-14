@@ -359,13 +359,15 @@ skinRenderCB(Atomic *atomic, InstanceDataHeader *header)
 		setPipelineVertexAlpha(inst->vertexAlpha || m->color.alpha != 0xFF);
 
 		// Same rule as the default pipeline in gl3render.cpp: per-pixel
-		// replaces the directional-only case and nothing else.
+		// replaces the directional-only case, and the cel look any lit case.
+		// A skinned draw with no lights never takes the cel look, as on D3D9.
 		if((vsBits & VSLIGHT_MASK) == 0){
 			if(getAlphaTest())
 				skinShader->use();
 			else
 				skinShader_noAT->use();
-		}else if(getPerPixelLighting() && (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT){
+		}else if(getToonShading() ||
+		         (getPerPixelLighting() && (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT)){
 			if(getAlphaTest())
 				skinShader_pp->use();
 			else

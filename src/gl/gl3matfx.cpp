@@ -57,7 +57,8 @@ matfxDefaultRender(InstanceDataHeader *header, InstanceData *inst, int32 vsBits,
 			defaultShader->use();
 		else
 			defaultShader_noAT->use();
-	}else if(getPerPixelLighting() && (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT){
+	}else if(getToonShading() ||
+	         (getPerPixelLighting() && (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT)){
 		if(getAlphaTest())
 			defaultShader_pp->use();
 		else

@@ -71,7 +71,8 @@ skinMatfxRender_Default(InstanceDataHeader *header, InstanceData *inst, int32 vs
 			skinShader->use();
 		else
 			skinShader_noAT->use();
-	}else if(getPerPixelLighting() && (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT){
+	}else if(getToonShading() ||
+	         (getPerPixelLighting() && (vsBits & VSLIGHT_MASK) == VSLIGHT_DIRECT)){
 		if(getAlphaTest())
 			skinShader_pp->use();
 		else

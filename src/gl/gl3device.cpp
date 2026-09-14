@@ -649,6 +649,12 @@ setToonShading(bool32 enable, float32 bands, float32 saturation, float32 strengt
 		setUniform(u_toonParams, toonParams);
 }
 
+bool32
+getToonShading(void)
+{
+	return toonParams[0] != 0.0f;
+}
+
 void
 setToonRoomScale(float32 scale)
 {
