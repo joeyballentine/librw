@@ -131,6 +131,15 @@ im2DSetXform(void)
 //	glUniform4fv(currentShader->uniformLocations[u_xform], 1, xform);
 }
 
+// How many elements to orphan a stream buffer at: the usual size, or the batch
+// where the batch is larger. glBufferSubData past the end of the buffer is
+// GL_INVALID_VALUE, and the draw after it reads outside the buffer.
+static int32
+streamSize(int32 n, int32 usual)
+{
+	return n > usual ? n : usual;
+}
+
 void
 im2DRenderPrimitive(PrimitiveType primType, void *vertices, int32 numVertices)
 {
@@ -143,7 +152,7 @@ im2DRenderPrimitive(PrimitiveType primType, void *vertices, int32 numVertices)
 #endif
 
 	glBindBuffer(GL_ARRAY_BUFFER, im2DVbo);
-	glBufferData(GL_ARRAY_BUFFER, STARTVERTICES*sizeof(Im2DVertex), nil, GL_STREAM_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, streamSize(numVertices, STARTVERTICES)*sizeof(Im2DVertex), nil, GL_STREAM_DRAW);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, numVertices*sizeof(Im2DVertex), vertices);
 
 	if(im2dOverrideShader)
@@ -178,11 +187,11 @@ im2DRenderIndexedPrimitive(PrimitiveType primType,
 #endif
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, im2DIbo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, STARTINDICES*2, nil, GL_STREAM_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, streamSize(numIndices, STARTINDICES)*2, nil, GL_STREAM_DRAW);
 	glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, numIndices*2, indices);
 
 	glBindBuffer(GL_ARRAY_BUFFER, im2DVbo);
-	glBufferData(GL_ARRAY_BUFFER, STARTVERTICES*sizeof(Im2DVertex), nil, GL_STREAM_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, streamSize(numVertices, STARTVERTICES)*sizeof(Im2DVertex), nil, GL_STREAM_DRAW);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, numVertices*sizeof(Im2DVertex), vertices);
 
 	if(im2dOverrideShader)
@@ -290,7 +299,7 @@ im3DTransform(void *vertices, int32 numVertices, Matrix *world, uint32 flags)
 #endif
 
 	glBindBuffer(GL_ARRAY_BUFFER, im3DVbo);
-	glBufferData(GL_ARRAY_BUFFER, STARTVERTICES*sizeof(Im3DVertex), nil, GL_STREAM_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, streamSize(numVertices, STARTVERTICES)*sizeof(Im3DVertex), nil, GL_STREAM_DRAW);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, numVertices*sizeof(Im3DVertex), vertices);
 #ifndef RW_GL_USE_VAOS
 	setAttribPointers(im3dattribDesc, 4);
@@ -311,7 +320,7 @@ void
 im3DRenderIndexedPrimitive(PrimitiveType primType, void *indices, int32 numIndices)
 {
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, im3DIbo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, STARTINDICES*2, nil, GL_STREAM_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, streamSize(numIndices, STARTINDICES)*2, nil, GL_STREAM_DRAW);
 	glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, numIndices*2, indices);
 
 	flushCache();
