@@ -84,12 +84,24 @@ const char *shaderDecl330 =
 "#define FRAGCOLOR(c) (fragColor = c)\n";
 const char *shaderDecl100es =
 "#version 100\n"
+// fwidth and dFdx are core from 3.0 and an extension before it. A vertex
+// shader has no derivatives, and "enable" on an unsupported extension is a
+// warning rather than an error, so one preamble still serves both stages.
+"#extension GL_OES_standard_derivatives : enable\n"
 "#define GL2\n"
 "#define texture texture2D\n"
 "#define VSIN(index) attribute\n"
 "#define VSOUT varying\n"
 "#define FSIN varying\n"
 "#define FRAGCOLOR(c) (gl_FragColor = c)\n"
+"precision highp float;\n"
+"precision highp int;\n";
+const char *shaderDecl300es =
+"#version 300 es\n"
+"#define VSIN(index) layout(location = index) in\n"
+"#define VSOUT out\n"
+"#define FSIN in\n"
+"#define FRAGCOLOR(c) (fragColor = c)\n"
 "precision highp float;\n"
 "precision highp int;\n";
 const char *shaderDecl310es =
@@ -3066,6 +3078,7 @@ static struct {
 	{ SDL_GL_CONTEXT_PROFILE_CORE, 3, 3 },
 	{ SDL_GL_CONTEXT_PROFILE_CORE, 2, 1 },
 	{ SDL_GL_CONTEXT_PROFILE_ES, 3, 1 },
+	{ SDL_GL_CONTEXT_PROFILE_ES, 3, 0 },
 	{ SDL_GL_CONTEXT_PROFILE_ES, 2, 0 },
 	{ 0, 0, 0 },
 };
@@ -3365,8 +3378,10 @@ initOpenGL(void)
 		glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &gl3Caps.maxAnisotropy);
 
 	if(gl3Caps.gles){
-		if(gl3Caps.glversion >= 30)
+		if(gl3Caps.glversion >= 31)
 			shaderDecl = shaderDecl310es;
+		else if(gl3Caps.glversion >= 30)
+			shaderDecl = shaderDecl300es;
 		else
 			shaderDecl = shaderDecl100es;
 	}else{
