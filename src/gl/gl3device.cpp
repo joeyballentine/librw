@@ -1840,14 +1840,11 @@ setRenderState(int32 state, void *pvalue)
 		setAlphaTestFunction(value);
 		break;
 	case ALPHATESTREF:
+		// updateAlphaStates owns alphaRef: a cutout raises the reference past
+		// the one asked for.
 		if(rwStateCache.alpharef != value){
 			rwStateCache.alpharef = value;
 			updateAlphaStates();
-		}
-		if(alphaRef != value/255.0f){
-			alphaRef = value/255.0f;
-			uniformStateDirty[RWGL_ALPHAREF] = true;
-			stateDirty = 1;
 		}
 		break;
 	case GSALPHATEST:
@@ -1946,7 +1943,7 @@ getRenderState(int32 state)
 		val = rwStateCache.alphaFunc;
 		break;
 	case ALPHATESTREF:
-		val = (uint32)(alphaRef*255.0f);
+		val = rwStateCache.alpharef;
 		break;
 	case GSALPHATEST:
 		val = rwStateCache.gsalpha;
