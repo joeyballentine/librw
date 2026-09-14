@@ -8,6 +8,10 @@
 #endif
 #endif
 
+#ifdef RW_VULKAN
+struct SDL_Window;
+#endif
+
 namespace rw {
 
 #if !defined(RW_D3D9) && !defined(RW_D3D11)
@@ -18,18 +22,22 @@ namespace rw {
 
 namespace d3d {
 
+#ifdef RW_D3D_ANY
+struct EngineOpenParams : rw::EngineOpenParams
+{
 #if defined(RW_D3D9) || defined(RW_D3D11)
 #ifdef _WINDOWS_
-struct EngineOpenParams : rw::EngineOpenParams
-{
 	HWND window;
-};
 #else
-struct EngineOpenParams : rw::EngineOpenParams
-{
 	uint32 please_include_windows_h;
-};
 #endif
+#endif
+#ifdef RW_VULKAN
+	// The window the Vulkan device presents to. The application makes it,
+	// with SDL_WINDOW_VULKAN; the Direct3D devices take the HWND instead.
+	::SDL_Window *sdlWindow;
+#endif
+};
 #endif
 
 extern bool32 isP8supported;
@@ -250,7 +258,7 @@ void setD3dMaterial(D3DMATERIAL9 *mat9);
 #endif
 #endif
 
-#if defined(RW_D3D9) || defined(RW_D3D11)
+#ifdef RW_D3D_ANY
 
 // What fxc called the array inside a compiled blob.
 //
@@ -526,6 +534,11 @@ struct D3dRaster
 	// One of AlphaKind. ALPHAGRADED is the safe default: it is what every
 	// raster with an alpha channel was treated as before this existed.
 	uint8 alphaKind;
+#if defined(RW_D3D11) || defined(RW_VULKAN)
+	// Whether the system-memory copy has been written since it was last
+	// uploaded. Both backends below keep the texels twice; see D3D11's.
+	bool dirty;
+#endif
 #ifdef RW_D3D11
 	// The GPU side. `texture` above stays the system-memory copy, because
 	// D3D11 has nothing like D3D9's managed pool: a texture the GPU reads
@@ -535,7 +548,12 @@ struct D3dRaster
 	void *srv;	// ID3D11ShaderResourceView
 	void *rtv;	// ID3D11RenderTargetView, camera textures only
 	void *dsv;	// ID3D11DepthStencilView, z buffers only
-	bool dirty;
+#endif
+#ifdef RW_VULKAN
+	// The GPU side, kept the way D3D11 keeps it. A pointer to the backend's
+	// own record rather than the handles themselves: a Vulkan image is a
+	// 64-bit handle even in a 32-bit build, and a void* cannot hold one.
+	void *vk;
 #endif
 };
 
@@ -880,48 +898,115 @@ extern Device renderdevice;
 }
 #endif
 
-// Which implementation Engine::open should take, and the flag the forwarders
-// read. Set it before Engine::open; nothing changes it afterwards.
-#if defined(RW_D3D9) && defined(RW_D3D11)
+#ifdef RW_VULKAN
+namespace implvk {
+bool32 captureFrame(Raster *dst);
+void *createPixelShader(void *csosrc);
+void *createVertexShader(void *csosrc);
+void destroyPixelShader(void *shader);
+void destroyVertexShader(void *shader);
+bool32 deviceOpen(void);
+void drawIndexedPrimitive(uint32 primType, int32 baseVertex, uint32 minVertex,
+	uint32 numVertices, uint32 startIndex, uint32 numPrimitives);
+void drawPrimitive(uint32 primType, uint32 startVertex, uint32 numPrimitives);
+void flushCache(void);
+bool32 getBlendEnabled(void);
+void getRenderState(uint32 state, uint32 *value);
+void getSamplerState(uint32 stage, uint32 type, uint32 *value);
+void getScreenExtent(int32 *width, int32 *height);
+void getTextureStageState(uint32 stage, uint32 type, uint32 *value);
+void getVirtualScreen(int32 *width, int32 *height);
+int32 getVirtualScreenSamples(void);
+void setIm2DActive(bool32 active);
+void setIndices(void *indexBuffer);
+void setMaterial(const RGBA &color, const SurfaceProperties &surfaceprops, float extraSurfProp);
+void setPipelineVertexAlpha(bool32 enable);
+void setPixelShader(void *ps);
+void setPixelShaderConstantF(uint32 reg, const float32 *data, int32 numRegs);
+void setRasterStage(uint32 stage, Raster *raster);
+void setRenderState(uint32 state, uint32 value);
+void setSamplerState(uint32 stage, uint32 type, uint32 value);
+void setStreamSource(int n, void *buffer, uint32 offset, uint32 stride);
+void setTexture(uint32 stage, Texture *tex);
+void setTextureStageState(uint32 stage, uint32 type, uint32 value);
+void setVertexDeclaration(void *declaration);
+void setVertexShader(void *vs);
+void setVertexShaderConstantF(uint32 reg, const float32 *data, int32 numRegs);
+void setVertexShaderConstantI(uint32 reg, const int32 *data, int32 numRegs);
+void setVirtualScreen(int32 width, int32 height);
+void setVirtualScreenSamples(int32 samples);
+extern Device renderdevice;
+}
+#endif
+
+// Which implementation Engine::open should take, and the flags the forwarders
+// read. Set them before Engine::open; nothing changes them afterwards. Neither
+// set means D3D9, and useVulkan wins over useD3D11.
+//
+// Only a build carrying more than one implementation has them. In any other the
+// answer is a constant.
+#if (defined(RW_D3D9) + defined(RW_D3D11) + defined(RW_VULKAN)) > 1
+#define RWD3D_MULTI
 extern bool32 useD3D11;
+extern bool32 useVulkan;
 #endif
 Device &renderDevice(void);
 
-// The same question for code that is compiled ONCE for both backends -- the
-// raster layer, the immediate mode, the pipelines. Constants in a build that
-// carries only one, so the arm that cannot apply costs nothing and the arm that
-// always applies is not a branch.
+// The same question for code that is compiled ONCE for every implementation --
+// the raster layer, the immediate mode, the pipelines. Constants in a build
+// that carries only one, so the arm that cannot apply costs nothing and the arm
+// that always applies is not a branch.
 //
 // The #ifdef around such an arm is still needed: only one of these has d3d9.h
-// in scope, and only the other has d3d11.h.
-#if defined(RW_D3D9) && defined(RW_D3D11)
-#define RWD3D_IS9 (!rw::d3d::useD3D11)
-#define RWD3D_IS11 (rw::d3d::useD3D11)
-#elif defined(RW_D3D9)
+// in scope, only one has d3d11.h, and only one has vulkan.h.
+#ifdef RWD3D_MULTI
+#define RWD3D_ISVK (rw::d3d::useVulkan)
+#define RWD3D_IS11 (!rw::d3d::useVulkan && rw::d3d::useD3D11)
+#define RWD3D_IS9 (!rw::d3d::useVulkan && !rw::d3d::useD3D11)
+#else
+#ifdef RW_D3D9
 #define RWD3D_IS9 1
-#define RWD3D_IS11 0
-#elif defined(RW_D3D11)
-#define RWD3D_IS9 0
-#define RWD3D_IS11 1
 #else
 #define RWD3D_IS9 0
+#endif
+#ifdef RW_D3D11
+#define RWD3D_IS11 1
+#else
 #define RWD3D_IS11 0
 #endif
-
-// A compiled shader by name, from the tree of the backend that is running.
-//
-// shaders/make_shaders.cmd compiles every source into shaders/ for D3D9 and
-// shaders11/ for D3D11 under one array name. A file that creates shaders
-// includes the first tree's headers inside a namespace sm2 and the second's
-// inside a namespace sm4, so a shader missing from either tree does not compile
-// in a build that carries both.
-#if defined(RW_D3D9) && defined(RW_D3D11)
-#define RWD3D_SHADER(name) (RWD3D_IS11 ? (void*)sm4::name : (void*)sm2::name)
-#elif defined(RW_D3D9)
-#define RWD3D_SHADER(name) ((void*)sm2::name)
-#elif defined(RW_D3D11)
-#define RWD3D_SHADER(name) ((void*)sm4::name)
+#ifdef RW_VULKAN
+#define RWD3D_ISVK 1
+#else
+#define RWD3D_ISVK 0
 #endif
+#endif
+
+// A compiled shader by name, from the tree of the implementation that is
+// running.
+//
+// shaders/make_shaders.cmd compiles every source into shaders/ for D3D9,
+// shaders11/ for D3D11 and shadersvk/ for Vulkan under one array name. A file
+// that creates shaders includes the first tree's headers inside a namespace
+// sm2, the second's inside a namespace sm4 and the third's inside a namespace
+// spv, so a shader missing from any tree does not compile in a build that
+// carries it.
+#ifdef RW_D3D9
+#define RWD3D_SHADER9(name) ((void*)sm2::name)
+#else
+#define RWD3D_SHADER9(name) ((void*)0)
+#endif
+#ifdef RW_D3D11
+#define RWD3D_SHADER11(name) ((void*)sm4::name)
+#else
+#define RWD3D_SHADER11(name) ((void*)0)
+#endif
+#ifdef RW_VULKAN
+#define RWD3D_SHADERVK(name) ((void*)spv::name)
+#else
+#define RWD3D_SHADERVK(name) ((void*)0)
+#endif
+#define RWD3D_SHADER(name) \
+	(RWD3D_ISVK ? RWD3D_SHADERVK(name) : RWD3D_IS11 ? RWD3D_SHADER11(name) : RWD3D_SHADER9(name))
 
 }
 }

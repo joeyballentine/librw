@@ -35,7 +35,7 @@ getFixedFunction(void)
 	return fixedFunction;
 }
 
-#if defined(RW_D3D9) || defined(RW_D3D11)
+#if defined(RW_D3D_ANY)
 
 #ifdef RW_D3D9
 IDirect3DDevice9 *d3ddevice = nil;
@@ -119,6 +119,29 @@ namespace sm4 {
 #include "shaders11/im2d_VS.h"
 #include "shaders11/im2d_PS.h"
 #include "shaders11/im2d_tex_PS.h"
+}
+#endif
+#ifdef RW_VULKAN
+namespace spv {
+#include "shadersvk/default_amb_VS.h"
+#include "shadersvk/default_amb_dir_VS.h"
+#include "shadersvk/default_all_VS.h"
+#include "shadersvk/uvxform_amb_VS.h"
+#include "shadersvk/uvxform_amb_dir_VS.h"
+#include "shadersvk/uvxform_all_VS.h"
+#include "shadersvk/default_pp_VS.h"
+#include "shadersvk/uvxform_pp_VS.h"
+#include "shadersvk/default_PS.h"
+#include "shadersvk/default_tex_PS.h"
+#include "shadersvk/default_pp_PS.h"
+#include "shadersvk/default_tex_pp_PS.h"
+#include "shadersvk/default_toon_PS.h"
+#include "shadersvk/default_tex_toon_PS.h"
+#include "shadersvk/outline_VS.h"
+#include "shadersvk/outline_PS.h"
+#include "shadersvk/im2d_VS.h"
+#include "shadersvk/im2d_PS.h"
+#include "shadersvk/im2d_tex_PS.h"
 }
 #endif
 

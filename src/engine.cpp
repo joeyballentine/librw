@@ -276,7 +276,7 @@ Engine::open(EngineOpenParams *p)
 		engine->device = ps2::renderdevice;
 		break;
 #endif
-#if defined(RW_D3D9) || defined(RW_D3D11)
+#if defined(RW_D3D_ANY)
 	case PLATFORM_D3D9:
 		engine->device = d3d::renderDevice();
 		break;

@@ -20,7 +20,7 @@ namespace rw {
 namespace d3d9 {
 using namespace d3d;
 
-#if !defined(RW_D3D9) && !defined(RW_D3D11)
+#if !defined(RW_D3D_ANY)
 void matfxRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header) {}
 #else
 
@@ -257,6 +257,15 @@ namespace sm4 {
 #include "shaders11/matfx_env_tex_PS.h"
 }
 #endif
+#ifdef RW_VULKAN
+namespace spv {
+#include "shadersvk/matfx_env_amb_VS.h"
+#include "shadersvk/matfx_env_amb_dir_VS.h"
+#include "shadersvk/matfx_env_all_VS.h"
+#include "shadersvk/matfx_env_PS.h"
+#include "shadersvk/matfx_env_tex_PS.h"
+}
+#endif
 
 void
 createMatFXShaders(void)
@@ -307,7 +316,7 @@ matfxOpen(void *o, int32, int32)
 	if(rw::platform != PLATFORM_D3D9)
 		return o;
 
-#if defined(RW_D3D9) || defined(RW_D3D11)
+#if defined(RW_D3D_ANY)
 	if(!getFixedFunction())
 		createMatFXShaders();
 #endif
@@ -323,7 +332,7 @@ matfxClose(void *o, int32, int32)
 	if(rw::platform != PLATFORM_D3D9)
 		return o;
 
-#if defined(RW_D3D9) || defined(RW_D3D11)
+#if defined(RW_D3D_ANY)
 	if(!getFixedFunction())
 		destroyMatFXShaders();
 #endif

@@ -20,7 +20,7 @@ namespace rw {
 namespace d3d9 {
 using namespace d3d;
 
-#if !defined(RW_D3D9) && !defined(RW_D3D11)
+#if !defined(RW_D3D_ANY)
 void skinInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance) {}
 void skinRenderCB(Atomic *atomic, InstanceDataHeader *header) {}
 #else
@@ -431,6 +431,15 @@ namespace sm4 {
 #include "shaders11/skin_outline_VS.h"
 }
 #endif
+#ifdef RW_VULKAN
+namespace spv {
+#include "shadersvk/skin_amb_VS.h"
+#include "shadersvk/skin_amb_dir_VS.h"
+#include "shadersvk/skin_all_VS.h"
+#include "shadersvk/skin_pp_VS.h"
+#include "shadersvk/skin_outline_VS.h"
+}
+#endif
 
 void
 createSkinShaders(void)
@@ -485,7 +494,7 @@ skinOpen(void *o, int32, int32)
 	if(rw::platform != PLATFORM_D3D9)
 		return o;
 
-#if defined(RW_D3D9) || defined(RW_D3D11)
+#if defined(RW_D3D_ANY)
 	// Not under fixed function: the CPU skinner needs a vertex declaration and
 	// a dynamic buffer, and the device it runs on may have no shader unit to
 	// compile these for.
@@ -512,7 +521,7 @@ skinClose(void *o, int32, int32)
 	if(rw::platform != PLATFORM_D3D9)
 		return o;
 
-#if defined(RW_D3D9) || defined(RW_D3D11)
+#if defined(RW_D3D_ANY)
 	if(getFixedFunction())
 		ffCloseSkin();
 	else{

@@ -17,7 +17,7 @@
 namespace rw {
 namespace d3d {
 
-#if defined(RW_D3D9) || defined(RW_D3D11)
+#if defined(RW_D3D_ANY)
 
 // might want to tweak this
 #define NUMINDICES 10000

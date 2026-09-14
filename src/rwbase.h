@@ -32,9 +32,18 @@
 // which Engine::open sets. The half-pixel shift D3D9 needs is rw::halfPixel
 // for the same reason; it used to be an RWHALFPIXEL define, which cannot say
 // anything useful in a build that carries D3D9 and GL3 at once.
+//
+// RW_D3D_ANY is every backend that implements rw::d3d's device interface. They
+// share the raster layer, the immediate mode and the pipelines, so code that
+// belongs to that layer is guarded by this rather than by a list of backends
+// that goes stale the next time one is added.
+#if defined(RW_D3D9) || defined(RW_D3D11) || defined(RW_VULKAN)
+#define RW_D3D_ANY
+#endif
+
 #if defined(RW_PS2)
 #define RWDEVICE ps2
-#elif defined(RW_D3D9) || defined(RW_D3D8) || defined(RW_D3D11)
+#elif defined(RW_D3D_ANY) || defined(RW_D3D8)
 #define RWDEVICE d3d
 #elif defined(RW_GL3)
 #define RWDEVICE gl3

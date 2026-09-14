@@ -12,6 +12,7 @@
 #include "../rwengine.h"
 #include "rwd3d.h"
 #include "rwd3d11.h"
+#include "rwd3dvk.h"
 #include "rwd3dimpl.h"
 
 #define PLUGIN_ID ID_DRIVER
@@ -21,11 +22,12 @@ namespace d3d {
 
 bool32 isP8supported = 1;	// set to 0 when actual d3d device is used
 
-// Which device implementation is running, when the build carries both. Set
-// before Engine::open -- renderDevice() below reads it, and that is the first
-// thing Engine::open asks for.
-#if defined(RW_D3D9) && defined(RW_D3D11)
+// Which device implementation is running, when the build carries several. Set
+// before Engine::open -- renderDevice() reads them, and that is the first thing
+// Engine::open asks for.
+#ifdef RWD3D_MULTI
 bool32 useD3D11;
+bool32 useVulkan;
 #endif
 
 // Shared by both device implementations, because code built once for both
@@ -102,6 +104,11 @@ int vertFormatMap[] = {
 void*
 createIndexBuffer(uint32 length, bool dynamic)
 {
+#ifdef RW_VULKAN
+	if(RWD3D_ISVK){
+		return implvk::createIndexBufferVk(length, dynamic);
+	}
+#endif
 #ifdef RW_D3D11
 	if(RWD3D_IS11){
 		return impl11::createIndexBuffer11(length, dynamic);
@@ -125,6 +132,12 @@ createIndexBuffer(uint32 length, bool dynamic)
 void
 destroyIndexBuffer(void *indexBuffer)
 {
+#ifdef RW_VULKAN
+	if(RWD3D_ISVK){
+		implvk::destroyIndexBufferVk(indexBuffer);
+		return;
+	}
+#endif
 #ifdef RW_D3D11
 	if(RWD3D_IS11){
 		impl11::destroyIndexBuffer11(indexBuffer);
@@ -150,6 +163,12 @@ lockIndices(void *indexBuffer, uint32 offset, uint32 size, uint32 flags)
 {
 	if(indexBuffer == nil)
 		return nil;
+#ifdef RW_VULKAN
+	if(RWD3D_ISVK){
+		(void)flags;
+		return (uint16*)implvk::lockBufferVk(indexBuffer, offset, size);
+	}
+#endif
 #ifdef RW_D3D11
 	if(RWD3D_IS11){
 		(void)flags;
@@ -175,9 +194,16 @@ unlockIndices(void *indexBuffer)
 {
 	if(indexBuffer == nil)
 		return;
+#ifdef RW_VULKAN
+	if(RWD3D_ISVK){
+		implvk::unlockBufferVk(indexBuffer);
+		return;
+	}
+#endif
 #ifdef RW_D3D11
 	if(RWD3D_IS11){
 		impl11::unlockBuffer11(indexBuffer);
+		return;
 	}
 #endif
 #ifdef RW_D3D9
@@ -191,6 +217,12 @@ unlockIndices(void *indexBuffer)
 void*
 createVertexBuffer(uint32 length, uint32 fvf, bool dynamic)
 {
+#ifdef RW_VULKAN
+	if(RWD3D_ISVK){
+		(void)fvf;
+		return implvk::createVertexBufferVk(length, dynamic);
+	}
+#endif
 #ifdef RW_D3D11
 	if(RWD3D_IS11){
 		(void)fvf;
@@ -216,6 +248,12 @@ createVertexBuffer(uint32 length, uint32 fvf, bool dynamic)
 void
 destroyVertexBuffer(void *vertexBuffer)
 {
+#ifdef RW_VULKAN
+	if(RWD3D_ISVK){
+		implvk::destroyVertexBufferVk(vertexBuffer);
+		return;
+	}
+#endif
 #ifdef RW_D3D11
 	if(RWD3D_IS11){
 		impl11::destroyVertexBuffer11(vertexBuffer);
@@ -241,6 +279,12 @@ lockVertices(void *vertexBuffer, uint32 offset, uint32 size, uint32 flags)
 {
 	if(vertexBuffer == nil)
 		return nil;
+#ifdef RW_VULKAN
+	if(RWD3D_ISVK){
+		(void)flags;
+		return implvk::lockBufferVk(vertexBuffer, offset, size);
+	}
+#endif
 #ifdef RW_D3D11
 	if(RWD3D_IS11){
 		(void)flags;
@@ -266,9 +310,16 @@ unlockVertices(void *vertexBuffer)
 {
 	if(vertexBuffer == nil)
 		return;
+#ifdef RW_VULKAN
+	if(RWD3D_ISVK){
+		implvk::unlockBufferVk(vertexBuffer);
+		return;
+	}
+#endif
 #ifdef RW_D3D11
 	if(RWD3D_IS11){
 		impl11::unlockBuffer11(vertexBuffer);
+		return;
 	}
 #endif
 #ifdef RW_D3D9
@@ -347,8 +398,9 @@ destroyTexture(void *texture)
 int32 nativeRasterOffset;
 
 // D3D9's raster creators are the file-scope ones below; D3D11's are in
-// d3d11raster.cpp, inside impl11. Macros rather than calls because only the
-// backends the build carries have one at all.
+// d3d11raster.cpp, inside impl11, and Vulkan's in vkraster.cpp, inside implvk.
+// Macros rather than calls because only the backends the build carries have
+// one at all.
 #ifdef RW_D3D9
 #define RWD3D_CREATE9(f, r) f(r)
 #else
@@ -358,6 +410,11 @@ int32 nativeRasterOffset;
 #define RWD3D_CREATE11(f, r) impl11::f(r)
 #else
 #define RWD3D_CREATE11(f, r) nil
+#endif
+#ifdef RW_VULKAN
+#define RWD3D_CREATEVK(f, r) implvk::f(r)
+#else
+#define RWD3D_CREATEVK(f, r) nil
 #endif
 
 struct RasterFormatInfo
@@ -457,11 +514,11 @@ rasterSetFormat(Raster *raster)
 			raster->format = Raster::C8888;
 			break;
 
-#if defined(RW_D3D9) || defined(RW_D3D11)
+#ifdef RW_D3D_ANY
 		// One set of cases whichever backend is running: two would be two
-		// labels for the same value in a build that carries both. D3D11's
-		// answers are fixed rather than asked of the device, because its swap
-		// chain is created 8888 and its depth buffer D24S8.
+		// labels for the same value in a build that carries both. D3D11's and
+		// Vulkan's answers are fixed rather than asked of the device, because
+		// both make their own targets 8888 with a depth buffer beside them.
 		case Raster::ZBUFFER:
 #ifdef RW_D3D9
 			if(RWD3D_IS9){
@@ -658,19 +715,22 @@ rasterCreate(Raster *raster)
 		ret = rasterCreateTexture(raster);
 		break;
 
-#if defined(RW_D3D9) || defined(RW_D3D11)
+#ifdef RW_D3D_ANY
 	// The three that need a device. D3D9's are the file-scope ones below;
-	// D3D11's are in d3d11raster.cpp, one namespace deeper.
+	// D3D11's and Vulkan's are one namespace deeper.
 	case Raster::CAMERATEXTURE:
-		ret = RWD3D_IS11 ? RWD3D_CREATE11(rasterCreateCameraTexture, raster)
+		ret = RWD3D_ISVK ? RWD3D_CREATEVK(rasterCreateCameraTexture, raster)
+		    : RWD3D_IS11 ? RWD3D_CREATE11(rasterCreateCameraTexture, raster)
 		                 : RWD3D_CREATE9(rasterCreateCameraTexture, raster);
 		break;
 	case Raster::ZBUFFER:
-		ret = RWD3D_IS11 ? RWD3D_CREATE11(rasterCreateZbuffer, raster)
+		ret = RWD3D_ISVK ? RWD3D_CREATEVK(rasterCreateZbuffer, raster)
+		    : RWD3D_IS11 ? RWD3D_CREATE11(rasterCreateZbuffer, raster)
 		                 : RWD3D_CREATE9(rasterCreateZbuffer, raster);
 		break;
 	case Raster::CAMERA:
-		ret = RWD3D_IS11 ? RWD3D_CREATE11(rasterCreateCamera, raster)
+		ret = RWD3D_ISVK ? RWD3D_CREATEVK(rasterCreateCamera, raster)
+		    : RWD3D_IS11 ? RWD3D_CREATE11(rasterCreateCamera, raster)
 		                 : RWD3D_CREATE9(rasterCreateCamera, raster);
 		break;
 #endif
@@ -760,6 +820,15 @@ rasterLock(Raster *raster, int32 level, int32 lockMode)
 		return raster->pixels;
 	}
 #endif
+#ifdef RW_VULKAN
+	if(RWD3D_ISVK && (raster->type == Raster::CAMERA || raster->type == Raster::CAMERATEXTURE)){
+		if(implvk::rasterLockTarget(raster, level, lockMode) == nil)
+			return nil;
+		if(lockMode & Raster::LOCKREAD) raster->privateFlags |= Raster::PRIVATELOCK_READ;
+		if(lockMode & Raster::LOCKWRITE) raster->privateFlags |= Raster::PRIVATELOCK_WRITE;
+		return raster->pixels;
+	}
+#endif
 	// The system-memory copy, which is what D3D11 locks for everything but a
 	// render target and what a build with no device locks for everything.
 	RasterLevels *levels = (RasterLevels*)natras->texture;
@@ -776,7 +845,7 @@ rasterLock(Raster *raster, int32 level, int32 lockMode)
 void
 rasterUnlock(Raster *raster, int32 level)
 {
-#if defined(RW_D3D9) || defined(RW_D3D11)
+#ifdef RW_D3D_ANY
 	D3dRaster *natras = GETD3DRASTEREXT(raster);
 #endif
 #ifdef RW_D3D9
@@ -791,6 +860,14 @@ rasterUnlock(Raster *raster, int32 level)
 	if(RWD3D_IS11){
 		if(raster->type == Raster::CAMERA || raster->type == Raster::CAMERATEXTURE)
 			impl11::rasterUnlockTarget(raster);
+		else if(raster->privateFlags & Raster::PRIVATELOCK_WRITE)
+			natras->dirty = 1;
+	}
+#endif
+#ifdef RW_VULKAN
+	if(RWD3D_ISVK){
+		if(raster->type == Raster::CAMERA || raster->type == Raster::CAMERATEXTURE)
+			implvk::rasterUnlockTarget(raster);
 		else if(raster->privateFlags & Raster::PRIVATELOCK_WRITE)
 			natras->dirty = 1;
 	}
@@ -1202,12 +1279,17 @@ createNativeRaster(void *object, int32 offset, int32)
 	raster->hasAlpha = 0;
 	raster->customFormat = 0;
 	raster->alphaKind = ALPHAGRADED;
+#if defined(RW_D3D11) || defined(RW_VULKAN)
+	raster->dirty = 0;
+#endif
 #ifdef RW_D3D11
 	raster->tex11 = nil;
 	raster->srv = nil;
 	raster->rtv = nil;
 	raster->dsv = nil;
-	raster->dirty = 0;
+#endif
+#ifdef RW_VULKAN
+	raster->vk = nil;
 #endif
 	return object;
 }
@@ -1231,6 +1313,10 @@ destroyNativeRaster(void *object, int32 offset, int32)
 #ifdef RW_D3D11
 	if(RWD3D_IS11)
 		impl11::rasterDestroy(raster, natras);
+#endif
+#ifdef RW_VULKAN
+	if(RWD3D_ISVK)
+		implvk::rasterDestroy(raster, natras);
 #endif
 	switch(raster->type){
 	case Raster::NORMAL:
@@ -1268,12 +1354,17 @@ copyNativeRaster(void *dst, void *, int32 offset, int32)
 	raster->hasAlpha = 0;
 	raster->customFormat = 0;
 	raster->alphaKind = ALPHAGRADED;
+#if defined(RW_D3D11) || defined(RW_VULKAN)
+	raster->dirty = 0;
+#endif
 #ifdef RW_D3D11
 	raster->tex11 = nil;
 	raster->srv = nil;
 	raster->rtv = nil;
 	raster->dsv = nil;
-	raster->dirty = 0;
+#endif
+#ifdef RW_VULKAN
+	raster->vk = nil;
 #endif
 	return dst;
 }

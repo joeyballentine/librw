@@ -37,7 +37,7 @@ int32 build = 0xFFFF;
 	int32 platform = PLATFORM_PS2;
 #elif defined(RW_WDGL)
 	int32 platform = PLATFORM_WDGL;
-#elif defined(RW_D3D9) || defined(RW_D3D11)
+#elif defined(RW_D3D_ANY)
 	int32 platform = PLATFORM_D3D9;
 #elif defined(RW_GL3)
 	int32 platform = PLATFORM_GL3;

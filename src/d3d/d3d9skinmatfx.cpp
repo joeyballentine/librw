@@ -35,7 +35,7 @@ namespace rw {
 namespace d3d9 {
 using namespace d3d;
 
-#if !defined(RW_D3D9) && !defined(RW_D3D11)
+#if !defined(RW_D3D_ANY)
 void skinMatfxRenderCB(Atomic *atomic, InstanceDataHeader *header) {}
 void createSkinMatFXShaders(void) {}
 void destroySkinMatFXShaders(void) {}
@@ -229,6 +229,13 @@ namespace sm4 {
 #include "shaders11/skin_matfx_env_amb_VS.h"
 #include "shaders11/skin_matfx_env_amb_dir_VS.h"
 #include "shaders11/skin_matfx_env_all_VS.h"
+}
+#endif
+#ifdef RW_VULKAN
+namespace spv {
+#include "shadersvk/skin_matfx_env_amb_VS.h"
+#include "shadersvk/skin_matfx_env_amb_dir_VS.h"
+#include "shadersvk/skin_matfx_env_all_VS.h"
 }
 #endif
 

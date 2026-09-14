@@ -1,10 +1,11 @@
 // rw::d3d's entry points, forwarded to whichever implementation is running.
 //
-// The two Direct3D backends implement one interface -- the raster layer, the
-// immediate mode, the pipelines and everything above them are written against
-// rw::d3d and are compiled once -- and they used to BE rw::d3d, one at a time,
-// which is why a build could only ever carry one. Their definitions now sit in
-// rw::d3d::impl9 and rw::d3d::impl11, and this file is rw::d3d.
+// The device implementations -- Direct3D 9, Direct3D 11 and Vulkan -- implement
+// one interface. The raster layer, the immediate mode, the pipelines and
+// everything above them are written against rw::d3d and are compiled once, and
+// the implementations used to BE rw::d3d, one at a time, which is why a build
+// could only ever carry one. Their definitions now sit in rw::d3d::impl9,
+// rw::d3d::impl11 and rw::d3d::implvk, and this file is rw::d3d.
 //
 // The cost is one call per device operation. That is the price of the choice
 // being a setting rather than a build, and these are state setters that already
@@ -27,32 +28,48 @@
 namespace rw {
 namespace d3d {
 
-#if defined(RW_D3D9) && defined(RW_D3D11)
-#define RWD3D_CALL(f, args) (useD3D11 ? impl11::f args : impl9::f args)
-#define RWD3D_VOID(f, args)                                             \
-	do {                                                            \
-		if(useD3D11) impl11::f args; else impl9::f args;   \
-	} while(0)
-#elif defined(RW_D3D9)
-#define RWD3D_CALL(f, args) (impl9::f args)
-#define RWD3D_VOID(f, args) impl9::f args
+// Each arm is the implementation's call when it is built in and a call that is
+// never reached when it is not, so one definition serves every combination.
+// RWD3D_IS9 and friends are constants when there is only one.
+#if defined(RW_VULKAN)
+#define RWD3D_ARMANY(f, args) implvk::f args
 #elif defined(RW_D3D11)
-#define RWD3D_CALL(f, args) (impl11::f args)
-#define RWD3D_VOID(f, args) impl11::f args
+#define RWD3D_ARMANY(f, args) impl11::f args
+#else
+#define RWD3D_ARMANY(f, args) impl9::f args
+#endif
+#ifdef RW_D3D9
+#define RWD3D_ARM9(f, args) impl9::f args
+#else
+#define RWD3D_ARM9(f, args) RWD3D_ARMANY(f, args)
+#endif
+#ifdef RW_D3D11
+#define RWD3D_ARM11(f, args) impl11::f args
+#else
+#define RWD3D_ARM11(f, args) RWD3D_ARMANY(f, args)
+#endif
+#ifdef RW_VULKAN
+#define RWD3D_ARMVK(f, args) implvk::f args
+#else
+#define RWD3D_ARMVK(f, args) RWD3D_ARMANY(f, args)
 #endif
 
-#if defined(RW_D3D9) || defined(RW_D3D11)
+#define RWD3D_CALL(f, args) \
+	(RWD3D_ISVK ? RWD3D_ARMVK(f, args) : RWD3D_IS11 ? RWD3D_ARM11(f, args) : RWD3D_ARM9(f, args))
+#define RWD3D_VOID(f, args)                                             \
+	do {                                                            \
+		if(RWD3D_ISVK) RWD3D_ARMVK(f, args);                    \
+		else if(RWD3D_IS11) RWD3D_ARM11(f, args);               \
+		else RWD3D_ARM9(f, args);                               \
+	} while(0)
+
+#ifdef RW_D3D_ANY
 
 Device &
 renderDevice(void)
 {
-#if defined(RW_D3D9) && defined(RW_D3D11)
-	return useD3D11 ? impl11::renderdevice : impl9::renderdevice;
-#elif defined(RW_D3D9)
-	return impl9::renderdevice;
-#else
-	return impl11::renderdevice;
-#endif
+	return RWD3D_ISVK ? RWD3D_ARMVK(renderdevice, ) :
+	       RWD3D_IS11 ? RWD3D_ARM11(renderdevice, ) : RWD3D_ARM9(renderdevice, );
 }
 
 bool32

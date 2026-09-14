@@ -1,7 +1,7 @@
 namespace rw {
 namespace d3d {
 
-#if defined(RW_D3D9) || defined(RW_D3D11)
+#ifdef RW_D3D_ANY
 void openIm2D(void);
 void closeIm2D(void);
 void im2DRenderLine(void *vertices, int32 numVertices, int32 vert1, int32 vert2);

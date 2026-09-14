@@ -17,7 +17,7 @@ namespace rw {
 namespace d3d9 {
 using namespace d3d;
 
-#if !defined(RW_D3D9) && !defined(RW_D3D11)
+#if !defined(RW_D3D_ANY)
 void defaultRenderCB(Atomic*, InstanceDataHeader*) {}
 void defaultRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header) {}
 void uvTransformRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header) {}

@@ -60,9 +60,15 @@ add_library(librw
     d3d/d3ddispatch.cpp
     d3d/d3dimmed.cpp
     d3d/d3drender.cpp
+    d3d/vkdevice.cpp
+    d3d/vkpipeline.cpp
+    d3d/vkresource.cpp
+    d3d/vkmem.cpp
     d3d/rwd3d8.h
     d3d/rwd3d9.h
     d3d/rwd3d11.h
+    d3d/rwd3dvk.h
+    d3d/vkincludes.h
     d3d/rwd3d.h
     d3d/rwd3dimpl.h
     d3d/rwxbox.h
@@ -239,6 +245,38 @@ if(LIBRW_PLATFORM_D3D11)
             dxgi
             dxguid
             xinput
+    )
+endif()
+
+# Vulkan is loaded at run time through volk, so what it links is headers, volk
+# and VMA -- no import library, and no Vulkan SDK needed to build. An embedding
+# project that already has the targets keeps its own; otherwise they are looked
+# for as installed packages. The window is SDL's.
+if(LIBRW_PLATFORM_VULKAN)
+    if(NOT TARGET volk::volk)
+        find_package(volk CONFIG REQUIRED)
+    endif()
+    if(NOT TARGET GPUOpen::VulkanMemoryAllocator)
+        find_package(VulkanMemoryAllocator CONFIG REQUIRED)
+    endif()
+    if(NOT TARGET SDL3::SDL3)
+        find_package(SDL3 CONFIG REQUIRED)
+    endif()
+    target_link_libraries(librw
+        PRIVATE
+            volk::volk
+            GPUOpen::VulkanMemoryAllocator
+        PUBLIC
+            SDL3::SDL3
+    )
+    # VMA is C++14. The rest of librw stays at 11, so only these files move.
+    set_source_files_properties(
+        d3d/vkdevice.cpp
+        d3d/vkpipeline.cpp
+        d3d/vkresource.cpp
+        d3d/vkmem.cpp
+        PROPERTIES
+            COMPILE_OPTIONS "$<IF:$<CXX_COMPILER_ID:MSVC>,/std:c++17,-std=c++17>"
     )
 endif()
 

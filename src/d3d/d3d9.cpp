@@ -14,6 +14,7 @@
 #include "rwd3d.h"
 #include "rwd3d9.h"
 #include "rwd3d11.h"
+#include "rwd3dvk.h"
 
 #include "rwd3dimpl.h"
 
@@ -37,7 +38,7 @@ driverOpen(void *o, int32, int32)
 	if(rw::platform != PLATFORM_D3D9)
 		return o;
 
-#if defined(RW_D3D9) || defined(RW_D3D11)
+#if defined(RW_D3D_ANY)
 	// Not under fixed function: a device with no shader support cannot make
 	// one of these, and nothing that runs after this point asks for one.
 	if(!getFixedFunction())
@@ -64,7 +65,7 @@ driverClose(void *o, int32, int32)
 	if(rw::platform != PLATFORM_D3D9)
 		return o;
 
-#if defined(RW_D3D9) || defined(RW_D3D11)
+#if defined(RW_D3D_ANY)
 	if(!getFixedFunction())
 		destroyDefaultShaders();
 #endif
@@ -97,8 +98,9 @@ createVertexDeclaration(VertexElement *elements)
 		return decl;
 	}
 #endif
-	// D3D11 and a build with no device keep the element list itself. D3D11
-	// makes the input layout from it when it knows the shader too.
+	// D3D11, Vulkan and a build with no device keep the element list itself.
+	// D3D11 makes the input layout from it when it knows the shader too, and
+	// Vulkan the vertex input state.
 	int n = 0;
 	VertexElement *e = (VertexElement*)elements;
 	while(e[n++].stream != 0xFF)
@@ -127,6 +129,11 @@ destroyVertexDeclaration(void *declaration)
 	// declaration to land here inherits another geometry's attribute offsets.
 	if(RWD3D_IS11)
 		impl11::forgetVertexDeclaration(declaration);
+#endif
+#ifdef RW_VULKAN
+	// The same, for the pipelines keyed on it.
+	if(RWD3D_ISVK)
+		implvk::forgetVertexDeclaration(declaration);
 #endif
 	rwFree(declaration);
 }
