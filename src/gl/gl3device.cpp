@@ -1610,7 +1610,7 @@ setFilterMode(uint32 stage, int32 filter, int32 maxAniso = 1)
 				}
 				natras->filterMode = filter;
 			}
-			if(natras->maxAnisotropy != maxAniso){
+			if(natras->maxAnisotropy != maxAniso && GLAD_GL_EXT_texture_filter_anisotropic){
 				setActiveTexture(stage);
 				glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, (float)maxAniso);
 				natras->maxAnisotropy = maxAniso;
@@ -3313,7 +3313,10 @@ initOpenGL(void)
 	gl3Caps.dxtSupported = !!GLAD_GL_EXT_texture_compression_s3tc;
 	gl3Caps.astcSupported = !!GLAD_GL_KHR_texture_compression_astc_ldr;
 
-	glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &gl3Caps.maxAnisotropy);
+	// An extension, not core before 4.6; without it the enum is invalid.
+	gl3Caps.maxAnisotropy = 1.0f;
+	if(GLAD_GL_EXT_texture_filter_anisotropic)
+		glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &gl3Caps.maxAnisotropy);
 
 	if(gl3Caps.gles){
 		if(gl3Caps.glversion >= 30)
@@ -3419,7 +3422,7 @@ initOpenGL(void)
 
 	resetRenderState();
 
-	glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maxAnisotropy);
+	maxAnisotropy = gl3Caps.maxAnisotropy;
 
 	if(gl3Caps.glversion >= 30){
 		glGenVertexArrays(1, &vao);
