@@ -407,6 +407,10 @@ static struct {
 	VkSemaphore acquired;
 	bool32 vsync;
 	bool32 dirty;
+	// Created without the surface's own transform, which the compositor then
+	// applies. Every present says VK_SUBOPTIMAL_KHR while that holds, and it
+	// is not a reason to rebuild.
+	bool32 compositorRotates;
 } swap;
 
 static void
@@ -433,7 +437,26 @@ createSwapchain(void)
 	if(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pd, vkGlobals.surface, &caps) != VK_SUCCESS)
 		return 0;
 
+	// A surface that reports a rotation -- a phone held in landscape, whose
+	// screen is portrait -- wants the frame drawn already rotated. This does
+	// not rotate: it asks for no transform, and the compositor turns the image.
+	// The size is then the window's, since which way round currentExtent comes
+	// is up to the driver: a Galaxy S24 reports it landscape beside a 90-degree
+	// transform. A desktop reports no rotation and takes currentExtent.
+	VkSurfaceTransformFlagBitsKHR transform = caps.currentTransform;
+	if(caps.currentTransform != VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR &&
+	   (caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR))
+		transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+
 	VkExtent2D extent = caps.currentExtent;
+	if(transform != caps.currentTransform){
+		int32 w, h;
+		windowPixels(&w, &h);
+		if(w > 0 && h > 0){
+			extent.width = w;
+			extent.height = h;
+		}
+	}
 	if(extent.width == 0xFFFFFFFF){
 		int32 w, h;
 		windowPixels(&w, &h);
@@ -485,7 +508,7 @@ createSwapchain(void)
 	ci.imageArrayLayers = 1;
 	ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 	ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	ci.preTransform = caps.currentTransform;
+	ci.preTransform = transform;
 	ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	if(!(caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR))
 		ci.compositeAlpha = (VkCompositeAlphaFlagBitsKHR)(caps.supportedCompositeAlpha &
@@ -503,6 +526,7 @@ createSwapchain(void)
 	swap.swapchain = sc;
 	swap.format = fmt.format;
 	swap.extent = extent;
+	swap.compositorRotates = transform != caps.currentTransform;
 
 	vkGetSwapchainImagesKHR(vkGlobals.device, sc, &n, nil);
 	swap.numImages = n;
@@ -584,7 +608,7 @@ submitFrame(bool32 present, uint32 imageIndex)
 		pi.pSwapchains = &swap.swapchain;
 		pi.pImageIndices = &imageIndex;
 		VkResult pr = vkQueuePresentKHR(vkGlobals.queue, &pi);
-		if(pr == VK_ERROR_OUT_OF_DATE_KHR || pr == VK_SUBOPTIMAL_KHR)
+		if(pr == VK_ERROR_OUT_OF_DATE_KHR || (pr == VK_SUBOPTIMAL_KHR && !swap.compositorRotates))
 			swap.dirty = 1;
 	}
 }
@@ -854,7 +878,7 @@ showRaster(Raster *raster, uint32 flags)
 		submitFrame(0, 0);
 		return;
 	}
-	if(r == VK_SUBOPTIMAL_KHR)
+	if(r == VK_SUBOPTIMAL_KHR && !swap.compositorRotates)
 		swap.dirty = 1;
 
 	transitionImage(cmd, src, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
