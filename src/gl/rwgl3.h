@@ -620,6 +620,8 @@ struct Gl3Raster
 	uint8 alphaKind;
 	bool autogenMipmap;
 	int8 numLevels;
+	// The GL_TEXTURE_MAX_LEVEL set on the texture: the highest level uploaded.
+	int8 maxLevel;
 	// cached filtermode and addressing
 	uint8 filterMode;
 	uint8 addressU;

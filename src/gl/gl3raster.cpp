@@ -57,6 +57,30 @@ getLevelSize(Raster *raster, int32 level)
 
 #ifdef RW_OPENGL
 
+// GL_TEXTURE_MAX_LEVEL, as far as there are levels to sample.
+//
+// A texture sampled with a mipmap filter is incomplete, and reads as black,
+// unless every level up to MAX_LEVEL has been specified. numLevels is the full
+// chain, but a raster converted from another platform uploads only the levels
+// its source had; so MAX_LEVEL starts at 0 and rasterUnlock raises it as each
+// level arrives. A generated chain is all there at once.
+static void
+setInitialMaxLevel(Raster *raster, Gl3Raster *natras)
+{
+	int32 top = 0;
+	if(natras->autogenMipmap){
+		int w = raster->width;
+		int h = raster->height;
+		while(w > 1 || h > 1){
+			top++;
+			if(w > 1) w /= 2;
+			if(h > 1) h /= 2;
+		}
+	}
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, top);
+	natras->maxLevel = top;
+}
+
 static Raster*
 rasterCreateTexture(Raster *raster)
 {
@@ -128,8 +152,7 @@ rasterCreateTexture(Raster *raster)
 	glTexImage2D(GL_TEXTURE_2D, 0, natras->internalFormat,
 	             raster->width, raster->height,
 	             0, natras->format, natras->type, nil);
-	// TODO: allocate other levels...probably
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, natras->numLevels-1);
+	setInitialMaxLevel(raster, natras);
 	natras->filterMode = 0;
 	natras->addressU = 0;
 	natras->addressV = 0;
@@ -352,8 +375,7 @@ allocateDXT(Raster *raster, int32 dxt, int32 numLevels, bool32 hasAlpha)
 	glTexImage2D(GL_TEXTURE_2D, 0, natras->internalFormat,
 	             raster->width, raster->height,
 	             0, natras->format, natras->type, nil);
-	// TODO: allocate other levels...probably
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, natras->numLevels-1);
+	setInitialMaxLevel(raster, natras);
 	natras->filterMode = 0;
 	natras->addressU = 0;
 	natras->addressV = 0;
@@ -617,6 +639,10 @@ rasterUnlock(Raster *raster, int32 level)
 			}
 			if(level == 0 && natras->autogenMipmap)
 				glGenerateMipmap(GL_TEXTURE_2D);
+			else if(level > natras->maxLevel && level < natras->numLevels){
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, level);
+				natras->maxLevel = level;
+			}
 			bindTexture(prev);
 		}
 		break;
