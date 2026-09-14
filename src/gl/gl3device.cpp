@@ -2131,21 +2131,23 @@ out:
 	// clamped per channel, so Rock Bottom stays blue instead of clipping cyan.
 	//
 	// The D3D9 backend has always done it this way because ps_2_0 has neither
-	// loops nor branches. This is the same arithmetic, in the same place.
+	// loops nor branches. This is the same arithmetic, in the same place: the
+	// lights' own colours, without lightIntensity, which scales the lighting
+	// and not the room.
 	if(toonParams[0] != 0.0f){
 		float32 room[3];
 		float32 bestLum = -1.0f;
 
-		room[0] = uniformObject.ambLight.red;
-		room[1] = uniformObject.ambLight.green;
-		room[2] = uniformObject.ambLight.blue;
+		room[0] = lightData->ambient.red;
+		room[1] = lightData->ambient.green;
+		room[2] = lightData->ambient.blue;
 
 		for(i = 0; i < lightData->numDirectionals && i < 8; i++){
 			l = lightData->directionals[i];
 
-			float32 r = l->color.red*lightIntensity;
-			float32 g = l->color.green*lightIntensity;
-			float32 b = l->color.blue*lightIntensity;
+			float32 r = l->color.red;
+			float32 g = l->color.green;
+			float32 b = l->color.blue;
 
 			room[0] += r;
 			room[1] += g;
