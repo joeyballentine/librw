@@ -1597,7 +1597,7 @@ setFilterMode(uint32 stage, int32 filter, int32 maxAniso = 1)
 	if(rwStateCache.texstage[stage].filter != (Texture::FilterMode)filter){
 		rwStateCache.texstage[stage].filter = (Texture::FilterMode)filter;
 		Raster *raster = rwStateCache.texstage[stage].raster;
-		if(raster){
+		if(raster && filter != 0){
 			Gl3Raster *natras = PLUGINOFFSET(Gl3Raster, rwStateCache.texstage[stage].raster, nativeRasterOffset);
 			if(natras->filterMode != filter){
 				setActiveTexture(stage);
@@ -1625,7 +1625,7 @@ setAddressU(uint32 stage, int32 addressing)
 	if(rwStateCache.texstage[stage].addressingU != (Texture::Addressing)addressing){
 		rwStateCache.texstage[stage].addressingU = (Texture::Addressing)addressing;
 		Raster *raster = rwStateCache.texstage[stage].raster;
-		if(raster){
+		if(raster && addressing != 0){
 			Gl3Raster *natras = PLUGINOFFSET(Gl3Raster, raster, nativeRasterOffset);
 			// != , not ==. glTexParameteri is what actually changes the
 			// texture, and it is needed exactly when the raster does not
@@ -1652,7 +1652,7 @@ setAddressV(uint32 stage, int32 addressing)
 	if(rwStateCache.texstage[stage].addressingV != (Texture::Addressing)addressing){
 		rwStateCache.texstage[stage].addressingV = (Texture::Addressing)addressing;
 		Raster *raster = rwStateCache.texstage[stage].raster;
-		if(raster){
+		if(raster && addressing != 0){
 			Gl3Raster *natras = PLUGINOFFSET(Gl3Raster, rwStateCache.texstage[stage].raster, nativeRasterOffset);
 			// The same inversion as setAddressU above; see the note there.
 			if(natras->addressV != addressing){
@@ -1713,7 +1713,9 @@ setRasterStage(uint32 stage, Raster *raster)
 			uint32 filter = rwStateCache.texstage[stage].filter;
 			uint32 addrU = rwStateCache.texstage[stage].addressingU;
 			uint32 addrV = rwStateCache.texstage[stage].addressingV;
-			if(natras->filterMode != filter){
+			// Zero is a stage nothing has set a filter or addressing on, and
+			// no GL enum: the texture keeps what it has.
+			if(filter != 0 && natras->filterMode != filter){
 				if(natras->autogenMipmap || natras->numLevels > 1){
 					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterConvMap_MIP[filter]);
 					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterConvMap_NoMIP[filter]);
@@ -1723,11 +1725,11 @@ setRasterStage(uint32 stage, Raster *raster)
 				}
 				natras->filterMode = filter;
 			}
-			if(natras->addressU != addrU){
+			if(addrU != 0 && natras->addressU != addrU){
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, addressConvMap[addrU]);
 				natras->addressU = addrU;
 			}
-			if(natras->addressV != addrV){
+			if(addrV != 0 && natras->addressV != addrV){
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, addressConvMap[addrV]);
 				natras->addressV = addrV;
 			}

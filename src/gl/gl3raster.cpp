@@ -57,6 +57,21 @@ getLevelSize(Raster *raster, int32 level)
 
 #ifdef RW_OPENGL
 
+// Put the texture's filter and wrap where its cache says they are. GL's own
+// default minification filter is a mipmap one, and a cache of 0 matches no
+// enum, so neither could stand in for "not yet set".
+static void
+setInitialSampling(Gl3Raster *natras)
+{
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	natras->filterMode = Texture::LINEAR;
+	natras->addressU = Texture::WRAP;
+	natras->addressV = Texture::WRAP;
+}
+
 // GL_TEXTURE_MAX_LEVEL, as far as there are levels to sample.
 //
 // A texture sampled with a mipmap filter is incomplete, and reads as black,
@@ -153,9 +168,7 @@ rasterCreateTexture(Raster *raster)
 	             raster->width, raster->height,
 	             0, natras->format, natras->type, nil);
 	setInitialMaxLevel(raster, natras);
-	natras->filterMode = 0;
-	natras->addressU = 0;
-	natras->addressV = 0;
+	setInitialSampling(natras);
 	natras->maxAnisotropy = 1;
 
 	bindTexture(prev);
@@ -218,9 +231,7 @@ rasterCreateCameraTexture(Raster *raster)
 	glTexImage2D(GL_TEXTURE_2D, 0, natras->internalFormat,
 	             raster->width, raster->height,
 	             0, natras->format, natras->type, nil);
-	natras->filterMode = 0;
-	natras->addressU = 0;
-	natras->addressV = 0;
+	setInitialSampling(natras);
 	natras->maxAnisotropy = 1;
 
 	bindTexture(prev);
@@ -376,9 +387,7 @@ allocateDXT(Raster *raster, int32 dxt, int32 numLevels, bool32 hasAlpha)
 	             raster->width, raster->height,
 	             0, natras->format, natras->type, nil);
 	setInitialMaxLevel(raster, natras);
-	natras->filterMode = 0;
-	natras->addressU = 0;
-	natras->addressV = 0;
+	setInitialSampling(natras);
 	natras->maxAnisotropy = 1;
 
 	bindTexture(prev);
