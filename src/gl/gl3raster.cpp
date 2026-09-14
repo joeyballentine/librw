@@ -204,9 +204,9 @@ rasterCreateCameraTexture(Raster *raster)
 
 
 	glGenFramebuffers(1, &natras->fbo);
-	bindFramebuffer(natras->fbo);
+	uint32 prevFbo = bindFramebuffer(natras->fbo);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, natras->texid, 0);
-	bindFramebuffer(0);
+	bindFramebuffer(prevFbo);
 	natras->fboMate = nil;
 
 	return raster;
@@ -517,14 +517,14 @@ rasterLock(Raster *raster, int32 level, int32 lockMode)
 			}else if(gl3Caps.gles){
 				GLuint fbo;
 				glGenFramebuffers(1, &fbo);
-				bindFramebuffer(fbo);
+				uint32 prevFbo = bindFramebuffer(fbo);
 				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, natras->texid, 0);
 				GLenum e = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 assert(natras->format == GL_RGBA);
 				glReadPixels(0, 0, raster->width, raster->height, natras->format, natras->type, px);
 //e = glGetError(); printf("GL err4 %x (%x)\n", e, natras->format);
-				bindFramebuffer(0);
-				glDeleteFramebuffers(1, &fbo);
+				bindFramebuffer(prevFbo);
+				deleteFramebuffer(fbo);
 			}else{
 				uint32 prev = bindTexture(natras->texid);
 				glPixelStorei(GL_PACK_ALIGNMENT, 1);
@@ -539,8 +539,15 @@ assert(natras->format == GL_RGBA);
 	case Raster::CAMERA:
 		if(lockMode & Raster::PRIVATELOCK_WRITE)
 			assert(0 && "can't lock framebuffer for writing");
-		raster->width = glGlobals.presentWidth;
-		raster->height = glGlobals.presentHeight;
+		// The virtual screen's size where there is one. presentWidth is the
+		// last viewport set, which after an offscreen pass is that target's.
+		if(natras->fbo){
+			raster->width = virtualScreenWidth;
+			raster->height = virtualScreenHeight;
+		}else{
+			raster->width = glGlobals.presentWidth;
+			raster->height = glGlobals.presentHeight;
+		}
 		raster->stride = raster->width*natras->bpp;
 		assert(natras->bpp == 3);
 		allocSz = raster->height*raster->stride;
@@ -557,11 +564,12 @@ assert(natras->format == GL_RGBA);
 			glReadBuffer(GL_COLOR_ATTACHMENT0);
 		}else
 			glReadBuffer(GL_BACK);
+		// Three bytes a pixel does not fill a row to the default 4-byte
+		// alignment, and a padded row would overrun the buffer.
+		glPixelStorei(GL_PACK_ALIGNMENT, 1);
 		glReadPixels(0, 0, raster->width, raster->height, GL_RGB, GL_UNSIGNED_BYTE, px);
-		if(natras->fbo){
-			glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-			glReadBuffer(GL_BACK);
-		}
+		if(natras->fbo)
+			rebindFramebuffer();
 
 		raster->privateFlags = lockMode;
 		break;
@@ -898,7 +906,7 @@ destroyNativeRaster(void *object, int32 offset, int32)
 	switch(raster->type){
 	case Raster::NORMAL:
 	case Raster::TEXTURE:
-		glDeleteTextures(1, &natras->texid);
+		deleteTexture(natras->texid);
 		break;
 
 	case Raster::CAMERATEXTURE:
@@ -908,8 +916,8 @@ destroyNativeRaster(void *object, int32 offset, int32)
 			zras->fboMate = nil;
 			natras->fboMate = nil;
 		}
-		glDeleteFramebuffers(1, &natras->fbo);
-		glDeleteTextures(1, &natras->texid);
+		deleteFramebuffer(natras->fbo);
+		deleteTexture(natras->texid);
 		break;
 
 	case Raster::ZBUFFER:
@@ -917,15 +925,16 @@ destroyNativeRaster(void *object, int32 offset, int32)
 			// Detatch from FBO we may be attached to
 			Gl3Raster *oldfb = GETGL3RASTEREXT(natras->fboMate);
 			if(oldfb->fbo){
-				bindFramebuffer(oldfb->fbo);
+				uint32 prevFbo = bindFramebuffer(oldfb->fbo);
 				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
+				bindFramebuffer(prevFbo);
 			}
 			oldfb->fboMate = nil;
 		}
 		if(gl3Caps.gles)
 			glDeleteRenderbuffers(1, &natras->texid);
 		else
-			glDeleteTextures(1, &natras->texid);
+			deleteTexture(natras->texid);
 		break;
 
 	case Raster::CAMERA:

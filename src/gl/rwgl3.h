@@ -543,8 +543,16 @@ bool32 getAlphaBlend(void);
 
 bool32 getAlphaTest(void);
 
-void bindFramebuffer(uint32 fbo);
+uint32 bindFramebuffer(uint32 fbo);
 uint32 bindTexture(uint32 texid);
+// Put GL_FRAMEBUFFER back to the cached binding after binding the read and draw
+// targets separately.
+void rebindFramebuffer(void);
+// Delete through these rather than glDelete*: GL reverts a binding to 0 when
+// the bound object goes, a later object can be handed the same name, and a
+// cache still holding the name would then skip binding it.
+void deleteFramebuffer(uint32 fbo);
+void deleteTexture(uint32 texid);
 
 void flushCache(void);
 

@@ -1195,13 +1195,42 @@ bindTexture(uint32 texid)
 	return prev;
 }
 
-void
+uint32
 bindFramebuffer(uint32 fbo)
 {
+	uint32 prev = currentFramebuffer;
 	if(currentFramebuffer != fbo){
 		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 		currentFramebuffer = fbo;
 	}
+	return prev;
+}
+
+void
+rebindFramebuffer(void)
+{
+	rebindFramebuffer();
+}
+
+void
+deleteFramebuffer(uint32 fbo)
+{
+	if(fbo == 0)
+		return;
+	if(currentFramebuffer == fbo)
+		currentFramebuffer = 0;
+	glDeleteFramebuffers(1, &fbo);
+}
+
+void
+deleteTexture(uint32 texid)
+{
+	if(texid == 0)
+		return;
+	for(int i = 0; i < MAXNUMSTAGES; i++)
+		if(boundTexture[i] == texid)
+			boundTexture[i] = 0;
+	glDeleteTextures(1, &texid);
 }
 
 static GLint filterConvMap_NoMIP[] = {
@@ -1276,7 +1305,7 @@ acquireVirtualScreenMS(void)
 	// is the picture without the extra samples, not a broken one.
 	if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE){
 		bindFramebuffer(prevFbo);
-		glDeleteFramebuffers(1, &virtualScreenMSFbo);
+		deleteFramebuffer(virtualScreenMSFbo);
 		glDeleteRenderbuffers(1, &virtualScreenMSColor);
 		glDeleteRenderbuffers(1, &virtualScreenMSDepth);
 		virtualScreenMSFbo = 0;
@@ -1305,14 +1334,20 @@ resolveVirtualScreen(void)
 	glBlitFramebuffer(0, 0, virtualScreenWidth, virtualScreenHeight,
 	                  0, 0, virtualScreenWidth, virtualScreenHeight,
 	                  GL_COLOR_BUFFER_BIT, GL_NEAREST);
-	glBindFramebuffer(GL_FRAMEBUFFER, currentFramebuffer);
+	rebindFramebuffer();
 }
+
+// Set when the driver refused the virtual screen, so that the allocation is not
+// tried again on every setFrameBuffer.
+static bool32 virtualScreenRefused;
 
 uint32
 virtualScreenFramebuffer(void)
 {
 	if(virtualScreenFbo)
 		return virtualScreenMSFbo ? virtualScreenMSFbo : virtualScreenFbo;
+	if(virtualScreenRefused)
+		return 0;
 	if(virtualScreenWidth <= 0 || virtualScreenHeight <= 0)
 		return 0;
 
@@ -1356,12 +1391,13 @@ virtualScreenFramebuffer(void)
 	// virtual screen and a great deal better than a black screen.
 	if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE){
 		bindFramebuffer(prevFbo);
-		glDeleteFramebuffers(1, &virtualScreenFbo);
-		glDeleteTextures(1, &virtualScreenTex);
+		deleteFramebuffer(virtualScreenFbo);
+		deleteTexture(virtualScreenTex);
 		glDeleteRenderbuffers(1, &virtualScreenDepth);
 		virtualScreenFbo = 0;
 		virtualScreenTex = 0;
 		virtualScreenDepth = 0;
+		virtualScreenRefused = 1;
 		return 0;
 	}
 
@@ -1455,8 +1491,8 @@ acquireDepthCopy(void)
 	bindFramebuffer(prevFbo);
 
 	if(!ok){
-		glDeleteFramebuffers(1, &depthCopyFbo);
-		glDeleteTextures(1, &depthCopyTex);
+		deleteFramebuffer(depthCopyFbo);
+		deleteTexture(depthCopyTex);
 		depthCopyFbo = 0;
 		depthCopyTex = 0;
 		return 0;
@@ -1483,7 +1519,7 @@ bindVirtualScreenDepth(int32 stage)
 	glBlitFramebuffer(0, 0, virtualScreenWidth, virtualScreenHeight,
 	                  0, 0, virtualScreenWidth, virtualScreenHeight,
 	                  GL_DEPTH_BUFFER_BIT, GL_NEAREST);
-	glBindFramebuffer(GL_FRAMEBUFFER, currentFramebuffer);
+	rebindFramebuffer();
 
 	// Round the raster cache, which tracks Rasters and has none for this. The
 	// stage is cleared first so the cache reads nil while the depth texture is
@@ -1512,7 +1548,7 @@ void
 destroyVirtualScreen(void)
 {
 	if(virtualScreenMSFbo){
-		glDeleteFramebuffers(1, &virtualScreenMSFbo);
+		deleteFramebuffer(virtualScreenMSFbo);
 		virtualScreenMSFbo = 0;
 	}
 	if(virtualScreenMSColor){
@@ -1525,17 +1561,26 @@ destroyVirtualScreen(void)
 	}
 	virtualScreenSamples = 1;
 	if(virtualScreenFbo){
-		glDeleteFramebuffers(1, &virtualScreenFbo);
+		deleteFramebuffer(virtualScreenFbo);
 		virtualScreenFbo = 0;
 	}
 	if(virtualScreenTex){
-		glDeleteTextures(1, &virtualScreenTex);
+		deleteTexture(virtualScreenTex);
 		virtualScreenTex = 0;
 	}
 	if(virtualScreenDepth){
 		glDeleteRenderbuffers(1, &virtualScreenDepth);
 		virtualScreenDepth = 0;
 	}
+	if(depthCopyFbo){
+		deleteFramebuffer(depthCopyFbo);
+		depthCopyFbo = 0;
+	}
+	if(depthCopyTex){
+		deleteTexture(depthCopyTex);
+		depthCopyTex = 0;
+	}
+	virtualScreenRefused = 0;
 }
 
 static GLint addressConvMap[] = {
@@ -2043,12 +2088,19 @@ resetRenderState(void)
 	setGlRenderState(RWGL_COLORMASK, COLORWRITEALL);
 	setGlRenderState(RWGL_MULTISAMPLE, true);
 
+	// Nothing cached survives: whitetex may have the name a texture had before
+	// the engine last stopped, and a cached raster pointer may be a new raster.
 	activeTexture = -1;
 	for(int i = 0; i < MAXNUMSTAGES; i++){
 		setActiveTexture(i);
+		boundTexture[i] = ~(uint32)0;
 		bindTexture(whitetex);
+		rwStateCache.texstage[i].raster = nil;
 	}
 	setActiveTexture(0);
+	currentFramebuffer = ~(uint32)0;
+	bindFramebuffer(0);
+	im2DActive = 0;
 }
 
 void
