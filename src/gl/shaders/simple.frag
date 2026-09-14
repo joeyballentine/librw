@@ -100,15 +100,17 @@ main(void)
 		// normal is for the bands. ToonRimAmount says what that cost.
 		toonRimAmt = ToonRimAmount(N, v_viewDir);
 		toonGlossAmt = ToonGlossAmount(N, v_viewDir, L);
+
+		// The material's alpha and not its colour: the cel colour is the
+		// room's and the texture's. The same as default_PS.hlsl's TOON arm.
+		color.a *= u_matColor.a;
 	}else{
 		color.rgb = v_color.rgb;
 		color.rgb += u_ambLight.rgb*surfAmbient;
 		color.rgb += DoDynamicLightPP(N)*surfDiffuse;
-		color.rgb = clamp(color.rgb, 0.0, 1.0);
+		color = clamp(color, 0.0, 1.0);
+		color *= u_matColor;
 	}
-
-	color.a = clamp(color.a, 0.0, 1.0);
-	color *= u_matColor;
 #endif
 
 	color *= texture(tex0, vec2(v_tex0.x, 1.0-v_tex0.y));
@@ -164,21 +166,28 @@ main(void)
 #endif
 #endif
 
-	color.rgb = ToonSaturate(color.rgb);
+#ifdef PERPIXEL
+	// Only where the cel branch above ran. im2d, im3d and the per-vertex
+	// programs share this shader and never take the look; D3D9 applies both
+	// in its TOON pixel shader alone.
+	if(toonEnabled != 0.0){
+		color.rgb = ToonSaturate(color.rgb);
 
-	// **Flattening is the last thing that happens to the colour.**
-	//
-	// It was done straight after the texture, which put two operations after it
-	// that both move a colour off the levels it was just rounded to: the shadow
-	// multiplied it down by whatever the filter averaged, and the saturation
-	// scaled it. The setting asked for twelve shades and the frame buffer got
-	// however many those two produced. Fog is the only thing allowed after,
-	// because fog is the air and not the surface.
-	//
-	// A character and not the world -- a painted background does not want its
-	// colours rounded.
-	if(toonEnabled != 0.0 && toonIsCharacter != 0.0)
-		color.rgb = ToonQuantize(color.rgb);
+		// **Flattening is the last thing that happens to the colour.**
+		//
+		// It was done straight after the texture, which put two operations after it
+		// that both move a colour off the levels it was just rounded to: the shadow
+		// multiplied it down by whatever the filter averaged, and the saturation
+		// scaled it. The setting asked for twelve shades and the frame buffer got
+		// however many those two produced. Fog is the only thing allowed after,
+		// because fog is the air and not the surface.
+		//
+		// A character and not the world -- a painted background does not want its
+		// colours rounded.
+		if(toonIsCharacter != 0.0)
+			color.rgb = ToonQuantize(color.rgb);
+	}
+#endif
 
 	color.rgb = mix(u_fogColor.rgb, color.rgb, v_fog);
 	DoAlphaTest(color.a);
