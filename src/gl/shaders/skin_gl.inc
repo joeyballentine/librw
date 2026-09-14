@@ -49,7 +49,9 @@ const char *skin_vert_src =
 "	// has to be in hand first, which is why it is computed above the\n"
 "	// projection here and below it in a stock librw.\n"
 "	//\n"
-"	// In world units, so the band is thicker up close and thinner far away --\n"
+"	// In model units -- world units on an unscaled atomic, and the same space\n"
+"	// default_VS.hlsl pushes in -- so the band is thicker up close and thinner\n"
+"	// far away --\n"
 "	// which is what a drawn line does NOT do, but scaling by depth instead\n"
 "	// makes distant characters look inked in marker.\n"
 "	//\n"
@@ -84,7 +86,7 @@ const char *skin_vert_src =
 "	for(int k = 0; k < 4; k++)\n"
 "		SkinHull += (mat3(u_boneMatrices[int(in_indices[k])]) * hullLocal) * in_weights[k];\n"
 
-"	Vertex.xyz += normalize(mat3(u_normal) * SkinHull)*thickness*u_outlineSign.x;\n"
+"	Vertex = u_world * vec4(SkinVertex + normalize(SkinHull)*thickness*u_outlineSign.x, 1.0);\n"
 
 "	// The hull's own facing, for the shadow the ink takes. The normal is in\n"
 "	// hand here and the fragment stage has no other way to get it.\n"

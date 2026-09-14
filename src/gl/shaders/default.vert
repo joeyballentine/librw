@@ -49,7 +49,9 @@ main(void)
 	// has to be in hand first, which is why it is computed above the
 	// projection here and below it in a stock librw.
 	//
-	// In world units, so the band is thicker up close and thinner far away --
+	// In model units -- world units on an unscaled atomic, and the same space
+	// default_VS.hlsl pushes in -- so the band is thicker up close and thinner
+	// far away --
 	// which is what a drawn line does NOT do, but scaling by depth instead
 	// makes distant characters look inked in marker.
 	//
@@ -85,7 +87,7 @@ main(void)
 	if(dot(hullLocal, hullLocal) <= 1e-8)
 		hullLocal = in_normal;
 
-	Vertex.xyz += normalize(mat3(u_normal) * hullLocal)*thickness*u_outlineSign.x;
+	Vertex = u_world * vec4(in_pos + normalize(hullLocal)*thickness*u_outlineSign.x, 1.0);
 
 	// The hull's own facing, for the shadow the ink takes. The normal is in
 	// hand here and the fragment stage has no other way to get it.
