@@ -201,7 +201,7 @@ vec3 DoDynamicLight(vec3 V, vec3 N)
 			if(falloff < 0.0)	// outside of cone
 				l = 0.0;
 			l *= max(falloff, u_lightParams[i].w);
-			return l*u_lightColor[i].rgb*atten;
+			color += l*u_lightColor[i].rgb*atten;
 		}else
 #endif
 			;

@@ -202,7 +202,7 @@ const char *header_vert_src =
 "			if(falloff < 0.0)	// outside of cone\n"
 "				l = 0.0;\n"
 "			l *= max(falloff, u_lightParams[i].w);\n"
-"			return l*u_lightColor[i].rgb*atten;\n"
+"			color += l*u_lightColor[i].rgb*atten;\n"
 "		}else\n"
 "#endif\n"
 "			;\n"
