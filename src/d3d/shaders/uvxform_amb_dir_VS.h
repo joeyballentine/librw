@@ -85,7 +85,7 @@
 // approximately 36 instruction slots used
 #endif
 
-const BYTE g_vs20_main[] =
+const BYTE uvxform_amb_dir_VS[] =
 {
       0,   2, 254, 255, 254, 255, 
     146,   0,  67,  84,  65,  66, 

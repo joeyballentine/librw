@@ -74,7 +74,7 @@
 // approximately 43 instruction slots used
 #endif
 
-const BYTE g_ps20_main[] =
+const BYTE default_pp_PS[] =
 {
       0,   2, 255, 255, 254, 255, 
      79,   0,  67,  84,  65,  66, 

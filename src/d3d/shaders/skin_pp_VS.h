@@ -89,7 +89,7 @@
 // approximately 53 instruction slots used
 #endif
 
-const BYTE g_vs20_main[] =
+const BYTE skin_pp_VS[] =
 {
       0,   2, 254, 255, 254, 255, 
      83,   0,  67,  84,  65,  66, 

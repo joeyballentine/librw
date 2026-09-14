@@ -34,7 +34,7 @@ ret
 // Approximately 8 instruction slots used
 #endif
 
-const BYTE g_main[] =
+const BYTE blit_VS[] =
 {
      68,  88,  66,  67, 242, 153, 
     213, 166,  41, 168,   5, 111, 

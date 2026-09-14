@@ -239,97 +239,39 @@ matfxRenderCB_Shader(Atomic *atomic, InstanceDataHeader *header)
 }
 
 
+#ifdef RW_D3D9
+namespace sm2 {
+#include "shaders/matfx_env_amb_VS.h"
+#include "shaders/matfx_env_amb_dir_VS.h"
+#include "shaders/matfx_env_all_VS.h"
+#include "shaders/matfx_env_PS.h"
+#include "shaders/matfx_env_tex_PS.h"
+}
+#endif
+#ifdef RW_D3D11
+namespace sm4 {
+#include "shaders11/matfx_env_amb_VS.h"
+#include "shaders11/matfx_env_amb_dir_VS.h"
+#include "shaders11/matfx_env_all_VS.h"
+#include "shaders11/matfx_env_PS.h"
+#include "shaders11/matfx_env_tex_PS.h"
+}
+#endif
+
 void
 createMatFXShaders(void)
 {
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/matfx_env_amb_VS.h"
-			matfx_env_amb_VS = createVertexShader((void*)g_vs20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/matfx_env_amb_VS.h"
-			matfx_env_amb_VS = createVertexShader((void*)g_main);
-		}
-#endif
-		assert(matfx_env_amb_VS);
-	}
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/matfx_env_amb_dir_VS.h"
-			matfx_env_amb_dir_VS = createVertexShader((void*)g_vs20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/matfx_env_amb_dir_VS.h"
-			matfx_env_amb_dir_VS = createVertexShader((void*)g_main);
-		}
-#endif
-		assert(matfx_env_amb_dir_VS);
-	}
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/matfx_env_all_VS.h"
-			matfx_env_all_VS = createVertexShader((void*)g_vs20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/matfx_env_all_VS.h"
-			matfx_env_all_VS = createVertexShader((void*)g_main);
-		}
-#endif
-		assert(matfx_env_all_VS);
-	}
+	matfx_env_amb_VS = createVertexShader(RWD3D_SHADER(matfx_env_amb_VS));
+	assert(matfx_env_amb_VS);
+	matfx_env_amb_dir_VS = createVertexShader(RWD3D_SHADER(matfx_env_amb_dir_VS));
+	assert(matfx_env_amb_dir_VS);
+	matfx_env_all_VS = createVertexShader(RWD3D_SHADER(matfx_env_all_VS));
+	assert(matfx_env_all_VS);
 
-
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/matfx_env_PS.h"
-			matfx_env_PS = createPixelShader((void*)g_ps20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/matfx_env_PS.h"
-			matfx_env_PS = createPixelShader((void*)g_main);
-		}
-#endif
-		assert(matfx_env_PS);
-	}
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/matfx_env_tex_PS.h"
-			matfx_env_tex_PS = createPixelShader((void*)g_ps20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/matfx_env_tex_PS.h"
-			matfx_env_tex_PS = createPixelShader((void*)g_main);
-		}
-#endif
-		assert(matfx_env_tex_PS);
-	}
-
+	matfx_env_PS = createPixelShader(RWD3D_SHADER(matfx_env_PS));
+	assert(matfx_env_PS);
+	matfx_env_tex_PS = createPixelShader(RWD3D_SHADER(matfx_env_tex_PS));
+	assert(matfx_env_tex_PS);
 }
 
 void

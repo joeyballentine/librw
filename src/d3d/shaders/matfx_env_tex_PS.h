@@ -43,7 +43,7 @@
 // approximately 12 instruction slots used (2 texture, 10 arithmetic)
 #endif
 
-const BYTE g_ps20_main[] =
+const BYTE matfx_env_tex_PS[] =
 {
       0,   2, 255, 255, 254, 255, 
      61,   0,  67,  84,  65,  66, 

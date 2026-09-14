@@ -35,11 +35,11 @@ struct VS_in
 #endif
 	float4 Prelight		: COLOR0;
 	float4 Weights		: BLENDWEIGHT;
-	int4 Indices		: BLENDINDICES;
+	RW_BLENDINDICES Indices	: BLENDINDICES;
 };
 
 struct VS_out {
-	float4 Position		: POSITION;
+	float4 Position		: SV_POSITION;
 	float3 TexCoord0	: TEXCOORD0;	// also fog
 	float4 Color		: COLOR0;
 #ifdef PERPIXEL

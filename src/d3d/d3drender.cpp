@@ -75,312 +75,114 @@ getPerPixelLighting(void)
 }
 
 
+#ifdef RW_D3D9
+namespace sm2 {
+#include "shaders/default_amb_VS.h"
+#include "shaders/default_amb_dir_VS.h"
+#include "shaders/default_all_VS.h"
+#include "shaders/uvxform_amb_VS.h"
+#include "shaders/uvxform_amb_dir_VS.h"
+#include "shaders/uvxform_all_VS.h"
+#include "shaders/default_pp_VS.h"
+#include "shaders/uvxform_pp_VS.h"
+#include "shaders/default_PS.h"
+#include "shaders/default_tex_PS.h"
+#include "shaders/default_pp_PS.h"
+#include "shaders/default_tex_pp_PS.h"
+#include "shaders/default_toon_PS.h"
+#include "shaders/default_tex_toon_PS.h"
+#include "shaders/outline_VS.h"
+#include "shaders/outline_PS.h"
+#include "shaders/im2d_VS.h"
+#include "shaders/im2d_PS.h"
+#include "shaders/im2d_tex_PS.h"
+}
+#endif
+#ifdef RW_D3D11
+namespace sm4 {
+#include "shaders11/default_amb_VS.h"
+#include "shaders11/default_amb_dir_VS.h"
+#include "shaders11/default_all_VS.h"
+#include "shaders11/uvxform_amb_VS.h"
+#include "shaders11/uvxform_amb_dir_VS.h"
+#include "shaders11/uvxform_all_VS.h"
+#include "shaders11/default_pp_VS.h"
+#include "shaders11/uvxform_pp_VS.h"
+#include "shaders11/default_PS.h"
+#include "shaders11/default_tex_PS.h"
+#include "shaders11/default_pp_PS.h"
+#include "shaders11/default_tex_pp_PS.h"
+#include "shaders11/default_toon_PS.h"
+#include "shaders11/default_tex_toon_PS.h"
+#include "shaders11/outline_VS.h"
+#include "shaders11/outline_PS.h"
+#include "shaders11/im2d_VS.h"
+#include "shaders11/im2d_PS.h"
+#include "shaders11/im2d_tex_PS.h"
+}
+#endif
+
 void
 createDefaultShaders(void)
 {
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/default_amb_VS.h"
-			default_amb_VS = createVertexShader((void*)g_vs20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/default_amb_VS.h"
-			default_amb_VS = createVertexShader((void*)g_main);
-		}
-#endif
-		assert(default_amb_VS);
-	}
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/default_amb_dir_VS.h"
-			default_amb_dir_VS = createVertexShader((void*)g_vs20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/default_amb_dir_VS.h"
-			default_amb_dir_VS = createVertexShader((void*)g_main);
-		}
-#endif
-		assert(default_amb_dir_VS);
-	}
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/default_all_VS.h"
-			default_all_VS = createVertexShader((void*)g_vs20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/default_all_VS.h"
-			default_all_VS = createVertexShader((void*)g_main);
-		}
-#endif
-		assert(default_all_VS);
-	}
+	default_amb_VS = createVertexShader(RWD3D_SHADER(default_amb_VS));
+	assert(default_amb_VS);
+	default_amb_dir_VS = createVertexShader(RWD3D_SHADER(default_amb_dir_VS));
+	assert(default_amb_dir_VS);
+	default_all_VS = createVertexShader(RWD3D_SHADER(default_all_VS));
+	assert(default_all_VS);
 
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/uvxform_amb_VS.h"
-			uvxform_amb_VS = createVertexShader((void*)g_vs20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/uvxform_amb_VS.h"
-			uvxform_amb_VS = createVertexShader((void*)g_main);
-		}
-#endif
-		assert(uvxform_amb_VS);
-	}
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/uvxform_amb_dir_VS.h"
-			uvxform_amb_dir_VS = createVertexShader((void*)g_vs20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/uvxform_amb_dir_VS.h"
-			uvxform_amb_dir_VS = createVertexShader((void*)g_main);
-		}
-#endif
-		assert(uvxform_amb_dir_VS);
-	}
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/uvxform_all_VS.h"
-			uvxform_all_VS = createVertexShader((void*)g_vs20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/uvxform_all_VS.h"
-			uvxform_all_VS = createVertexShader((void*)g_main);
-		}
-#endif
-		assert(uvxform_all_VS);
-	}
+	uvxform_amb_VS = createVertexShader(RWD3D_SHADER(uvxform_amb_VS));
+	assert(uvxform_amb_VS);
+	uvxform_amb_dir_VS = createVertexShader(RWD3D_SHADER(uvxform_amb_dir_VS));
+	assert(uvxform_amb_dir_VS);
+	uvxform_all_VS = createVertexShader(RWD3D_SHADER(uvxform_all_VS));
+	assert(uvxform_all_VS);
 
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/default_pp_VS.h"
-			default_pp_VS = createVertexShader((void*)g_vs20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/default_pp_VS.h"
-			default_pp_VS = createVertexShader((void*)g_main);
-		}
-#endif
-		assert(default_pp_VS);
-	}
+	default_pp_VS = createVertexShader(RWD3D_SHADER(default_pp_VS));
+	assert(default_pp_VS);
+	uvxform_pp_VS = createVertexShader(RWD3D_SHADER(uvxform_pp_VS));
+	assert(uvxform_pp_VS);
 
 	// The cel look and the hull that goes round it.
+	default_toon_PS = createPixelShader(RWD3D_SHADER(default_toon_PS));
+	assert(default_toon_PS);
+	default_tex_toon_PS = createPixelShader(RWD3D_SHADER(default_tex_toon_PS));
+	assert(default_tex_toon_PS);
+
+	// **Said out loud, because these two are the only ps_3_0 shaders in the D3D9
+	// tree.**
 	//
-	// D3D9 only. Every blob below lives in the shaders/ tree and shaders11/
-	// carries no toon permutation, so a D3D11 device has none of these.
-#ifdef RW_D3D9
-	if(RWD3D_IS9){
-		{
-			static
-#include "shaders/default_toon_PS.h"
-			default_toon_PS = createPixelShader((void*)g_ps30_main);
-			assert(default_toon_PS);
-		}
-		{
-			static
-#include "shaders/default_tex_toon_PS.h"
-			default_tex_toon_PS = createPixelShader((void*)g_ps30_main);
-			assert(default_tex_toon_PS);
-		}
+	// createPixelShader hands back nil on a device that will not have it, and
+	// the asserts above are compiled out of a release build -- so a card
+	// without Shader Model 3 would take the cel path and draw it with no pixel
+	// shader at all, which is a black screen with no explanation anywhere.
+	// Everything else in the renderer is ps_2_0 and unaffected. A D3D11 device
+	// takes shader model 4 or nothing, so there it cannot happen.
+	if(default_toon_PS == nil || default_tex_toon_PS == nil)
+		printf("bfbb: this card has no Shader Model 3; the cel look needs it "
+		       "for its antialiased bands. Turn experimental.toon off.\n");
 
-		// **Said out loud, because these two are the only ps_3_0 shaders here.**
-		//
-		// createPixelShader hands back nil on a device that will not have it,
-		// and the asserts above are compiled out of a release build -- so a card
-		// without Shader Model 3 would take the cel path and draw it with no
-		// pixel shader at all, which is a black screen with no explanation
-		// anywhere. Everything else in the renderer is ps_2_0 and unaffected.
-		if(default_toon_PS == nil || default_tex_toon_PS == nil)
-			printf("bfbb: this card has no Shader Model 3; the cel look needs it "
-			       "for its antialiased bands. Turn experimental.toon off.\n");
-		{
-			static
-#include "shaders/outline_VS.h"
-			outline_VS = createVertexShader((void*)g_vs20_main);
-			assert(outline_VS);
-		}
-		{
-			static
-#include "shaders/outline_PS.h"
-			outline_PS = createPixelShader((void*)g_ps20_main);
-			assert(outline_PS);
-		}
-	}
-#endif
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/uvxform_pp_VS.h"
-			uvxform_pp_VS = createVertexShader((void*)g_vs20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/uvxform_pp_VS.h"
-			uvxform_pp_VS = createVertexShader((void*)g_main);
-		}
-#endif
-		assert(uvxform_pp_VS);
-	}
+	outline_VS = createVertexShader(RWD3D_SHADER(outline_VS));
+	assert(outline_VS);
+	outline_PS = createPixelShader(RWD3D_SHADER(outline_PS));
+	assert(outline_PS);
 
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/default_PS.h"
-			default_PS = createPixelShader((void*)g_ps20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/default_PS.h"
-			default_PS = createPixelShader((void*)g_main);
-		}
-#endif
-		assert(default_PS);
-	}
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/default_tex_PS.h"
-			default_tex_PS = createPixelShader((void*)g_ps20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/default_tex_PS.h"
-			default_tex_PS = createPixelShader((void*)g_main);
-		}
-#endif
-		assert(default_tex_PS);
-	}
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/default_pp_PS.h"
-			default_pp_PS = createPixelShader((void*)g_ps20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/default_pp_PS.h"
-			default_pp_PS = createPixelShader((void*)g_main);
-		}
-#endif
-		assert(default_pp_PS);
-	}
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/default_tex_pp_PS.h"
-			default_tex_pp_PS = createPixelShader((void*)g_ps20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/default_tex_pp_PS.h"
-			default_tex_pp_PS = createPixelShader((void*)g_main);
-		}
-#endif
-		assert(default_tex_pp_PS);
-	}
+	default_PS = createPixelShader(RWD3D_SHADER(default_PS));
+	assert(default_PS);
+	default_tex_PS = createPixelShader(RWD3D_SHADER(default_tex_PS));
+	assert(default_tex_PS);
+	default_pp_PS = createPixelShader(RWD3D_SHADER(default_pp_PS));
+	assert(default_pp_PS);
+	default_tex_pp_PS = createPixelShader(RWD3D_SHADER(default_tex_pp_PS));
+	assert(default_tex_pp_PS);
 
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/im2d_VS.h"
-			im2d_VS = createVertexShader((void*)g_vs20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/im2d_VS.h"
-			im2d_VS = createVertexShader((void*)g_main);
-		}
-#endif
-		assert(im2d_VS);
-	}
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/im2d_PS.h"
-			im2d_PS = createPixelShader((void*)g_ps20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/im2d_PS.h"
-			im2d_PS = createPixelShader((void*)g_main);
-		}
-#endif
-		assert(im2d_PS);
-	}
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/im2d_tex_PS.h"
-			im2d_tex_PS = createPixelShader((void*)g_ps20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/im2d_tex_PS.h"
-			im2d_tex_PS = createPixelShader((void*)g_main);
-		}
-#endif
-		assert(im2d_tex_PS);
-	}
+	im2d_VS = createVertexShader(RWD3D_SHADER(im2d_VS));
+	assert(im2d_VS);
+	im2d_PS = createPixelShader(RWD3D_SHADER(im2d_PS));
+	assert(im2d_PS);
+	im2d_tex_PS = createPixelShader(RWD3D_SHADER(im2d_tex_PS));
+	assert(im2d_tex_PS);
 }
 
 void
@@ -402,6 +204,15 @@ destroyDefaultShaders(void)
 	default_pp_VS = nil;
 	destroyVertexShader(uvxform_pp_VS);
 	uvxform_pp_VS = nil;
+
+	destroyPixelShader(default_toon_PS);
+	default_toon_PS = nil;
+	destroyPixelShader(default_tex_toon_PS);
+	default_tex_toon_PS = nil;
+	destroyVertexShader(outline_VS);
+	outline_VS = nil;
+	destroyPixelShader(outline_PS);
+	outline_PS = nil;
 
 	destroyPixelShader(default_PS);
 	default_PS = nil;

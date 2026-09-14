@@ -64,7 +64,7 @@ float4 toonExtra3 : register(c32);
 
 // The colour strip the light term looks up. Band count, widths and colours are
 // properties of the texture, so a character can be retuned without a rebuild.
-sampler2D tex3 : register(s3);
+RW_TEXTURE(tex3, 3);
 
 // How many ramps are stacked in the strip. iToon.cpp builds them and the game
 // names a row per draw -- skin does not band like sheet metal.
@@ -75,7 +75,7 @@ float3 ToonRampAt(float l)
 	// Half a texel in on both axes, so the two ends of a row sample their own
 	// colour rather than blending with the clamp, and a row samples itself
 	// rather than the one above it.
-	return tex2D(tex3, float2(clamp(l, 0.02, 0.98),
+	return RW_SAMPLE(tex3, float2(clamp(l, 0.02, 0.98),
 	                          (toonRampRow + 0.5)/TOON_RAMP_ROWS)).rgb;
 }
 
@@ -92,7 +92,7 @@ float3 ToonRampAt(float l)
 // edge, they straddle it and the average is the coverage.
 //
 // **This is why the toon shaders are ps_3_0 and the rest are ps_2_0.** ps_2_0
-// has no derivative instructions at all. See make_default.cmd.
+// has no derivative instructions at all. See make_shaders.cmd.
 float3 ToonRamp(float l)
 {
 	float w = min(abs(ddx(l)) + abs(ddy(l)), 0.08);

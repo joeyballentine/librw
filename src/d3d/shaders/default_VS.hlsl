@@ -50,7 +50,7 @@ struct VS_in
 };
 
 struct VS_out {
-	float4 Position		: POSITION;
+	float4 Position		: SV_POSITION;
 	float3 TexCoord0	: TEXCOORD0;	// also fog
 	float4 Color		: COLOR0;
 #ifdef OUTLINE

@@ -1,13 +1,15 @@
+#include "rwshader.h"
+
 struct VS_out {
-	float4 Position		: POSITION;
+	float4 Position		: SV_POSITION;
 	float3 TexCoord0	: TEXCOORD0;
 	float2 TexCoord1	: TEXCOORD1;
 	float4 Color		: COLOR0;
 	float4 EnvColor		: COLOR1;
 };
 
-sampler2D diffTex : register(s0);
-sampler2D envTex : register(s1);
+RW_TEXTURE(diffTex, 0);
+RW_TEXTURE(envTex, 1);
 
 float4 fogColor : register(c0);
 
@@ -16,14 +18,15 @@ float4 fxparams : register(c1);
 #define shininess (fxparams.x)
 #define disableFBA (fxparams.y)
 
-float4 main(VS_out input) : COLOR
+float4 main(VS_out input) : SV_Target
 {
 	float4 pass1 = input.Color;
 #ifdef TEX
-	pass1 *= tex2D(diffTex, input.TexCoord0.xy);
+	pass1 *= RW_SAMPLE(diffTex, input.TexCoord0.xy);
 #endif
+	RW_ALPHA_TEST(pass1.a);
 
-	float4 pass2 = input.EnvColor*shininess*tex2D(envTex, input.TexCoord1.xy);
+	float4 pass2 = input.EnvColor*shininess*RW_SAMPLE(envTex, input.TexCoord1.xy);
 
 	pass1.rgb = lerp(fogColor.rgb, pass1.rgb, input.TexCoord0.z);
 	pass2.rgb = lerp(float3(0.0, 0.0, 0.0), pass2.rgb, input.TexCoord0.z);

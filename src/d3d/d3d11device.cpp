@@ -513,12 +513,12 @@ initD3D11(void)
 	{
 		static
 #include "shaders11/blit_VS.h"
-		blitVS = createVertexShader((void*)g_main);
+		blitVS = createVertexShader((void*)blit_VS);
 	}
 	{
 		static
 #include "shaders11/blit_PS.h"
-		blitPS = createPixelShader((void*)g_main);
+		blitPS = createPixelShader((void*)blit_PS);
 	}
 
 	D3D11_BLEND_DESC bd;

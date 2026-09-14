@@ -908,5 +908,20 @@ Device &renderDevice(void);
 #define RWD3D_IS11 0
 #endif
 
+// A compiled shader by name, from the tree of the backend that is running.
+//
+// shaders/make_shaders.cmd compiles every source into shaders/ for D3D9 and
+// shaders11/ for D3D11 under one array name. A file that creates shaders
+// includes the first tree's headers inside a namespace sm2 and the second's
+// inside a namespace sm4, so a shader missing from either tree does not compile
+// in a build that carries both.
+#if defined(RW_D3D9) && defined(RW_D3D11)
+#define RWD3D_SHADER(name) (RWD3D_IS11 ? (void*)sm4::name : (void*)sm2::name)
+#elif defined(RW_D3D9)
+#define RWD3D_SHADER(name) ((void*)sm2::name)
+#elif defined(RW_D3D11)
+#define RWD3D_SHADER(name) ((void*)sm4::name)
+#endif
+
 }
 }

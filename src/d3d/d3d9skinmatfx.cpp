@@ -217,63 +217,33 @@ skinMatfxRenderCB(Atomic *atomic, InstanceDataHeader *header)
 }
 
 
+#ifdef RW_D3D9
+namespace sm2 {
+#include "shaders/skin_matfx_env_amb_VS.h"
+#include "shaders/skin_matfx_env_amb_dir_VS.h"
+#include "shaders/skin_matfx_env_all_VS.h"
+}
+#endif
+#ifdef RW_D3D11
+namespace sm4 {
+#include "shaders11/skin_matfx_env_amb_VS.h"
+#include "shaders11/skin_matfx_env_amb_dir_VS.h"
+#include "shaders11/skin_matfx_env_all_VS.h"
+}
+#endif
+
 void
 createSkinMatFXShaders(void)
 {
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/skin_matfx_env_amb_VS.h"
-			skin_matfx_env_amb_VS = createVertexShader((void*)g_vs20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/skin_matfx_env_amb_VS.h"
-			skin_matfx_env_amb_VS = createVertexShader((void*)g_main);
-		}
-#endif
-		assert(skin_matfx_env_amb_VS);
-	}
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/skin_matfx_env_amb_dir_VS.h"
-			skin_matfx_env_amb_dir_VS = createVertexShader((void*)g_vs20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/skin_matfx_env_amb_dir_VS.h"
-			skin_matfx_env_amb_dir_VS = createVertexShader((void*)g_main);
-		}
-#endif
-		assert(skin_matfx_env_amb_dir_VS);
-	}
+	skin_matfx_env_amb_VS = createVertexShader(RWD3D_SHADER(skin_matfx_env_amb_VS));
+	assert(skin_matfx_env_amb_VS);
+	skin_matfx_env_amb_dir_VS = createVertexShader(RWD3D_SHADER(skin_matfx_env_amb_dir_VS));
+	assert(skin_matfx_env_amb_dir_VS);
 	// As in d3d9skin.cpp: skinning is expensive enough in vertex shader
 	// instructions that the fully lit variant is the one at risk of not
 	// fitting, so it is not asserted. If it ever comes back nil the env pass
 	// is skipped for that lighting setup rather than drawn wrong.
-	{
-#ifdef RW_D3D9
-		if(RWD3D_IS9){
-			static
-#include "shaders/skin_matfx_env_all_VS.h"
-			skin_matfx_env_all_VS = createVertexShader((void*)g_vs20_main);
-		}
-#endif
-#ifdef RW_D3D11
-		if(RWD3D_IS11){
-			static
-#include "shaders11/skin_matfx_env_all_VS.h"
-			skin_matfx_env_all_VS = createVertexShader((void*)g_main);
-		}
-#endif
-	}
+	skin_matfx_env_all_VS = createVertexShader(RWD3D_SHADER(skin_matfx_env_all_VS));
 }
 
 void

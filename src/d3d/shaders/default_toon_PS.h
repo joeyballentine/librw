@@ -206,7 +206,7 @@
 // approximately 174 instruction slots used (4 texture, 170 arithmetic)
 #endif
 
-const BYTE g_ps30_main[] =
+const BYTE default_toon_PS[] =
 {
       0,   3, 255, 255, 254, 255, 
      96,   0,  67,  84,  65,  66, 

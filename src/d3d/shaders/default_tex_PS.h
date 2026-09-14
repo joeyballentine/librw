@@ -29,7 +29,7 @@
 // approximately 5 instruction slots used (1 texture, 4 arithmetic)
 #endif
 
-const BYTE g_ps20_main[] =
+const BYTE default_tex_PS[] =
 {
       0,   2, 255, 255, 254, 255, 
      43,   0,  67,  84,  65,  66, 

@@ -1,3 +1,5 @@
+#include "rwshader.h"
+
 // c0, as every pixel shader here has it.
 float4 fogColor : register(c0);
 
@@ -6,7 +8,7 @@ float4 fogColor : register(c0);
 // The ink, and how to read it: rgb is either a colour outright or a scale on
 // the surface, and w says which. The vertex shader picks the region.
 struct VS_out {
-	float4 Position		: POSITION;
+	float4 Position		: SV_POSITION;
 	float3 TexCoord0	: TEXCOORD0;
 	float4 Color		: COLOR0;
 	float4 Outline		: TEXCOORD1;
@@ -37,9 +39,9 @@ float3 InkStretch(float3 c)
 	return pow(c, inkGamma);
 }
 
-sampler2D tex0 : register(s0);
+RW_TEXTURE(tex0, 0);
 
-float4 main(VS_out input) : COLOR
+float4 main(VS_out input) : SV_Target
 {
 	// Two ways to read the ink, chosen per region.
 	//
@@ -49,7 +51,7 @@ float4 main(VS_out input) : COLOR
 	// SpongeBob's trousers are inked black whatever they are painted.
 	// The stretch goes on the scaled variety only. A flat ink was named
 	// outright, and a named colour is not something to second-guess.
-	float4 tex = tex2D(tex0, input.TexCoord0.xy);
+	float4 tex = RW_SAMPLE(tex0, input.TexCoord0.xy);
 	float3 ink = lerp(InkStretch(tex.rgb*input.Outline.rgb), input.Outline.rgb,
 	                  input.Outline.a);
 
@@ -63,6 +65,7 @@ float4 main(VS_out input) : COLOR
 	// the vertex costs nothing on an opaque model, where both are one.
 	float4 color = float4(ink*toonRoom.rgb, tex.a*input.Color.a);
 
+	RW_ALPHA_TEST(color.a);
 	color.rgb = lerp(fogColor.rgb, color.rgb, input.TexCoord0.z);
 	return color;
 }
