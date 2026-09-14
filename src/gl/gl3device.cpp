@@ -2313,6 +2313,18 @@ setMaterial(const RGBA &color, const SurfaceProperties &surfaceprops, float extr
 	setUniform(u_surfProps, surfProps);
 }
 
+// 1/(start - end), for DoFog. Fog that starts where it ends is a step at that
+// distance rather than a division by zero, whose infinity times the zero at
+// w == end is NaN.
+static float32
+fogRangeOf(float32 start, float32 end)
+{
+	float32 d = start - end;
+	if(fabs(d) < 1e-6f)
+		d = -1e-6f;
+	return 1.0f/d;
+}
+
 void
 flushCache(void)
 {
@@ -2324,7 +2336,7 @@ flushCache(void)
 	uniformState.fogDisable = rwStateCache.fogEnable ? 0.0f : 1.0f;
 	uniformState.fogStart = rwStateCache.fogStart;
 	uniformState.fogEnd = rwStateCache.fogEnd;
-	uniformState.fogRange = 1.0f/(rwStateCache.fogStart - rwStateCache.fogEnd);
+	uniformState.fogRange = fogRangeOf(rwStateCache.fogStart, rwStateCache.fogEnd);
 
 	if(uniformStateDirty[RWGL_ALPHAFUNC] || uniformStateDirty[RWGL_ALPHAREF]){
 		float alphaTest[4] = {};
@@ -2400,7 +2412,7 @@ flushCache(void)
 		uniformState.fogDisable = rwStateCache.fogEnable ? 0.0f : 1.0f;
 		uniformState.fogStart = rwStateCache.fogStart;
 		uniformState.fogEnd = rwStateCache.fogEnd;
-		uniformState.fogRange = 1.0f/(rwStateCache.fogStart - rwStateCache.fogEnd);
+		uniformState.fogRange = fogRangeOf(rwStateCache.fogStart, rwStateCache.fogEnd);
 		glBindBuffer(GL_UNIFORM_BUFFER, ubo_state);
 		glBufferData(GL_UNIFORM_BUFFER, sizeof(UniformState), nil, GL_STREAM_DRAW);
 		glBufferData(GL_UNIFORM_BUFFER, sizeof(UniformState), &uniformState, GL_STREAM_DRAW);

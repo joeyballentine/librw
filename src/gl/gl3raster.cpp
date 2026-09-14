@@ -839,6 +839,8 @@ rasterToImage(Raster *raster)
 	if(natras->isCompressed){
 		// TODO
 		RWERROR((ERR_INVRASTER));
+		if(unlock)
+			raster->unlock(0);
 		return nil;
 	}
 
@@ -863,12 +865,16 @@ rasterToImage(Raster *raster)
 	case Raster::C4444:
 	case Raster::LUM8:
 		RWERROR((ERR_INVRASTER));
+		if(unlock)
+			raster->unlock(0);
 		return nil;
 	}
 
 	if(raster->format & Raster::PAL4 ||
 	   raster->format & Raster::PAL8){
 		RWERROR((ERR_INVRASTER));
+		if(unlock)
+			raster->unlock(0);
 		return nil;
 	}
 		
