@@ -1221,7 +1221,7 @@ bindFramebuffer(uint32 fbo)
 void
 rebindFramebuffer(void)
 {
-	rebindFramebuffer();
+	glBindFramebuffer(GL_FRAMEBUFFER, currentFramebuffer);
 }
 
 void
