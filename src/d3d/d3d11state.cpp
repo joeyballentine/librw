@@ -46,6 +46,11 @@ namespace impl11 {
 
 // --- the shadow states ------------------------------------------------------
 
+// Stages 0 and 1 are the material and the environment map; stage 3 is the cel
+// ramp, uploaded by d3drender.cpp's uploadToonConstants. Stage 2 is unused and
+// binds the white texture.
+#define NUMTEXSTAGES 4
+
 static struct {
 	// Blend
 	uint32 srcblend, destblend;
@@ -62,13 +67,13 @@ static struct {
 	uint32 cullmode;
 	bool32 scissorenable;
 
-	// Sampler, stage 0 and 1
+	// Sampler, per stage
 	struct {
 		Raster *raster;
 		uint32 addressingU, addressingV;
 		uint32 filter;
 		uint32 maxAnisotropy;
-	} texstage[2];
+	} texstage[NUMTEXSTAGES];
 
 	// What the application asked for, kept apart from what a pipeline asked
 	// for: the two are ORed, and neither may erase the other.
@@ -452,8 +457,8 @@ bindRasterizerState(void)
 static void
 bindSamplers(void)
 {
-	ID3D11SamplerState *samplers[2];
-	for(int i = 0; i < 2; i++){
+	ID3D11SamplerState *samplers[NUMTEXSTAGES];
+	for(int i = 0; i < NUMTEXSTAGES; i++){
 		D3D11_SAMPLER_DESC desc;
 		memset(&desc, 0, sizeof(desc));
 		desc.Filter = filterMode(rwStateCache.texstage[i].filter,
@@ -476,20 +481,20 @@ bindSamplers(void)
 		}
 		samplers[i] = state;
 	}
-	d3d11context->PSSetSamplers(0, 2, samplers);
+	d3d11context->PSSetSamplers(0, NUMTEXSTAGES, samplers);
 }
 
 static void
 bindTextures(void)
 {
-	ID3D11ShaderResourceView *views[2];
-	for(int i = 0; i < 2; i++){
+	ID3D11ShaderResourceView *views[NUMTEXSTAGES];
+	for(int i = 0; i < NUMTEXSTAGES; i++){
 		Raster *raster = rwStateCache.texstage[i].raster;
 		views[i] = raster ? (ID3D11ShaderResourceView*)rasterShaderResource(raster) : whiteView;
 		if(views[i] == nil)
 			views[i] = whiteView;
 	}
-	d3d11context->PSSetShaderResources(0, 2, views);
+	d3d11context->PSSetShaderResources(0, NUMTEXSTAGES, views);
 }
 
 void
@@ -504,7 +509,7 @@ flushCache(void)
 	// state, so nothing below would run and the GPU would keep the texels it
 	// was given the first time. rasterShaderResource is what pushes them, and
 	// bindTextures is the only thing that calls it.
-	for(int i = 0; i < 2 && !stateDirty; i++){
+	for(int i = 0; i < NUMTEXSTAGES && !stateDirty; i++){
 		Raster *raster = rwStateCache.texstage[i].raster;
 		if(raster && GETD3DRASTEREXT(raster)->dirty)
 			stateDirty = 1;
@@ -596,7 +601,7 @@ getIm2DActive(void)
 void
 forgetRaster(Raster *raster)
 {
-	for(int i = 0; i < 2; i++)
+	for(int i = 0; i < NUMTEXSTAGES; i++)
 		if(rwStateCache.texstage[i].raster == raster){
 			rwStateCache.texstage[i].raster = nil;
 			stateDirty = 1;
@@ -606,7 +611,7 @@ forgetRaster(Raster *raster)
 void
 setRasterStage(uint32 stage, Raster *raster)
 {
-	if(stage > 1)
+	if(stage >= NUMTEXSTAGES)
 		return;
 	if(rwStateCache.texstage[stage].raster == raster)
 		return;
@@ -631,7 +636,7 @@ setRasterStage(uint32 stage, Raster *raster)
 void
 setTexture(uint32 stage, Texture *tex)
 {
-	if(stage > 1)
+	if(stage >= NUMTEXSTAGES)
 		return;
 	if(tex == nil || tex->raster == nil){
 		setRasterStage(stage, nil);
@@ -840,8 +845,8 @@ invalidateDeviceState(void)
 void
 unbindTextures(void)
 {
-	ID3D11ShaderResourceView *none[2] = { nil, nil };
-	d3d11context->PSSetShaderResources(0, 2, none);
+	ID3D11ShaderResourceView *none[NUMTEXSTAGES] = { nil };
+	d3d11context->PSSetShaderResources(0, NUMTEXSTAGES, none);
 	stateDirty = 1;
 }
 
@@ -862,7 +867,7 @@ resetRenderState(void)
 	rwStateCache.stencilwritemask = 0xFF;
 	rwStateCache.alphafunc = ALPHAGREATEREQUAL;
 	rwStateCache.alpharef = 10;
-	for(int i = 0; i < 2; i++){
+	for(int i = 0; i < NUMTEXSTAGES; i++){
 		rwStateCache.texstage[i].addressingU = Texture::WRAP;
 		rwStateCache.texstage[i].addressingV = Texture::WRAP;
 		rwStateCache.texstage[i].filter = Texture::LINEAR;

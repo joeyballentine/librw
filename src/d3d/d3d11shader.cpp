@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <stddef.h>
 
 #define WITH_D3D
 #include "../rwbase.h"
@@ -44,9 +45,12 @@ namespace impl11 {
 // packoffset at the same register, which is how HLSL spells a c-register inside
 // a cbuffer.
 // Up to c238: skin_matfx_env_VS.hlsl puts 64 bone matrices at c41 and the
-// environment map constants after them.
+// environment map constants after them. The pixel stage goes past ps_2_0's 32
+// because the toon shaders are ps_3_0 on D3D9 and read c32; see toonConstants.h.
+// The buffer has to be at least as large as the shader's $Globals, or the debug
+// layer refuses the draw.
 #define NUMVSCONST 256
-#define NUMPSCONST 32
+#define NUMPSCONST 64
 #define NUMVSINT 4
 
 static float vsConstants[NUMVSCONST*4];
@@ -299,6 +303,79 @@ declTypeFormat(uint32 type)
 	return DXGI_FORMAT_UNKNOWN;
 }
 
+// One semantic a vertex shader reads, from the input signature in its bytecode.
+struct ShaderInput
+{
+	const char *name;
+	uint32 index;
+	uint32 componentType;	// D3D_REGISTER_COMPONENT_TYPE
+	int32 numComponents;
+};
+
+static uint32
+readU32(const uint8 *p)
+{
+	uint32 v;
+	memcpy(&v, p, 4);
+	return v;
+}
+
+// The ISGN chunk of a DXBC container: a count, the offset of the first entry,
+// then 24 bytes an entry -- name offset, semantic index, system value, component
+// type, register, mask. Names are offsets from the start of the chunk's data.
+// System values are skipped: SV_VertexID is made by the runtime, not a layout.
+static int32
+readInputSignature(const uint8 *code, uint32 size, ShaderInput *out, int32 max)
+{
+	if(size < 32 || memcmp(code, "DXBC", 4) != 0)
+		return 0;
+	uint32 numChunks = readU32(code+28);
+	for(uint32 c = 0; c < numChunks && 32 + (c+1)*4 <= size; c++){
+		uint32 off = readU32(code + 32 + c*4);
+		if(off + 16 > size || memcmp(code+off, "ISGN", 4) != 0)
+			continue;
+		const uint8 *data = code + off + 8;
+		uint32 dataSize = readU32(code + off + 4);
+		if(off + 8 + dataSize > size)
+			return 0;
+		uint32 count = readU32(data);
+		uint32 first = readU32(data+4);
+		int32 n = 0;
+		for(uint32 i = 0; i < count && n < max; i++){
+			const uint8 *e = data + first + i*24;
+			if(first + (i+1)*24 > dataSize)
+				break;
+			if(readU32(e+8) != 0)
+				continue;
+			uint8 mask = e[20];
+			out[n].name = (const char*)data + readU32(e);
+			out[n].index = readU32(e+4);
+			out[n].componentType = readU32(e+12);
+			out[n].numComponents = (mask&1) + ((mask>>1)&1) + ((mask>>2)&1) + ((mask>>3)&1);
+			n++;
+		}
+		return n;
+	}
+	return 0;
+}
+
+static DXGI_FORMAT
+zeroInputFormat(const ShaderInput *in)
+{
+	static const DXGI_FORMAT floats[] = { DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R32G32_FLOAT,
+		DXGI_FORMAT_R32G32B32_FLOAT, DXGI_FORMAT_R32G32B32A32_FLOAT };
+	static const DXGI_FORMAT uints[] = { DXGI_FORMAT_R32_UINT, DXGI_FORMAT_R32G32_UINT,
+		DXGI_FORMAT_R32G32B32_UINT, DXGI_FORMAT_R32G32B32A32_UINT };
+	static const DXGI_FORMAT sints[] = { DXGI_FORMAT_R32_SINT, DXGI_FORMAT_R32G32_SINT,
+		DXGI_FORMAT_R32G32B32_SINT, DXGI_FORMAT_R32G32B32A32_SINT };
+	int32 i = in->numComponents < 1 ? 0 : in->numComponents > 4 ? 3 : in->numComponents-1;
+	switch(in->componentType){
+	case D3D_REGISTER_COMPONENT_UINT32:	return uints[i];
+	case D3D_REGISTER_COMPONENT_SINT32:	return sints[i];
+	default:				return floats[i];
+	}
+}
+
 ID3D11InputLayout*
 inputLayoutFor(void *declaration, void *vertexShader)
 {
@@ -323,6 +400,34 @@ inputLayoutFor(void *declaration, void *vertexShader)
 	}
 
 	VertexShader *vs = (VertexShader*)vertexShader;
+
+	// **What the shader reads and the geometry does not carry is fed zeroes.**
+	// That is what D3D9 did with a missing element, and the shaders are written
+	// against it: the hull reads its averaged normal from TEXCOORD1 and
+	// TEXCOORD2 and falls back to the lighting normal where they read zero, and
+	// only a model that has been through iToonHullNormals has either. D3D11
+	// instead refuses to make the layout, and the draw is skipped. The zeroes
+	// come from the constant vertex stream's texture coordinates, which are
+	// zero and wide enough for any four-component input.
+	ShaderInput inputs[16];
+	int32 numInputs = readInputSignature(vs->code, vs->codeSize, inputs, 16);
+	for(int32 j = 0; j < numInputs && n < 16; j++){
+		bool32 present = 0;
+		for(int32 k = 0; k < n && !present; k++)
+			present = desc[k].SemanticIndex == inputs[j].index &&
+			          _stricmp(desc[k].SemanticName, inputs[j].name) == 0;
+		if(present)
+			continue;
+		desc[n].SemanticName = inputs[j].name;
+		desc[n].SemanticIndex = inputs[j].index;
+		desc[n].Format = zeroInputFormat(&inputs[j]);
+		desc[n].InputSlot = 2;
+		desc[n].AlignedByteOffset = offsetof(VertexConstantData, texCoors);
+		desc[n].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
+		desc[n].InstanceDataStepRate = 0;
+		n++;
+	}
+
 	ID3D11InputLayout *layout = nil;
 	if(FAILED(d3d11device->CreateInputLayout(desc, n, vs->code, vs->codeSize, &layout)))
 		return nil;
