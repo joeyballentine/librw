@@ -53,9 +53,16 @@ registerUniform(const char *name, UniformType type, int32 num)
 		assert(u->num == num);
 		return i;
 	}
-	// TODO: print error
-	if(uniformRegistry.numUniforms+1 >= MAX_UNIFORMS){
+	// Printed as well as asserted: a release build compiles the assert out,
+	// and a uniform left at -1 is never uploaded to any shader.
+	if(uniformRegistry.numUniforms >= MAX_UNIFORMS){
+		fprintf(stderr, "gl3: no space for uniform %s (MAX_UNIFORMS %d)\n", name, (int)MAX_UNIFORMS);
 		assert(0 && "no space for uniform");
+		return -1;
+	}
+	if(type != UNIFORM_NA && dataPtr + uniformTypesize[type]*num > nelem(uniformData)){
+		fprintf(stderr, "gl3: no space for the data of uniform %s\n", name);
+		assert(0 && "no space for uniform data");
 		return -1;
 	}
 	Uniform *u = &uniformRegistry.uniforms[uniformRegistry.numUniforms];
@@ -111,6 +118,8 @@ findBlock(const char *name)
 void
 setUniform(int32 id, void *data)
 {
+	if(id < 0)
+		return;
 	Uniform *u = &uniformRegistry.uniforms[id];
 	assert(u->type != UNIFORM_NA);
 	if(memcmp(u->data, data, uniformTypesize[u->type]*u->num * sizeof(float)) != 0){

@@ -4,8 +4,10 @@ namespace rw {
 namespace gl3 {
 
 // TODO: make this dynamic
+// librw registers 31 of these and the skin and matfx plugins 5 more; an
+// application's own screen passes take the rest.
 enum {
-	MAX_UNIFORMS = 40,
+	MAX_UNIFORMS = 64,
 	MAX_BLOCKS = 20
 };
 
