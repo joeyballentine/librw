@@ -994,7 +994,9 @@ flushGlRenderState(void)
 
 	if(oldGlState.multisample != curGlState.multisample){
 		oldGlState.multisample = curGlState.multisample;
-		(oldGlState.multisample ? glEnable : glDisable)(GL_MULTISAMPLE);
+		// GLES has no GL_MULTISAMPLE; a multisampled target always is.
+		if(!gl3Caps.gles)
+			(oldGlState.multisample ? glEnable : glDisable)(GL_MULTISAMPLE);
 	}
 
 	if(oldGlState.colorMask != curGlState.colorMask){
