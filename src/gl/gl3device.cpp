@@ -1284,7 +1284,8 @@ acquireVirtualScreenMS(void)
 
 	glGenRenderbuffers(1, &virtualScreenMSColor);
 	glBindRenderbuffer(GL_RENDERBUFFER, virtualScreenMSColor);
-	glRenderbufferStorageMultisample(GL_RENDERBUFFER, want, GL_RGB8,
+	// The resolve's format; a multisample resolve between two formats fails.
+	glRenderbufferStorageMultisample(GL_RENDERBUFFER, want, GL_RGBA8,
 	                                 virtualScreenWidth, virtualScreenHeight);
 
 	glGenRenderbuffers(1, &virtualScreenMSDepth);
@@ -1363,8 +1364,10 @@ virtualScreenFramebuffer(void)
 	// its depth at all. D3D9 owns virtualScreenDepth for the same reason.
 	glGenTextures(1, &virtualScreenTex);
 	uint32 prev = bindTexture(virtualScreenTex);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, virtualScreenWidth, virtualScreenHeight,
-	             0, GL_RGB, GL_UNSIGNED_BYTE, nil);
+	// With alpha, as D3D9's A8R8G8B8 back buffer and D3D11's target have: the
+	// DESTALPHA blends read it and a colour mask can write only it.
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, virtualScreenWidth, virtualScreenHeight,
+	             0, GL_RGBA, GL_UNSIGNED_BYTE, nil);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -2722,6 +2725,13 @@ blitVirtualScreen(Raster *raster)
 
 	glBlitFramebuffer(0, 0, vw, vh, dx, dy, dx + dw, dy + dh,
 	                  GL_COLOR_BUFFER_BIT, GL_LINEAR);
+
+	// The blit carried the frame's alpha into a window that has an alpha
+	// channel, and a compositor that honours it shows the desktop through.
+	// Opaque again, colour untouched; the next flush restores the mask.
+	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE);
+	oldGlState.colorMask = COLORWRITEALPHA;
+	glClear(GL_COLOR_BUFFER_BIT);
 
 	// The read and draw bindings above went round bindFramebuffer's cache, so
 	// it no longer describes the binding. Put both back by hand.
