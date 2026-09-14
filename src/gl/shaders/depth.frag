@@ -28,6 +28,8 @@ PackDepth(float d)
 {
 	// The multiply ladder and the subtract are the standard encode. Each
 	// channel keeps the fraction the ones above it did not.
+	// Just under 1: fract(1.0) is 0, which would put the far plane nearest.
+	d = clamp(d, 0.0, 16777215.0/16777216.0);
 	vec3 bits = vec3(1.0, 255.0, 65025.0) * d;
 	bits = fract(bits);
 	// Take back what the next channel up is going to represent, or the sum

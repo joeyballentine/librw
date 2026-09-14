@@ -29,6 +29,8 @@ const char *depth_frag_src =
 "{\n"
 "	// The multiply ladder and the subtract are the standard encode. Each\n"
 "	// channel keeps the fraction the ones above it did not.\n"
+"	// Just under 1: fract(1.0) is 0, which would put the far plane nearest.\n"
+"	d = clamp(d, 0.0, 16777215.0/16777216.0);\n"
 "	vec3 bits = vec3(1.0, 255.0, 65025.0) * d;\n"
 "	bits = fract(bits);\n"
 "	// Take back what the next channel up is going to represent, or the sum\n"
