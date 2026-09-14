@@ -912,6 +912,21 @@ setGlRenderState(uint32 state, uint32 value)
 	}
 }
 
+// Open the colour, depth and stencil write masks for a clear, and record that
+// they are open. GL holds the flushed masks, oldGlState, which differ from the
+// requested ones in rwStateCache until the next draw flushes; so the masks are
+// opened unconditionally, and that next flush puts back what was asked for.
+static void
+openWriteMasks(void)
+{
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	oldGlState.colorMask = COLORWRITEALL;
+	glDepthMask(GL_TRUE);
+	oldGlState.depthMask = GL_TRUE;
+	glStencilMask(0xFFFFFFFF);
+	oldGlState.stencilWriteMask = 0xFFFFFFFF;
+}
+
 void
 flushGlRenderState(void)
 {
@@ -2585,19 +2600,11 @@ clearCamera(Camera *cam, RGBA *col, uint32 mode)
 		mask |= GL_DEPTH_BUFFER_BIT;
 	if(mode & Camera::CLEARSTENCIL)
 		mask |= GL_STENCIL_BUFFER_BIT;
-	// glClear obeys both write masks, so a clear issued while either is off
-	// would do nothing. D3D9's Clear() obeys neither, and a clear that clears
+	// glClear obeys all three write masks, so a clear issued while one is off
+	// would do nothing. D3D9's Clear() obeys none, and a clear that clears
 	// is what a caller of this means either way.
-	glDepthMask(GL_TRUE);
-	if(rwStateCache.colorwritemask != COLORWRITEALL)
-		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	openWriteMasks();
 	glClear(mask);
-	glDepthMask(rwStateCache.zwrite);
-	if(rwStateCache.colorwritemask != COLORWRITEALL)
-		glColorMask(!!(rwStateCache.colorwritemask & COLORWRITERED),
-			!!(rwStateCache.colorwritemask & COLORWRITEGREEN),
-			!!(rwStateCache.colorwritemask & COLORWRITEBLUE),
-			!!(rwStateCache.colorwritemask & COLORWRITEALPHA));
 
 	if(setScissor)
 		glDisable(GL_SCISSOR_TEST);
@@ -2656,20 +2663,13 @@ blitVirtualScreen(Raster *raster)
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 
 	glDisable(GL_SCISSOR_TEST);
-	if(rwStateCache.colorwritemask != COLORWRITEALL)
-		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	openWriteMasks();
 
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	glBlitFramebuffer(0, 0, vw, vh, dx, dy, dx + dw, dy + dh,
 	                  GL_COLOR_BUFFER_BIT, GL_LINEAR);
-
-	if(rwStateCache.colorwritemask != COLORWRITEALL)
-		glColorMask(!!(rwStateCache.colorwritemask & COLORWRITERED),
-			!!(rwStateCache.colorwritemask & COLORWRITEGREEN),
-			!!(rwStateCache.colorwritemask & COLORWRITEBLUE),
-			!!(rwStateCache.colorwritemask & COLORWRITEALPHA));
 
 	// The read and draw bindings above went round bindFramebuffer's cache, so
 	// it no longer describes the binding. Put both back by hand.
