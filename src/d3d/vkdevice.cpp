@@ -835,6 +835,24 @@ rasterRenderFast(Raster *raster, int32 x, int32 y)
 	return 1;
 }
 
+static PresentOverlayFn presentOverlay;
+// Set while the overlay callback runs, which is the only time
+// drawPresentOverlay has a pass to draw into.
+static bool32 overlayOpen;
+
+void
+setPresentOverlay(PresentOverlayFn fn)
+{
+	presentOverlay = fn;
+}
+
+void
+drawPresentOverlay(const float32 *vertices, int32 numVertices)
+{
+	if(overlayOpen)
+		drawOverlay(swap.format, swap.extent, vertices, numVertices);
+}
+
 // Stretch the scene into the swap chain image with its aspect ratio kept, the
 // rest cleared to black, and present it.
 static void
@@ -929,6 +947,20 @@ showRaster(Raster *raster, uint32 flags)
 	vkCmdSetScissor(cmd, 0, 1, &scissor);
 	presenting = 1;
 	drawBlit(swap.format, src);
+	if(presentOverlay){
+		// The whole image, not the letterboxed picture, and the right way up.
+		VkViewport full;
+		full.x = 0.0f;
+		full.y = 0.0f;
+		full.width = (float)swap.extent.width;
+		full.height = (float)swap.extent.height;
+		full.minDepth = 0.0f;
+		full.maxDepth = 1.0f;
+		vkCmdSetViewport(cmd, 0, 1, &full);
+		overlayOpen = 1;
+		presentOverlay((int32)swap.extent.width, (int32)swap.extent.height);
+		overlayOpen = 0;
+	}
 	presenting = 0;
 	vkCmdEndRendering(cmd);
 

@@ -201,6 +201,7 @@ void setAlphaTestConstants(uint32 func, uint32 ref);
 // The present-time blit: a fullscreen triangle sampling `source` into a target
 // of `format`, with the viewport already set.
 void drawBlit(VkFormat format, Image *source);
+void drawOverlay(VkFormat format, VkExtent2D extent, const float32 *vertices, int32 numVertices);
 
 #endif
 

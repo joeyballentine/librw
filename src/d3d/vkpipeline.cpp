@@ -1506,10 +1506,15 @@ bindFanIndices(VkBuffer buffer)
 
 static VertexShader *blitVS;
 static PixelShader *blitPS;
+static VertexShader *overlayVS;
+static PixelShader *overlayPS;
 
 namespace spv {
 #include "shadersvk/blit_VS.h"
 #include "shadersvk/blit_PS.h"
+// GLSL, not HLSL: see shaders/glsl_h.py.
+#include "shadersvk/overlay_VS.h"
+#include "shadersvk/overlay_PS.h"
 }
 
 void
@@ -1562,6 +1567,78 @@ drawBlit(VkFormat format, Image *source)
 	invalidateBindings();
 }
 
+// The present overlay's triangles. See drawPresentOverlay in rwd3d.h for the
+// vertex; the position is turned from window pixels into clip space here, so
+// the shaders need no constants and no descriptor set.
+void
+drawOverlay(VkFormat format, VkExtent2D extent, const float32 *vertices, int32 numVertices)
+{
+	enum { STRIDE = 12 };
+	if(overlayVS == nil || overlayPS == nil || numVertices <= 0 ||
+	   extent.width == 0 || extent.height == 0)
+		return;
+	VkCommandBuffer cmd = frameCommands();
+
+	ArenaSpan span;
+	if(!arenaAlloc((VkDeviceSize)numVertices*STRIDE*sizeof(float32), 4, &span))
+		return;
+	float32 *out = (float32*)span.data;
+	memcpy(out, vertices, numVertices*STRIDE*sizeof(float32));
+	for(int32 i = 0; i < numVertices; i++, out += STRIDE){
+		out[0] = out[0]/extent.width*2.0f - 1.0f;
+		out[1] = out[1]/extent.height*2.0f - 1.0f;
+	}
+
+	PipelineKey key;
+	memset(&key, 0, sizeof(key));
+	key.vertexShader = overlayVS;
+	key.pixelShader = overlayPS;
+	key.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	key.colorFormat = format;
+	key.depthFormat = VK_FORMAT_UNDEFINED;
+	key.samples = VK_SAMPLE_COUNT_1_BIT;
+	key.blendEnable = 1;
+	key.srcBlend = BLENDSRCALPHA;
+	key.destBlend = BLENDINVSRCALPHA;
+	key.writeMask = 0xF;
+	key.numBindings = 1;
+	key.bindings[0].binding = 0;
+	key.bindings[0].stride = STRIDE*sizeof(float32);
+	key.bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	static const VkFormat formats[5] = {
+		VK_FORMAT_R32G32_SFLOAT, VK_FORMAT_R32G32_SFLOAT, VK_FORMAT_R32G32_SFLOAT,
+		VK_FORMAT_R32G32_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT
+	};
+	static const uint32 offsets[5] = { 0, 8, 16, 24, 32 };
+	key.numAttributes = 5;
+	for(int i = 0; i < 5; i++){
+		key.attributes[i].location = i;
+		key.attributes[i].binding = 0;
+		key.attributes[i].format = formats[i];
+		key.attributes[i].offset = offsets[i];
+	}
+	VkPipeline pipeline = getPipeline(&key, overlayVS->module, overlayPS->module);
+	if(pipeline == VK_NULL_HANDLE)
+		return;
+
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+	vkCmdSetFrontFace(cmd, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	vkCmdSetCullMode(cmd, VK_CULL_MODE_NONE);
+	vkCmdSetDepthTestEnable(cmd, VK_FALSE);
+	vkCmdSetDepthWriteEnable(cmd, VK_FALSE);
+	vkCmdSetDepthCompareOp(cmd, VK_COMPARE_OP_ALWAYS);
+	vkCmdSetStencilTestEnable(cmd, VK_FALSE);
+	vkCmdSetStencilOp(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, VK_STENCIL_OP_KEEP,
+		VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS);
+	vkCmdSetStencilCompareMask(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, 0);
+	vkCmdSetStencilWriteMask(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, 0);
+	vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, 0);
+
+	vkCmdBindVertexBuffers(cmd, 0, 1, &span.buffer, &span.offset);
+	vkCmdDraw(cmd, numVertices, 1, 0, 0);
+	invalidateBindings();
+}
+
 // --- open and close ---------------------------------------------------------
 
 void
@@ -1606,6 +1683,8 @@ openPipelines(void)
 
 	blitVS = (VertexShader*)createVertexShader((void*)spv::blit_VS);
 	blitPS = (PixelShader*)createPixelShader((void*)spv::blit_PS);
+	overlayVS = (VertexShader*)createVertexShader((void*)spv::overlay_VS);
+	overlayPS = (PixelShader*)createPixelShader((void*)spv::overlay_PS);
 
 	if(!vkGlobals.bgraVertexColor)
 		fprintf(stderr, "librw: this Vulkan device cannot take B8G8R8A8 vertex colours; "
@@ -1623,6 +1702,10 @@ closePipelines(void)
 	blitVS = nil;
 	destroyPixelShader(blitPS);
 	blitPS = nil;
+	destroyVertexShader(overlayVS);
+	overlayVS = nil;
+	destroyPixelShader(overlayPS);
+	overlayPS = nil;
 	for(int32 i = 0; i < numPipelines; i++)
 		vkDestroyPipeline(vkGlobals.device, pipelines[i].pipeline, nil);
 	rwFree(pipelines);
