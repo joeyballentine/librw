@@ -3326,6 +3326,7 @@ initOpenGL(void)
 	setUniform(u_toonRoomTint, toonRoomTint);
 	setUniform(u_toonExtra, toonExtra);
 	setUniform(u_toonExtra2, toonExtra2);
+	setUniform(u_toonExtra3, toonExtra3);
 
 	// for im2d
 	registerUniform("u_xform", UNIFORM_VEC4);
