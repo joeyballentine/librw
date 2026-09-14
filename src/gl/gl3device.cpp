@@ -3085,17 +3085,23 @@ startSDL3(void)
 			if (win)
 				SDL_SetWindowFullscreenMode(win, NULL);
 		}
+		// The window is made whatever the version; it is the context that is
+		// refused. Try the next profile when it is.
 		if(win){
-			gl3Caps.gles = profiles[i].gl == SDL_GL_CONTEXT_PROFILE_ES;
-			gl3Caps.glversion = profiles[i].major*10 + profiles[i].minor;
-			break;
+			ctx = SDL_GL_CreateContext(win);
+			if(ctx){
+				gl3Caps.gles = profiles[i].gl == SDL_GL_CONTEXT_PROFILE_ES;
+				gl3Caps.glversion = profiles[i].major*10 + profiles[i].minor;
+				break;
+			}
+			SDL_DestroyWindow(win);
+			win = nil;
 		}
 	}
 	if(win == nil){
 		RWERROR((ERR_GENERAL, SDL_GetError()));
 		return 0;
 	}
-	ctx = SDL_GL_CreateContext(win);
 
 	if (!((gl3Caps.gles ? gladLoadGLES2Loader : gladLoadGLLoader) ((GLADloadproc) SDL_GL_GetProcAddress, gl3Caps.glversion)) ) {
 		RWERROR((ERR_GENERAL, "gladLoadGLLoader failed"));
