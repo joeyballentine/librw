@@ -50,38 +50,83 @@ int32 maxAnisotropy(void) { return (int32)vkGlobals.maxAnisotropy; }
 
 // --- the frame --------------------------------------------------------------
 
-static struct {
+// What one frame records into and is submitted with. A slot is reused only
+// once the GPU has finished the frame last submitted from it.
+struct FrameSlot
+{
 	VkCommandPool pool;
 	VkCommandBuffer cmd;
 	VkCommandBuffer upload;
 	VkFence fence;
-	bool32 open;
+	// The swap chain image's acquisition, which the frame's submit waits on.
+	VkSemaphore acquired;
 	bool32 pending;
+	uint32 serial;
+};
+
+static struct {
+	FrameSlot slots[FRAMESINFLIGHT];
+	int32 slot;
+	bool32 open;
 	bool32 uploadUsed;
 	uint32 serial;
 } frame;
 
+// Clear `pending` on every slot whose frame the GPU has finished.
+static void
+pollSubmitted(void)
+{
+	for(int32 i = 0; i < FRAMESINFLIGHT; i++){
+		FrameSlot *s = &frame.slots[i];
+		if(s->pending && vkGetFenceStatus(vkGlobals.device, s->fence) == VK_SUCCESS)
+			s->pending = 0;
+	}
+}
+
+static void
+waitForSubmitted(void)
+{
+	for(int32 i = 0; i < FRAMESINFLIGHT; i++){
+		FrameSlot *s = &frame.slots[i];
+		if(s->pending){
+			vkWaitForFences(vkGlobals.device, 1, &s->fence, VK_TRUE, UINT64_MAX);
+			s->pending = 0;
+		}
+	}
+}
+
+// The slot the last frame used is taken again if the GPU is already done with
+// it, which keeps a frame that flushed -- a level load staging its textures --
+// in one slot's arena. Otherwise the next slot, waiting for it if it is still
+// busy: that wait is what bounds the frames in flight.
 static void
 openFrame(void)
 {
 	if(frame.open)
 		return;
-	if(frame.pending){
-		vkWaitForFences(vkGlobals.device, 1, &frame.fence, VK_TRUE, UINT64_MAX);
-		frame.pending = 0;
+	FrameSlot *s = &frame.slots[frame.slot];
+	pollSubmitted();
+	if(s->pending){
+		frame.slot = (frame.slot + 1) % FRAMESINFLIGHT;
+		s = &frame.slots[frame.slot];
+		if(s->pending){
+			vkWaitForFences(vkGlobals.device, 1, &s->fence, VK_TRUE, UINT64_MAX);
+			s->pending = 0;
+		}
 	}
 	collectGarbage();
-	vkResetFences(vkGlobals.device, 1, &frame.fence);
-	vkResetCommandPool(vkGlobals.device, frame.pool, 0);
+	vkResetFences(vkGlobals.device, 1, &s->fence);
+	vkResetCommandPool(vkGlobals.device, s->pool, 0);
 	arenaReset();
 
 	VkCommandBufferBeginInfo bi = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
 	bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	vkBeginCommandBuffer(frame.cmd, &bi);
-	vkBeginCommandBuffer(frame.upload, &bi);
+	vkBeginCommandBuffer(s->cmd, &bi);
+	vkBeginCommandBuffer(s->upload, &bi);
 	frame.open = 1;
 	frame.uploadUsed = 0;
 	frame.serial++;
+	s->serial = frame.serial;
 	commandBufferBegun();
 }
 
@@ -89,7 +134,7 @@ VkCommandBuffer
 frameCommands(void)
 {
 	openFrame();
-	return frame.cmd;
+	return frame.slots[frame.slot].cmd;
 }
 
 VkCommandBuffer
@@ -97,11 +142,35 @@ uploadCommands(void)
 {
 	openFrame();
 	frame.uploadUsed = 1;
-	return frame.upload;
+	return frame.slots[frame.slot].upload;
 }
 
 uint32 frameSerial(void) { return frame.serial; }
-bool32 gpuBusy(void) { return frame.open || frame.pending; }
+int32 frameSlot(void) { return frame.slot; }
+
+bool32
+gpuBusy(void)
+{
+	if(frame.open)
+		return 1;
+	for(int32 i = 0; i < FRAMESINFLIGHT; i++)
+		if(frame.slots[i].pending)
+			return 1;
+	return 0;
+}
+
+uint32
+finishedSerial(void)
+{
+	pollSubmitted();
+	uint32 oldest = frame.open ? frame.serial : frame.serial + 1;
+	for(int32 i = 0; i < FRAMESINFLIGHT; i++){
+		FrameSlot *s = &frame.slots[i];
+		if(s->pending && s->serial < oldest)
+			oldest = s->serial;
+	}
+	return oldest - 1;
+}
 
 // --- targets ----------------------------------------------------------------
 
@@ -269,7 +338,7 @@ endRendering(void)
 {
 	if(!rendering)
 		return;
-	vkCmdEndRendering(frame.cmd);
+	vkCmdEndRendering(frame.slots[frame.slot].cmd);
 	rendering = 0;
 }
 
@@ -404,7 +473,6 @@ static struct {
 	VkImage *images;
 	VkImageView *views;
 	VkSemaphore *renderDone;
-	VkSemaphore acquired;
 	bool32 vsync;
 	bool32 dirty;
 	// Created without the surface's own transform, which the compositor then
@@ -598,14 +666,15 @@ submitFrame(bool32 present, uint32 imageIndex)
 	if(!frame.open)
 		return;
 	endRendering();
-	vkEndCommandBuffer(frame.upload);
-	vkEndCommandBuffer(frame.cmd);
+	FrameSlot *slot = &frame.slots[frame.slot];
+	vkEndCommandBuffer(slot->upload);
+	vkEndCommandBuffer(slot->cmd);
 
 	VkCommandBuffer bufs[2];
 	uint32 numBufs = 0;
 	if(frame.uploadUsed)
-		bufs[numBufs++] = frame.upload;
-	bufs[numBufs++] = frame.cmd;
+		bufs[numBufs++] = slot->upload;
+	bufs[numBufs++] = slot->cmd;
 
 	VkSubmitInfo si = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
 	VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -613,14 +682,14 @@ submitFrame(bool32 present, uint32 imageIndex)
 	si.pCommandBuffers = bufs;
 	if(present){
 		si.waitSemaphoreCount = 1;
-		si.pWaitSemaphores = &swap.acquired;
+		si.pWaitSemaphores = &slot->acquired;
 		si.pWaitDstStageMask = &waitStage;
 		si.signalSemaphoreCount = 1;
 		si.pSignalSemaphores = &swap.renderDone[imageIndex];
 	}
-	VkResult r = vkQueueSubmit(vkGlobals.queue, 1, &si, frame.fence);
+	VkResult r = vkQueueSubmit(vkGlobals.queue, 1, &si, slot->fence);
 	frame.open = 0;
-	frame.pending = r == VK_SUCCESS;
+	slot->pending = r == VK_SUCCESS;
 	if(r == VK_ERROR_DEVICE_LOST){
 		static bool32 said;
 		if(!said){
@@ -651,10 +720,7 @@ flushFrame(void)
 	if(!frame.open)
 		return;
 	submitFrame(0, 0);
-	if(frame.pending){
-		vkWaitForFences(vkGlobals.device, 1, &frame.fence, VK_TRUE, UINT64_MAX);
-		frame.pending = 0;
-	}
+	waitForSubmitted();
 }
 
 // --- the camera -------------------------------------------------------------
@@ -794,7 +860,7 @@ clearCamera(Camera *cam, RGBA *col, uint32 mode)
 	rect.rect.extent.height = target.height;
 	rect.baseArrayLayer = 0;
 	rect.layerCount = 1;
-	vkCmdClearAttachments(frame.cmd, n, atts, 1, &rect);
+	vkCmdClearAttachments(frame.slots[frame.slot].cmd, n, atts, 1, &rect);
 }
 
 // The frame so far, into a camera texture the caller sized from
@@ -909,11 +975,8 @@ showRaster(Raster *raster, uint32 flags)
 		swap.dirty = 1;
 	if(swap.dirty && w > 0 && h > 0){
 		// The frame being recorded does not name the swap chain yet, so what
-		// has to finish first is only the one before it.
-		if(frame.pending){
-			vkWaitForFences(vkGlobals.device, 1, &frame.fence, VK_TRUE, UINT64_MAX);
-			frame.pending = 0;
-		}
+		// has to finish first is only the ones before it.
+		waitForSubmitted();
 		vkQueueWaitIdle(vkGlobals.queue);
 		if(swap.surfaceLost)
 			recreateSurface();
@@ -926,7 +989,7 @@ showRaster(Raster *raster, uint32 flags)
 	VkResult r = VK_ERROR_OUT_OF_DATE_KHR;
 	if(swap.swapchain != VK_NULL_HANDLE && src && !swap.dirty)
 		r = vkAcquireNextImageKHR(vkGlobals.device, swap.swapchain, UINT64_MAX,
-			swap.acquired, VK_NULL_HANDLE, &index);
+			frame.slots[frame.slot].acquired, VK_NULL_HANDLE, &index);
 	if(r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR){
 		if(r == VK_ERROR_OUT_OF_DATE_KHR)
 			swap.dirty = 1;
@@ -1063,13 +1126,13 @@ drawPrimitive(uint32 primType, uint32 startVertex, uint32 numPrimitives)
 		if(!bufferBinding(fanIndices, &buf, &off))
 			return;
 		bindFanIndices(buf);
-		vkCmdDrawIndexed(frame.cmd, numPrimitives*3, 1, 0, (int32)startVertex, 0);
+		vkCmdDrawIndexed(frame.slots[frame.slot].cmd, numPrimitives*3, 1, 0, (int32)startVertex, 0);
 		return;
 	}
 	uint32 count = indexCount(primType, numPrimitives);
 	if(count == 0 || !prepareDraw(primType))
 		return;
-	vkCmdDraw(frame.cmd, count, 1, startVertex, 0);
+	vkCmdDraw(frame.slots[frame.slot].cmd, count, 1, startVertex, 0);
 }
 
 void
@@ -1085,7 +1148,7 @@ drawIndexedPrimitive(uint32 primType, int32 baseVertex, uint32 minVertex,
 	if(ib == nil)
 		return;
 	bindIndexBuffer(ib);
-	vkCmdDrawIndexed(frame.cmd, count, 1, startIndex, baseVertex, 0);
+	vkCmdDrawIndexed(frame.slots[frame.slot].cmd, count, 1, startIndex, baseVertex, 0);
 }
 
 // --- open, start, stop, close -----------------------------------------------
@@ -1357,21 +1420,23 @@ startVulkan(void)
 	vkGlobals.bcTextures = have.textureCompressionBC;
 	vkGlobals.maxAnisotropy = have.samplerAnisotropy ? vkGlobals.properties.limits.maxSamplerAnisotropy : 1.0f;
 
-	VkCommandPoolCreateInfo cpi = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-	cpi.queueFamilyIndex = family;
-	vkCreateCommandPool(vkGlobals.device, &cpi, nil, &frame.pool);
-	VkCommandBufferAllocateInfo cai = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
-	cai.commandPool = frame.pool;
-	cai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	cai.commandBufferCount = 1;
-	vkAllocateCommandBuffers(vkGlobals.device, &cai, &frame.cmd);
-	vkAllocateCommandBuffers(vkGlobals.device, &cai, &frame.upload);
-	VkFenceCreateInfo fi = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-	vkCreateFence(vkGlobals.device, &fi, nil, &frame.fence);
-	VkSemaphoreCreateInfo si = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-	vkCreateSemaphore(vkGlobals.device, &si, nil, &swap.acquired);
-	frame.open = 0;
-	frame.pending = 0;
+	memset(&frame, 0, sizeof(frame));
+	for(int32 i = 0; i < FRAMESINFLIGHT; i++){
+		FrameSlot *s = &frame.slots[i];
+		VkCommandPoolCreateInfo cpi = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+		cpi.queueFamilyIndex = family;
+		vkCreateCommandPool(vkGlobals.device, &cpi, nil, &s->pool);
+		VkCommandBufferAllocateInfo cai = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+		cai.commandPool = s->pool;
+		cai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		cai.commandBufferCount = 1;
+		vkAllocateCommandBuffers(vkGlobals.device, &cai, &s->cmd);
+		vkAllocateCommandBuffers(vkGlobals.device, &cai, &s->upload);
+		VkFenceCreateInfo fi = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+		vkCreateFence(vkGlobals.device, &fi, nil, &s->fence);
+		VkSemaphoreCreateInfo si = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+		vkCreateSemaphore(vkGlobals.device, &si, nil, &s->acquired);
+	}
 
 	swap.vsync = 1;
 	if(!createSwapchain())
@@ -1427,6 +1492,7 @@ termVulkan(void)
 
 	flushFrame();
 	vkDeviceWaitIdle(vkGlobals.device);
+	pollSubmitted();
 	releaseScene();
 	destroyWhiteTexture();
 	closePipelines();
@@ -1435,9 +1501,12 @@ termVulkan(void)
 	arenaDestroy();
 
 	destroySwapchain();
-	vkDestroySemaphore(vkGlobals.device, swap.acquired, nil);
-	vkDestroyFence(vkGlobals.device, frame.fence, nil);
-	vkDestroyCommandPool(vkGlobals.device, frame.pool, nil);
+	for(int32 i = 0; i < FRAMESINFLIGHT; i++){
+		FrameSlot *s = &frame.slots[i];
+		vkDestroySemaphore(vkGlobals.device, s->acquired, nil);
+		vkDestroyFence(vkGlobals.device, s->fence, nil);
+		vkDestroyCommandPool(vkGlobals.device, s->pool, nil);
+	}
 	memset(&frame, 0, sizeof(frame));
 	memset(&swap, 0, sizeof(swap));
 	vkDestroyPipelineCache(vkGlobals.device, vkGlobals.pipelineCache, nil);
