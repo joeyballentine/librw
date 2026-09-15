@@ -411,6 +411,10 @@ static struct {
 	// applies. Every present says VK_SUBOPTIMAL_KHR while that holds, and it
 	// is not a reason to rebuild.
 	bool32 compositorRotates;
+	// The surface belongs to a window that is gone. Android destroys the
+	// window under a backgrounded app and gives it a new one on return, and a
+	// surface cannot be moved to the new one.
+	bool32 surfaceLost;
 } swap;
 
 static void
@@ -434,8 +438,12 @@ createSwapchain(void)
 {
 	VkPhysicalDevice pd = vkGlobals.physicalDevice;
 	VkSurfaceCapabilitiesKHR caps;
-	if(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pd, vkGlobals.surface, &caps) != VK_SUCCESS)
+	VkResult cr = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pd, vkGlobals.surface, &caps);
+	if(cr != VK_SUCCESS){
+		if(cr == VK_ERROR_SURFACE_LOST_KHR)
+			swap.surfaceLost = 1;
 		return 0;
+	}
 
 	// A surface that reports a rotation -- a phone held in landscape, whose
 	// screen is portrait -- wants the frame drawn already rotated. This does
@@ -518,8 +526,12 @@ createSwapchain(void)
 	ci.oldSwapchain = swap.swapchain;
 
 	VkSwapchainKHR sc;
-	if(vkCreateSwapchainKHR(vkGlobals.device, &ci, nil, &sc) != VK_SUCCESS)
+	VkResult sr = vkCreateSwapchainKHR(vkGlobals.device, &ci, nil, &sc);
+	if(sr != VK_SUCCESS){
+		if(sr == VK_ERROR_SURFACE_LOST_KHR || sr == VK_ERROR_NATIVE_WINDOW_IN_USE_KHR)
+			swap.surfaceLost = 1;
 		return 0;
+	}
 	releaseSwapchainViews();
 	if(swap.swapchain != VK_NULL_HANDLE)
 		vkDestroySwapchainKHR(vkGlobals.device, swap.swapchain, nil);
@@ -558,6 +570,24 @@ destroySwapchain(void)
 		vkDestroySwapchainKHR(vkGlobals.device, swap.swapchain, nil);
 		swap.swapchain = VK_NULL_HANDLE;
 	}
+}
+
+// A new surface on the window's current native window. The old swap chain
+// goes first: it cannot be the oldSwapchain of one on a different surface.
+// With no native window yet the surface stays null and this is tried again
+// next frame.
+static void
+recreateSurface(void)
+{
+	destroySwapchain();
+	if(vkGlobals.surface != VK_NULL_HANDLE){
+		vkDestroySurfaceKHR(vkGlobals.instance, vkGlobals.surface, nil);
+		vkGlobals.surface = VK_NULL_HANDLE;
+	}
+	if(SDL_Vulkan_CreateSurface(vkGlobals.window, vkGlobals.instance, nil, &vkGlobals.surface))
+		swap.surfaceLost = 0;
+	else
+		vkGlobals.surface = VK_NULL_HANDLE;
 }
 
 // --- submission -------------------------------------------------------------
@@ -610,6 +640,8 @@ submitFrame(bool32 present, uint32 imageIndex)
 		VkResult pr = vkQueuePresentKHR(vkGlobals.queue, &pi);
 		if(pr == VK_ERROR_OUT_OF_DATE_KHR || (pr == VK_SUBOPTIMAL_KHR && !swap.compositorRotates))
 			swap.dirty = 1;
+		if(pr == VK_ERROR_SURFACE_LOST_KHR)
+			swap.surfaceLost = 1;
 	}
 }
 
@@ -873,6 +905,8 @@ showRaster(Raster *raster, uint32 flags)
 	windowPixels(&w, &h);
 	if((uint32)w != swap.extent.width || (uint32)h != swap.extent.height)
 		swap.dirty = 1;
+	if(swap.surfaceLost)
+		swap.dirty = 1;
 	if(swap.dirty && w > 0 && h > 0){
 		// The frame being recorded does not name the swap chain yet, so what
 		// has to finish first is only the one before it.
@@ -881,7 +915,10 @@ showRaster(Raster *raster, uint32 flags)
 			frame.pending = 0;
 		}
 		vkQueueWaitIdle(vkGlobals.queue);
-		createSwapchain();
+		if(swap.surfaceLost)
+			recreateSurface();
+		if(vkGlobals.surface != VK_NULL_HANDLE)
+			createSwapchain();
 	}
 
 	Image *src = sceneResolvedImage();
@@ -893,6 +930,8 @@ showRaster(Raster *raster, uint32 flags)
 	if(r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR){
 		if(r == VK_ERROR_OUT_OF_DATE_KHR)
 			swap.dirty = 1;
+		if(r == VK_ERROR_SURFACE_LOST_KHR)
+			swap.surfaceLost = 1;
 		submitFrame(0, 0);
 		return;
 	}
