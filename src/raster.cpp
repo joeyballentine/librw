@@ -651,6 +651,13 @@ Raster::convertTexToCurrentPlatform(rw::Raster *ras)
 	// fall back to going through Image directly
 	int32 width, height, depth, format;
 	Image *img = ras->toImage();
+	// A platform that cannot read one of its own rasters says so by handing
+	// back nothing, and every line below here dereferences it. Returning nil
+	// is what this function already promises a caller for a format it cannot
+	// handle; the alternative is a null dereference three lines on, in a
+	// release build, with nothing said about which texture did it.
+	if(img == nil)
+		return nil;
 	// TODO: maybe don't *always* do this?
 	img->unpalettize();
 	Raster::imageFindRasterFormat(img, Raster::TEXTURE, &width, &height, &depth, &format);
