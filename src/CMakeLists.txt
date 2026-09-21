@@ -34,6 +34,7 @@ add_library(librw
     rwuserdata.h
     skin.cpp
     texture.cpp
+    gcntex.cpp
     tga.cpp
     tristrip.cpp
     userdata.cpp
