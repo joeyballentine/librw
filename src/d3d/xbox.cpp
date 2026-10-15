@@ -1035,9 +1035,16 @@ createNativeRaster(void *object, int32 offset, int32)
 }
 
 static void*
-destroyNativeRaster(void *object, int32, int32)
+destroyNativeRaster(void *object, int32 offset, int32)
 {
-	// TODO:
+	// Plain memory, no device objects, so this is safe for every raster
+	// whatever platform is running: createNativeRaster left both nil on
+	// rasters that are not Xbox ones.
+	XboxRaster *raster = PLUGINOFFSET(XboxRaster, object, offset);
+	rwFree(raster->texture);
+	raster->texture = nil;
+	rwFree(raster->palette);
+	raster->palette = nil;
 	return object;
 }
 
