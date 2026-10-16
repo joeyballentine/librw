@@ -342,6 +342,42 @@ resizeToWindow(void)
 	acquireBackBuffer();
 }
 
+// A video mode set after the swap chain exists: into or out of exclusive
+// fullscreen. The target is resized to the mode first, as DXGI asks, and the
+// buffers follow it.
+static int
+switchVideoMode(int32 n)
+{
+	DisplayMode *mode = &d3d11Globals.modes[n];
+	BOOL exclusive = (mode->flags & VIDEOMODEEXCLUSIVE) != 0;
+
+	d3d11context->OMSetRenderTargets(0, nil, nil);
+	currentTarget = nil;
+	currentDepth = nil;
+	releaseBackBuffer();
+
+	HRESULT hr;
+	UINT width, height;
+	if(exclusive){
+		d3d11Globals.swapChain->ResizeTarget(&mode->mode);
+		hr = d3d11Globals.swapChain->SetFullscreenState(TRUE, nil);
+		width = mode->mode.Width;
+		height = mode->mode.Height;
+	}else{
+		hr = d3d11Globals.swapChain->SetFullscreenState(FALSE, nil);
+		RECT rect;
+		GetClientRect(d3d11Globals.window, &rect);
+		width = rect.right;
+		height = rect.bottom;
+	}
+	if(SUCCEEDED(hr) && width != 0 && height != 0)
+		d3d11Globals.swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
+	if(SUCCEEDED(hr))
+		d3d11Globals.startMode = *mode;
+	acquireBackBuffer();
+	return SUCCEEDED(hr);
+}
+
 // --- video modes ------------------------------------------------------------
 
 static void
@@ -1185,6 +1221,9 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 		if(n >= d3d11Globals.numModes)
 			return 0;
 		d3d11Globals.currentMode = n;
+		// Before Engine::start this is only the choice startD3D11 reads.
+		if(d3d11Globals.swapChain)
+			return switchVideoMode(n);
 		return 1;
 
 	case DEVICEGETVIDEOMODEINFO:

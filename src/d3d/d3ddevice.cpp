@@ -1714,6 +1714,61 @@ restoreVideoMemory(void)
 	restoreD3d9Device();
 }
 
+// A video mode set after the device exists: into or out of exclusive
+// fullscreen, by a Reset rather than a new device. The presentation parameters
+// are startD3D's for the new mode, so an exclusive mode is its own size and
+// format and the windowed one is the window's. A Reset that fails puts the old
+// parameters back, so a mode the display refuses leaves the game as it was.
+static int
+switchVideoMode(int32 n)
+{
+	DisplayMode *mode = &d3d9Globals.modes[n];
+	bool windowed = !(mode->flags & VIDEOMODEEXCLUSIVE);
+
+	D3DPRESENT_PARAMETERS was = d3d9Globals.present;
+	DisplayMode wasMode = d3d9Globals.startMode;
+
+	uint32 width, height;
+	D3DFORMAT format = mode->mode.Format;
+	if(windowed){
+		RECT rect;
+		GetClientRect(d3d9Globals.window, &rect);
+		width = rect.right - rect.left;
+		height = rect.bottom - rect.top;
+		if(width == 0 || height == 0){
+			width = mode->mode.Width;
+			height = mode->mode.Height;
+		}
+	}else{
+		SetWindowLong(d3d9Globals.window, GWL_STYLE, WS_POPUP);
+		width = mode->mode.Width;
+		height = mode->mode.Height;
+	}
+	if(format == D3DFMT_X8R8G8B8 &&
+	   d3d9Globals.d3d9->CheckDeviceType(d3d9Globals.adapter, D3DDEVTYPE_HAL, format,
+	                                     D3DFMT_A8R8G8B8, windowed) == D3D_OK)
+		format = D3DFMT_A8R8G8B8;
+
+	d3d9Globals.startMode = *mode;
+	d3d9Globals.present.BackBufferWidth = width;
+	d3d9Globals.present.BackBufferHeight = height;
+	d3d9Globals.present.BackBufferFormat = format;
+	d3d9Globals.present.Windowed = windowed;
+	d3d9Globals.present.FullScreen_RefreshRateInHz = D3DPRESENT_RATE_DEFAULT;
+
+	releaseVideoMemory();
+	HRESULT hr = d3ddevice->Reset(&d3d9Globals.present);
+	if(FAILED(hr)){
+		d3d9Globals.present = was;
+		d3d9Globals.startMode = wasMode;
+		d3ddevice->Reset(&d3d9Globals.present);
+		restoreVideoMemory();
+		return 0;
+	}
+	restoreVideoMemory();
+	return 1;
+}
+
 static void
 beginUpdate(Camera *cam)
 {
@@ -2569,6 +2624,10 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 		if(n >= d3d9Globals.numModes)
 			return 0;
 		d3d9Globals.currentMode = n;
+		// Before Engine::start this is only the choice startD3D reads. After
+		// it, the device has to be told.
+		if(d3ddevice)
+			return switchVideoMode(n);
 		return 1;
 
 	case DEVICEGETVIDEOMODEINFO:
